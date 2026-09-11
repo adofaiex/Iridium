@@ -344,5 +344,7 @@
   "OptimizeDecorationFilterCache": "장식물 필터 캐시 (실험적)",
   "OptimizeDecorationFilterCacheInfo": "정적인 필터 장식물의 매 프레임 필터 재렌더링(RT blit 체인)도 건너뜁니다 — 필터 결과는 소스 텍스처와 활성화된 필터 집합에만 의존하며 이동이나 카메라와 무관합니다. 필터가 자체적으로 파라미터를 애니메이션하면 화면이 이전 상태에 머물 수 있습니다. 이상이 보이면 비활성화하세요.",
   "EnableStaticDecorationBatching": "정적 장식물 배치 렌더링 (실험적)",
-  "EnableStaticDecorationBatchingInfo": "정적이고 필터 없는 장식물의 개별 렌더러를 아틀라스 페이지당 하나의 배치 메시로 병합하여 draw call을 수천 개에서 몇 개로 줄입니다. 사용자 지정 완화 엔진(tween 감지 필요)을 켜야 합니다. 필터, 마스크, 타일링 또는 기본이 아닌 블렌드 모드가 있는 장식물은 기존 경로를 유지합니다. 위치가 틀리거나 쌓임 순서가 이상하면 비활성화하세요."
+  "EnableStaticDecorationBatchingInfo": "정적이고 필터 없는 장식물의 개별 렌더러를 아틀라스 페이지당 하나의 배치 메시로 병합하여 draw call을 수천 개에서 몇 개로 줄입니다. 사용자 지정 완화 엔진(tween 감지 필요)을 켜야 합니다. 필터, 마스크, 타일링 또는 기본이 아닌 블렌드 모드가 있는 장식물은 기존 경로를 유지합니다. 위치가 틀리거나 쌓임 순서가 이상하면 비활성화하세요.",
+  "ShowPerfOverlay": "성능 오버레이",
+  "ShowPerfOverlayInfo": "화면 좌상단에 FPS, 1% low, draw call 수, 스크립트/tween 시간, 배치된 장식물 수를 표시하여 프레임 시간이 어디에 쓰이는지 진단합니다."
 }

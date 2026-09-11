@@ -344,5 +344,7 @@
   "OptimizeDecorationFilterCache": "Decoration Filter Cache (Experimental)",
   "OptimizeDecorationFilterCacheInfo": "Also skips the per-frame filter re-render (RT blit chain) for static filtered decorations — the filter result only depends on the source texture and the enabled filter set, not on movement or the camera. If a filter animates its own parameters, its image may freeze at an older state; disable if you notice artifacts.",
   "EnableStaticDecorationBatching": "Static Decoration Batching (Experimental)",
-  "EnableStaticDecorationBatchingInfo": "Replaces the individual renderers of static unfiltered decorations with one batched mesh per atlas page — draw calls drop from thousands to a few. Requires the custom easing engine (for tween awareness). Decorations with filters, masks, tiling or non-default blend modes keep the vanilla path. If anything looks misplaced or stacking order is wrong, disable it."
+  "EnableStaticDecorationBatchingInfo": "Replaces the individual renderers of static unfiltered decorations with one batched mesh per atlas page — draw calls drop from thousands to a few. Requires the custom easing engine (for tween awareness). Decorations with filters, masks, tiling or non-default blend modes keep the vanilla path. If anything looks misplaced or stacking order is wrong, disable it.",
+  "ShowPerfOverlay": "Performance Overlay",
+  "ShowPerfOverlayInfo": "Shows a small on-screen readout: FPS, 1% low, draw calls, script/tween time and how many decorations are batched. For diagnosing where frame time actually goes."
 }

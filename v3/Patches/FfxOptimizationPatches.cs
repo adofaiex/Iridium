@@ -1,5 +1,6 @@
 using Iridium.Config;
 using Iridium.Core;
+using Iridium.Patches.Optimizer;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -77,6 +78,14 @@ namespace Iridium.Patches
 					{
 						scrDecoration dec = allDecorations[i];
 						if (dec == null) continue;
+
+						// 已被合批渲染器接管：位置/材质由顶点遍历负责，
+						// 这里直接跳过（LogicUpdate 前缀亦会兜底）。
+						if (StaticDecorationBatcher.IsBatched(dec))
+						{
+							if (dec.useHitbox) dec.UpdateHitboxState();
+							continue;
+						}
 
 						var state = _states.GetOrCreateValue(dec);
 						if (!NeedsLogicUpdate(dec, state)) continue;

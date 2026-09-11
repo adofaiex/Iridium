@@ -44,7 +44,8 @@ namespace Iridium.Patches.Optimizer
             public bool Managed;
             public AtlasSlot? Slot;
             public int SlotPos = -1;
-            public int VertexIndex = -1;                          // 在 slot.Items 中的位置
+            public int VertexIndex = -1;
+            public int IdleFrames;                          // 在 slot.Items 中的位置
             public Vector3[] CornerOffsets = new Vector3[4];  // 世界顶点 - 视差根位置（含 z）
             public Color32 VColor;
         }
@@ -69,6 +70,7 @@ namespace Iridium.Patches.Optimizer
             public List<Vector2> Uvs = new();
             public List<int> Tris = new();
             public bool StructuralDirty;
+            public bool PositionDirty;
         }
 
         private sealed class Page
@@ -96,6 +98,9 @@ namespace Iridium.Patches.Optimizer
         private static readonly Dictionary<SlotKey, AtlasSlot> _slots = new();
         private static readonly List<Page> _pages = new();
         private static readonly HashSet<AtlasSlot> _uvInitDone = new();
+        private static readonly Dictionary<scrDecoration, int> _pending = new();
+        private static readonly List<scrDecoration> _pendingUpdate = new();
+        private static readonly List<scrDecoration> _pendingNeedIncrement = new();
 
         private static readonly AccessTools.FieldRef<scrVisualDecoration, bool>? _meshEnabledRef =
             AccessTools.FieldRefAccess<scrVisualDecoration, bool>("meshRendererEnabled");
@@ -106,6 +111,25 @@ namespace Iridium.Patches.Optimizer
         // ---------------- 开关生命周期 ----------------
 
         public static bool Enabled => _enabled;
+
+        /// <summary>
+        /// 该装饰物当前是否由合批渲染器接管。接管后其位置/材质由顶点遍历负责，
+        /// 原版每帧的 UpdatePosition/UpdateShader 应被跳过（见 FfxOptimizationPatches）。
+        /// </summary>
+        public static bool IsBatched(scrDecoration dec)
+            => _enabled && _items.TryGetValue(dec, out var item) && item.Managed;
+
+        /// <summary>当前已合批（实际由批次渲染）的装饰物数量，用于性能悬浮窗。</summary>
+        public static int BatchedCount
+        {
+            get
+            {
+                int n = 0;
+                foreach (var item in _items.Values)
+                    if (item.Managed) n++;
+                return n;
+            }
+        }
 
         public static void SetEnabled(bool value)
         {
@@ -125,6 +149,7 @@ namespace Iridium.Patches.Optimizer
                     _harmony.CreateClassProcessor(typeof(SetOpacityHook)).Patch();
                     _harmony.CreateClassProcessor(typeof(SetDepthHook)).Patch();
                     _harmony.CreateClassProcessor(typeof(ScnGameDestroyHook)).Patch();
+                    _harmony.CreateClassProcessor(typeof(LogicUpdateSkipHook)).Patch();
                     _hooked = true;
                 }
                 CustomEasingEngine.TargetTweensBecameActive += OnTargetDynamic;
@@ -146,6 +171,9 @@ namespace Iridium.Patches.Optimizer
         private static bool IsEligible(scrVisualDecoration dec)
         {
             if (Main.Settings?.optimizer.enableStaticDecorationBatching != true) return false;
+            // 编辑器（非试玩）态完全让位原版：合批是为游玩态烘焙的静态快照，
+            // 编辑器里改装饰物需要原版 LogicUpdate 的实时刷新。
+            if (ADOBase.isEditingLevel) return false;
             if (dec.cfpCache != null && dec.cfpCache.Length > 0) return false;   // 滤镜走 RT 管线
             if (dec.isMask()) return false;
             if (dec.repeatX != 1f || dec.repeatY != 1f) return false;            // 平铺无法进图集
@@ -234,6 +262,8 @@ namespace Iridium.Patches.Optimizer
                     UV = uvRect
                 };
                 mfNew.sharedMesh = slot.Mesh = new Mesh { hideFlags = HideFlags.HideAndDontSave };
+                // 世界空间网格：固定大包围盒，免每帧 RecalculateBounds（放弃剔除换 CPU）
+                slot.Mesh.bounds = new Bounds(Vector3.zero, new Vector3(1e6f, 1e6f, 1e4f));
                 var mr = go.AddComponent<MeshRenderer>();
                 slot.Material = new Material(Shader.Find("Sprites/Default"))
                 {
@@ -285,14 +315,16 @@ namespace Iridium.Patches.Optimizer
 
         private static void OnTargetDynamic(object target)
         {
+            if (target is scrVisualDecoration vis0) _pending.Remove(vis0);
             if (target is scrVisualDecoration vis && _items.TryGetValue(vis, out var item) && item.Managed)
                 Unmanage(item, restoreVanilla: true);
         }
 
         private static void OnTargetStatic(object target)
         {
+            // tween 刚结束：不立即入批，先静置计时（避免事件密集时反复进出批次）
             if (target is scrVisualDecoration vis && !_items.ContainsKey(vis))
-                TryManage(vis);
+                _pending[vis] = 0;
         }
 
         // ---------------- 增量 quad 增删 ----------------
@@ -366,11 +398,15 @@ namespace Iridium.Patches.Optimizer
                 var manager = scrDecorationManager.instance;
                 if (manager == null) return;
 
+                int total = 0, visCount = 0;
                 foreach (var dec in manager.allDecorations)
                 {
+                    total++;
                     if (dec is not scrVisualDecoration vis) continue;
+                    visCount++;
                     TryManage(vis);
                 }
+                Main.Logger?.Log($"[DecoBatch] RebuildAll: all={total} visual={visCount} managed={BatchedCount} enabled={_enabled} editing={ADOBase.isEditingLevel}");
             }
             catch (Exception ex)
             {
@@ -380,11 +416,36 @@ namespace Iridium.Patches.Optimizer
 
         // ---------------- 每帧：位置遍历 ----------------
 
+        /// <summary>tween 结束后的静置阈值：连续这么多帧无 tween 才纳入批次。</summary>
+        private const int BatchIdleThreshold = 15;
+
         public static void FrameRender()
         {
-            if (!_enabled || _items.Count == 0) return;
+            if (!_enabled) return;
             var controller = ADOBase.controller;
             if (controller?.camy == null) return;
+
+            // 静置晋升：tween 结束满阈值才入批，避免密集事件下反复进出
+            if (_pending.Count > 0)
+            {
+                _pendingUpdate.Clear();
+                foreach (var kvp in _pending)
+                {
+                    if (kvp.Value + 1 >= BatchIdleThreshold)
+                        _pendingUpdate.Add(kvp.Key);
+                    else
+                        _pendingNeedIncrement.Add(kvp.Key);
+                }
+                foreach (var k in _pendingNeedIncrement)
+                    _pending[k] = _pending[k] + 1;
+                foreach (var k in _pendingUpdate)
+                {
+                    _pending.Remove(k);
+                    if (k is scrVisualDecoration vis0) TryManage(vis0);
+                }
+            }
+
+            if (_items.Count == 0) return;
             var cam = controller.camy.transform.position;
 
             foreach (var item in _items.Values)
@@ -407,12 +468,39 @@ namespace Iridium.Patches.Optimizer
                 for (int c = 0; c < 4; c++)
                 {
                     var corner = item.CornerOffsets[c];
-                    float px = b0.x + (cam.x - b0.x) * mult.x + offK.x + corner.x;
-                    float py = b0.y + (cam.y - b0.y) * mult.y + offK.y + corner.y;
-                    slot.Verts[vi + c] = new Vector3(px, py, corner.z);
+                    var nv = new Vector3(
+                        b0.x + (cam.x - b0.x) * mult.x + offK.x + corner.x,
+                        b0.y + (cam.y - b0.y) * mult.y + offK.y + corner.y,
+                        corner.z);
+                    if (slot.Verts[vi + c] != nv)
+                    {
+                        slot.Verts[vi + c] = nv;
+                        slot.PositionDirty = true;
+                    }
                 }
             }
-            // 各 slot 的 MeshRenderer 常驻，Mesh 数据更新后自动绘制
+
+            // 脏页上传：结构变化 → 全量；仅位置变化 → 只传顶点
+            foreach (var slot in _slots.Values)
+            {
+                if (slot.Mesh == null) continue;
+                if (slot.StructuralDirty)
+                {
+                    slot.Mesh.Clear();
+                    slot.Mesh.SetVertices(slot.Verts);
+                    slot.Mesh.SetColors(slot.Colors);
+                    slot.Mesh.SetUVs(0, slot.Uvs);
+                    slot.Mesh.SetTriangles(slot.Tris, 0);
+                    slot.StructuralDirty = false;
+                    slot.PositionDirty = false;
+                    if (slot.GO != null) slot.GO.SetActive(slot.Items.Count > 0);
+                }
+                else if (slot.PositionDirty)
+                {
+                    slot.Mesh.SetVertices(slot.Verts);
+                    slot.PositionDirty = false;
+                }
+            }
         }
 
         // ---------------- 图集 ----------------
@@ -510,6 +598,24 @@ namespace Iridium.Patches.Optimizer
         {
             [HarmonyPostfix]
             public static void Postfix() => ClearBatchesAndAtlas();
+        }
+
+        /// <summary>
+        /// 已被合批接管的装饰物：位置/材质由顶点遍历负责，跳过原版 LogicUpdate
+        /// （避免每帧重复的视差重算与 transform 写入）。判定盒仍需更新。
+        /// 独立于 Ffx 优化开关，保证任何配置下都不做重复劳动。
+        /// </summary>
+        [HarmonyPatch(typeof(scrDecoration), nameof(scrDecoration.LogicUpdate))]
+        private static class LogicUpdateSkipHook
+        {
+            [HarmonyPrefix]
+            public static bool Prefix(scrDecoration __instance, bool disableUpdateShader)
+            {
+                if (ADOBase.isEditingLevel) return true;   // 编辑器态让位原版
+                if (!IsBatched(__instance)) return true;
+                if (__instance.useHitbox) __instance.UpdateHitboxState();
+                return false;
+            }
         }
 
         /// <summary>SetRotation 脏检查放行原版写入后，重捕获四角偏移。</summary>
