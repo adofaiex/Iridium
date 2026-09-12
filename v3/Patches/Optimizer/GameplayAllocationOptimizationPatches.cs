@@ -22,8 +22,10 @@ namespace Iridium.Patches.Optimizer
     /// 3. scrVisualDecoration.UpdateShader: 对 CameraFilterPack 滤镜每帧
     ///    走 MethodInfo.Invoke 反射调用（参数校验 + 装箱）。改为按
     ///    MethodInfo 缓存编译委托后直接调用，反射失败时回退原版。
+    ///
+    /// 注意：每个嵌套补丁类各自带 [IriPatch]，由 PatchManager 逐个注册。
+    /// （只在外层类标注的话 Harmony 容器不会递归到这里，整组补丁会 NotFound。）
     /// </summary>
-    [IriPatch(Path = "optimizer/gameplayAlloc", Pre = typeof(OptimizerSettings), Condition = "optimizeGameplayAllocations")]
     public static class GameplayAllocationOptimizationPatches
     {
         // ── 1. scrPlanet.Update: non-alloc hitbox overlap ──────────────────
@@ -57,6 +59,7 @@ namespace Iridium.Patches.Optimizer
             return result;
         }
 
+        [IriPatch(Path = "optimizer/gameplayAlloc", Pre = typeof(OptimizerSettings), Condition = "optimizeGameplayAllocations")]
         [HarmonyPatch(typeof(scrPlanet), "Update")]
         private static class PlanetOverlapAllocPatch
         {
@@ -106,6 +109,7 @@ namespace Iridium.Patches.Optimizer
             return floor.specialColorPulse == TrackColorPulse.None ? null : DOTween.Sequence();
         }
 
+        [IriPatch(Path = "optimizer/gameplayAlloc", Pre = typeof(OptimizerSettings), Condition = "optimizeGameplayAllocations")]
         [HarmonyPatch(typeof(scrFloor), "Update")]
         private static class FloorVolumeSequencePatch
         {
@@ -177,6 +181,7 @@ namespace Iridium.Patches.Optimizer
                 mi.Invoke(target, args);
         }
 
+        [IriPatch(Path = "optimizer/gameplayAlloc", Pre = typeof(OptimizerSettings), Condition = "optimizeGameplayAllocations")]
         [HarmonyPatch(typeof(scrVisualDecoration), "UpdateShader")]
         private static class DecorationFilterInvokePatch
         {

@@ -1242,8 +1242,9 @@ namespace Iridium
 
         /// <summary>
         /// 3.4.0 把 Perfect 拆分为 PerfectMinus/XPerfect/PerfectPlus。旧配置的
-        /// perfect 自定义文案在 4.0 下不再被任何判定命中，这里一次性继承到三个
-        /// 新字段（仅当新字段仍是默认值时，幂等）。
+        /// perfect 文案在 4.0 下不再被任何判定命中，这里一次性继承到三个新字段
+        /// （仅当新字段仍是默认值时，幂等）。空串同样继承：按 Iridium 约定，
+        /// 空模板 = 隐藏该判定文本。
         /// </summary>
         public static void MigrateJudgeText(Settings settings)
         {

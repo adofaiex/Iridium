@@ -15,6 +15,16 @@ namespace Iridium.Patches.Sound
 		// Captured missAngle from scrHitTextManager.ShowHitText (game doesn't forward it to Show in non-coop)
 		private static float _capturedMissAngle;
 
+		// 3.4.0 的 XPerfect 边框文字（旧版本无此字段，ref 为 null）。
+		// 隐藏判定时需一并清空，否则边框仍显示原生 XPerfect 文本。
+		private static readonly System.Reflection.FieldInfo? _xPerfectBorderField =
+			AccessTools.Field(typeof(scrHitTextMesh), "xPerfectBorder");
+
+		private static readonly AccessTools.FieldRef<scrHitTextMesh, TextMeshPro>? _xPerfectBorderRef =
+			_xPerfectBorderField == null
+				? null
+				: AccessTools.FieldRefAccess<scrHitTextMesh, TextMeshPro>(_xPerfectBorderField);
+
 		private static double CalculateTimingFromAngle(float angularOffset)
 		{
 			var controller = scrController.instance;
@@ -68,9 +78,24 @@ namespace Iridium.Patches.Sound
 				if (___text == null) return;
 
 				string template = Settings.GetTextForHitMarginName(__instance.hitMargin.ToString());
-				if (string.IsNullOrEmpty(template)) return; // Auto/Midspin 等回落游戏原生文本
+
+				// 空模板 = 隐藏该判定文本（与 3.3.x 的 Prefix 行为一致）。
+				// 3.4.0 的 Show 会先写入原生文本，所以这里要主动清空。
+				if (string.IsNullOrEmpty(template))
+				{
+					___text.text = "";
+					var border = _xPerfectBorderRef?.Invoke(__instance);
+					if (border != null) border.text = "";
+					return;
+				}
+
 				double timing = CalculateTimingFromAngle(_capturedMissAngle);
-				___text.text = JudgeTextSettings.ReplaceOffset(template, timing);
+				string newText = JudgeTextSettings.ReplaceOffset(template, timing);
+				___text.text = newText;
+
+				// XPerfect 的描边文字要与主文字同步（否则描边仍是原生文本）
+				var borderText = _xPerfectBorderRef?.Invoke(__instance);
+				if (borderText != null) borderText.text = newText;
 			}
 		}
 

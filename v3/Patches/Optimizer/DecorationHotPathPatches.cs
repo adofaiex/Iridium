@@ -19,14 +19,17 @@ namespace Iridium.Patches.Optimizer
     ///    输入（angle/startRot）未变且不依赖外部状态（stickToFloor/lockRotation）
     ///    时跳过 —— 消除每帧无效 transform 写入。
     /// 3. SetScale：同上，另需 camScaleMultiplier 未变（相机缩放会改变结果）。
+    ///
+    /// 注意：每个嵌套补丁类各自带 [IriPatch]，由 PatchManager 逐个注册。
+    /// （只在外层类标注的话 Harmony 容器不会递归到这里，整组补丁会 NotFound。）
     /// </summary>
-    [IriPatch(Path = "optimizer/decor", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer")]
     public static class DecorationHotPathPatches
     {
         // ---- 1. GetTaggedDecorations ----
 
         private static readonly HashSet<scrDecoration> _seen = new HashSet<scrDecoration>();
 
+        [IriPatch(Path = "optimizer/decor", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer")]
         [HarmonyPatch]
         public static class GetTaggedDecorationsPatch
         {
@@ -85,6 +88,7 @@ namespace Iridium.Patches.Optimizer
 
         private static readonly ConditionalWeakTable<scrDecoration, RotationState> _rotStates = new();
 
+        [IriPatch(Path = "optimizer/decor", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer")]
         [HarmonyPatch(typeof(scrDecoration), nameof(scrDecoration.SetRotation))]
         public static class SetRotationSkipPatch
         {
@@ -117,6 +121,7 @@ namespace Iridium.Patches.Optimizer
 
         private static readonly ConditionalWeakTable<scrDecoration, ScaleState> _scaleStates = new();
 
+        [IriPatch(Path = "optimizer/decor", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer")]
         [HarmonyPatch(typeof(scrDecoration), nameof(scrDecoration.SetScale))]
         public static class SetScaleSkipPatch
         {
