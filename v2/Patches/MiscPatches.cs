@@ -87,14 +87,14 @@ namespace Iridium.Patches
             {
                 float minDiff = Mathf.Abs(Mathf.DeltaAngle(angleA * Mathf.Rad2Deg, angleB * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
                 float minDiffDeg = minDiff * Mathf.Rad2Deg;
-                // num6 drives both the arc center (lerped from the corner intersection
-                // toward the tile origin) and the radius (lerped 0..width): only large
-                // num6 (~0.9) inflates the corner arc into the big rounded OUTER
-                // corner. Vanilla keeps that look exclusively in the 89.9-105.1 band,
-                // so claim every obtuse turn below ~170 as well. (Beyond that the arc
-                // sweep degenerates; 180 must stay vanilla so piAngle tiles keep
-                // their solid fill.)
-                if (minDiffDeg >= 89.9f && minDiffDeg <= 170f)
+                // num6 drives both the arc center and the radius: only large num6
+                // (~0.9) inflates the corner arc into the big rounded OUTER corner.
+                // 作用角度区间可由用户调整（默认 90-105，与原版直角表现一致）；
+                // 180 必须排除，否则 piAngle 砖块实心填充会异常。
+                var ui = Main.Settings.ui;
+                float min = Mathf.Clamp(ui.circleArcMinAngle, 0f, 180f);
+                float max = Mathf.Clamp(ui.circleArcMaxAngle, min, 180f);
+                if (minDiffDeg >= min && minDiffDeg <= max)
                     return minDiff * 5f / 180f * Mathf.PI;
                 return original;
             }
@@ -462,6 +462,17 @@ namespace Iridium.Patches
             {
                 if (!Main.Settings.ui.alwaysCountdown || !ADOBase.isLevelEditor) return;
                 RDC.auto = _tempAuto;
+            }
+        }
+
+        // v3 移植：暂停时保留暂停星球的运动拖尾（原版会调用 UpdateParticles(false) 禁用）。
+        [HarmonyPatch(typeof(PausePlanets), "UpdateParticles")]
+        public static class PausePlanetTrailPatch
+        {
+            public static bool Prefix(bool show)
+            {
+                if (!Main.Settings.ui.enablePausePlanetTrail) return true;
+                return show;
             }
         }
     }

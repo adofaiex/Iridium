@@ -261,6 +261,8 @@ namespace Iridium
             rendering.Add(Separator());
             rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeDecorationUpdate, v => optimizer.optimizeDecorationUpdate = v, "OptimizeDecorationUpdate"));
             rendering.Add(Separator());
+            rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeDecorationShaderCache, v => optimizer.optimizeDecorationShaderCache = v, "OptimizeDecorationShaderCache"));
+            rendering.Add(Separator());
             rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeTileUpdate, v => optimizer.optimizeTileUpdate = v, "OptimizeTileUpdate"));
             rendering.Add(Separator());
             rendering.Add(Enabled(
@@ -295,7 +297,29 @@ namespace Iridium
             rendering.Add(Separator());
             rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeFloorMesh, v => optimizer.optimizeFloorMesh = v, "OptimizeFloorMesh"));
             rendering.Add(Separator());
-            rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeFilters, v => optimizer.optimizeFilters = v, "OptimizeFilters"));
+            rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeFilters, v =>
+            {
+                optimizer.optimizeFilters = v;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+            }, "OptimizeFilters"));
+            rendering.Add(Separator());
+            rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeGameplayAllocations, v =>
+            {
+                optimizer.optimizeGameplayAllocations = v;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+            }, "OptimizeGameplayAllocations"));
+            rendering.Add(Separator());
+            rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeRDInputAllocations, v =>
+            {
+                optimizer.optimizeRDInputAllocations = v;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+            }, "OptimizeRDInputAllocations"));
+            rendering.Add(Separator());
+            rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizePlayerInputAllocations, v =>
+            {
+                optimizer.optimizePlayerInputAllocations = v;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+            }, "OptimizePlayerInputAllocations"));
             rendering.Add(Separator());
             rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.fastLoading, v => optimizer.fastLoading = v, "FastLoading"));
 
@@ -583,6 +607,13 @@ namespace Iridium
             }, "AlwaysCountdown"));
             body.Add(Separator());
 
+            body.Add(IridiumPreset.SwitchOption(sizes, ui.enablePausePlanetTrail, v =>
+            {
+                ui.enablePausePlanetTrail = v;
+                AsyncPatchManager.UpdatePatchByTypeAsync(typeof(MiscPatches.PausePlanetTrailPatch));
+            }, "EnablePausePlanetTrail"));
+            body.Add(Separator());
+
             body.Add(IridiumPreset.SwitchOption(sizes, ui.moveAutoplayText, v =>
             {
                 ui.moveAutoplayText = v;
@@ -635,6 +666,43 @@ namespace Iridium
                 PatchManager.UpdatePatchByType(typeof(MiscPatches.AllAngleArcCornersPatch));
                 RefreshFloorMeshCache();
             }, "EnableCircleArc"));
+
+            if (ui.enableCircleArc)
+            {
+                body.Add(HBox(
+                    ContainerStyle.None,
+                    sizes,
+                    WidthMax,
+                    Align(0.5, 0,
+                        Text(Localization.Get("CircleArcMinAngle"), TextStyle.Normal, WidthMin),
+                        Slider(ui.circleArcMinAngle, 0f, 180f, v =>
+                        {
+                            ui.circleArcMinAngle = Mathf.Clamp(v, 0f, 180f);
+                            if (ui.circleArcMaxAngle < ui.circleArcMinAngle)
+                                ui.circleArcMaxAngle = ui.circleArcMinAngle;
+                            RefreshFloorMeshCache();
+                        }),
+                        Text(ui.circleArcMinAngle.ToString("F0"), TextStyle.Secondary, Width(40))
+                    )
+                ));
+
+                body.Add(HBox(
+                    ContainerStyle.None,
+                    sizes,
+                    WidthMax,
+                    Align(0.5, 0,
+                        Text(Localization.Get("CircleArcMaxAngle"), TextStyle.Normal, WidthMin),
+                        Slider(ui.circleArcMaxAngle, 0f, 180f, v =>
+                        {
+                            ui.circleArcMaxAngle = Mathf.Clamp(v, 0f, 180f);
+                            if (ui.circleArcMaxAngle < ui.circleArcMinAngle)
+                                ui.circleArcMinAngle = ui.circleArcMaxAngle;
+                            RefreshFloorMeshCache();
+                        }),
+                        Text(ui.circleArcMaxAngle.ToString("F0"), TextStyle.Secondary, Width(40))
+                    )
+                ));
+            }
 
             elements.Add(VBox(ContainerStyle.Background, null, WithWidthMax(body.ToArray())));
             return elements.ToArray();
@@ -986,7 +1054,8 @@ namespace Iridium
                 sizes,
                 WidthMax,
                 Fill(),
-                Button(Localization.Get("ResetJudgeText"), ButtonStyle.Element, judgeText.ResetToDefault, Width(120))
+                Button(Localization.Get("ResetJudgeText"), ButtonStyle.Element, judgeText.ResetToDefault, Width(120)),
+                Button(Localization.Get("ConvertJudgeTextToOffset"), ButtonStyle.Element, judgeText.ConvertAllToOffset, Width(180))
             ));
 
             elements.Add(Enabled(() => judgeText.enableJudgeTextCustomization,

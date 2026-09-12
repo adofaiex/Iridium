@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace Iridium.Config
@@ -18,6 +19,10 @@ namespace Iridium.Config
         public int lossyQuality = 90;
         public bool disableShadows = false;
         public bool optimizeDecorationUpdate = false;
+        public bool optimizeDecorationShaderCache = false; // 装饰物渲染脏检查 + 滤镜结果缓存
+        public bool optimizeGameplayAllocations = false;   // 热路径每帧分配消除（v3 移植）
+        public bool optimizeRDInputAllocations = false;    // RDInput 列表池化（v3 移植）
+        public bool optimizePlayerInputAllocations = false; // 输入模拟委托化（v3 移植）
         public bool optimizeTileUpdate = false;
         public bool fastLoading = false;
         public bool skipEventIfPaused = false;
@@ -82,7 +87,11 @@ namespace Iridium.Config
         public float autoplayTextY = 0f;
         public bool forceDifficultyUI = false;
         public bool enableCircleArc = false;
+        // 圆弧化作用的角度区间（度）。默认 90-105 与旧行为兼容。
+        public float circleArcMinAngle = 90f;
+        public float circleArcMaxAngle = 105f;
         public bool alwaysCountdown = false;
+        public bool enablePausePlanetTrail = false; // v3 移植：暂停时保留星球拖尾
     }
 
     public class LobbyMusicSettings
@@ -175,6 +184,49 @@ namespace Iridium.Config
             multipress = "Multipress";
             failMiss = "FailMiss";
             failOverload = "FailOverload";
+        }
+
+        /// <summary>
+        /// 把模板里的 {offset} / {offset:x} 占位符替换为毫秒偏移（v3 移植）。
+        /// </summary>
+        public static string ReplaceOffset(string template, double offsetMs)
+        {
+            if (double.IsNaN(offsetMs) || double.IsInfinity(offsetMs))
+                offsetMs = 0;
+
+            return System.Text.RegularExpressions.Regex.Replace(template, @"\{offset(?::(\d+))?\}", match =>
+            {
+                double abs = Math.Abs(offsetMs);
+                bool isZero;
+                string formatted;
+                if (match.Groups[1].Success)
+                {
+                    int decimals = int.Parse(match.Groups[1].Value);
+                    formatted = abs.ToString("F" + decimals);
+                    isZero = Math.Round(abs, decimals) == 0;
+                }
+                else
+                {
+                    formatted = Math.Round(abs).ToString();
+                    isZero = Math.Round(abs) == 0;
+                }
+                string sign = offsetMs < 0 && !isZero ? "-" : "";
+                return sign + formatted;
+            });
+        }
+
+        public void ConvertAllToOffset()
+        {
+            tooEarly = "{offset}ms";
+            veryEarly = "{offset}ms";
+            earlyPerfect = "{offset}ms";
+            perfect = "{offset}ms";
+            latePerfect = "{offset}ms";
+            veryLate = "{offset}ms";
+            tooLate = "{offset}ms";
+            multipress = "{offset}ms";
+            failMiss = "{offset}ms";
+            failOverload = "{offset}ms";
         }
     }
 

@@ -94,6 +94,23 @@ namespace Iridium.Patches
             // --- Ffx Optimization Patches ---
             RegisterNestedPatches(typeof(FfxOptimizationPatches), optCond);
 
+            // --- Decoration Shader / Filter Cache (v3 移植) ---
+            RegisterNestedPatches(typeof(DecorationFilterCachePatches), optCond);
+
+            // --- Gameplay / Input Allocation Optimizations (v3 移植) ---
+            _definitions.Add(new PatchDef(
+                typeof(GameplayAllocationOptimizationPatches.PlanetOverlapAllocPatch),
+                () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeGameplayAllocations));
+            _definitions.Add(new PatchDef(
+                typeof(GameplayAllocationOptimizationPatches.DecorationFilterInvokePatch),
+                () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeGameplayAllocations));
+            _definitions.Add(new PatchDef(
+                typeof(RDInputOptimizationPatches.GetStateKeysPatch),
+                () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeRDInputAllocations));
+            _definitions.Add(new PatchDef(
+                typeof(PlayerInputOptimizationPatches.SimulatedPlayerControlUpdatePatch),
+                () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizePlayerInputAllocations));
+
             // --- Scene Optimization Patches ---
             RegisterNestedPatches(typeof(SceneOptimizationPatches), optCond);
 
@@ -162,6 +179,7 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(MiscPatches.AllAngleArcCornersPatch), () => Main.Settings.ui.enableCircleArc));
             _definitions.Add(new PatchDef(typeof(MiscPatches.AutoplayTextPositionPatch), () => Main.Settings.ui.moveAutoplayText));
             _definitions.Add(new PatchDef(typeof(MiscPatches.AlwaysCountdownPatch), () => Main.Settings.ui.alwaysCountdown));
+            _definitions.Add(new PatchDef(typeof(MiscPatches.PausePlanetTrailPatch), () => Main.Settings.ui.enablePausePlanetTrail));
 
             // Lobby music
             _definitions.Add(new PatchDef(typeof(MiscPatches.LobbyMusicPatch), () => Main.Settings.lobbyMusic.enableLobbyMusicPatch));

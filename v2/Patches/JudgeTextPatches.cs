@@ -83,13 +83,20 @@ namespace Iridium.Patches
         {
             public static void Prefix(scrHitTextMesh __instance, float angle, TextMesh ___text)
             {
-                if (!Settings.enableJudgeTextCustomization || !Settings.showAsOffset) return;
+                if (!Settings.enableJudgeTextCustomization) return;
+                if (___text == null) return;
 
-                if (___text != null)
+                double timing = CalculateTimingFromAngle(angle);
+
+                if (Settings.showAsOffset)
                 {
-                    double timing = CalculateTimingFromAngle(angle);
                     ___text.text = GetOffsetText(timing);
+                    return;
                 }
+
+                // 模板模式支持 {offset} / {offset:x} 占位符（v3 移植）
+                string template = Settings.GetTextForHitMargin((int)__instance.hitMargin);
+                ___text.text = JudgeTextSettings.ReplaceOffset(template, timing);
             }
         }
 
