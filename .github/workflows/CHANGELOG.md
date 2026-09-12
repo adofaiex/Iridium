@@ -17,7 +17,6 @@
 - **Memory Optimization**: Simplified to a single toggle with an optional virtual memory feature (Windows only, moves idle memory to disk).
 - **Major Performance Boost**: Added experimental Decoration Shader Cache and Static Decoration Batching for higher FPS on heavy charts.
 - **Rewritten Easing Engine**: Fixed animation overlaps/freezes, ensured all easings work properly, and resolved leftover white tracks on exit.
-- **Bug Fixes**: Resolved non-functional/misdisplayed editor shortcuts, unapplied settings, and play mode crashes.
 - **UI Improvements**: Reorganized settings panel with collapsible sections and clearer descriptions.
 
 > [!CAUTION]

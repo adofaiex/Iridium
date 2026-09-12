@@ -347,7 +347,5 @@
   "OptimizeDecorationShaderCache": "装饰物渲染缓存",
   "OptimizeDecorationShaderCacheInfo": "跳过颜色/透明度/平铺/可见性未变化的装饰物的每帧材质写入。对有成百上千个静止装饰物的谱面提升明显。带遮罩的装饰物不参与；带滤镜的装饰物由「优化滤镜性能」处理。",
   "EnableStaticDecorationBatching": "静态装饰物合批渲染（实验性）",
-  "EnableStaticDecorationBatchingInfo": "把静止且无滤镜装饰物的独立渲染器合并为每图集页一个批处理网格——draw call 从数千降为个位数。需要开启自定义缓速引擎（tween 感知依赖）。带滤镜、遮罩、平铺或非默认混合模式的装饰物仍走原版路径。若发现装饰物位置错误或层叠顺序异常，请关闭。",
-  "ShowPerfOverlay": "性能拆解悬浮窗",
-  "ShowPerfOverlayInfo": "在屏幕左上角显示 FPS、1% low、draw call 数、脚本/tween 耗时以及已合批装饰物数量，用来定位帧时间到底花在哪里。"
+  "EnableStaticDecorationBatchingInfo": "把静止且无滤镜装饰物的独立渲染器合并为每图集页一个批处理网格——draw call 从数千降为个位数。需要开启自定义缓速引擎（tween 感知依赖）。带滤镜、遮罩、平铺或非默认混合模式的装饰物仍走原版路径。若发现装饰物位置错误或层叠顺序异常，请关闭。"
 }

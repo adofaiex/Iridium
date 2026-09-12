@@ -339,14 +339,6 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnShowPerfOverlayToggled", (obj) =>
-            {
-                bool value = obj is bool b ? b : false;
-                optimizer.showPerfOverlay = value;
-                Iridium.UI.PerfOverlay.Visible = value;
-                Save();
-            });
-
             _renderer.RegisterHandler("OnStaticDecorationBatchingToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;

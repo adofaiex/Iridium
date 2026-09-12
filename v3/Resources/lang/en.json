@@ -347,7 +347,5 @@
   "OptimizeDecorationShaderCache": "Decoration Shader Cache",
   "OptimizeDecorationShaderCacheInfo": "Skips the per-frame material writes for decorations whose color/opacity/tile/visibility have not changed. Big win on charts with hundreds of static decorations. Decorations with masks are excluded; filtered decorations are handled by the filter optimization.",
   "EnableStaticDecorationBatching": "Static Decoration Batching (Experimental)",
-  "EnableStaticDecorationBatchingInfo": "Replaces the individual renderers of static unfiltered decorations with one batched mesh per atlas page — draw calls drop from thousands to a few. Requires the custom easing engine (for tween awareness). Decorations with filters, masks, tiling or non-default blend modes keep the vanilla path. If anything looks misplaced or stacking order is wrong, disable it.",
-  "ShowPerfOverlay": "Performance Overlay",
-  "ShowPerfOverlayInfo": "Shows a small on-screen readout: FPS, 1% low, draw calls, script/tween time and how many decorations are batched. For diagnosing where frame time actually goes."
+  "EnableStaticDecorationBatchingInfo": "Replaces the individual renderers of static unfiltered decorations with one batched mesh per atlas page — draw calls drop from thousands to a few. Requires the custom easing engine (for tween awareness). Decorations with filters, masks, tiling or non-default blend modes keep the vanilla path. If anything looks misplaced or stacking order is wrong, disable it."
 }

@@ -15,14 +15,6 @@
             <Link text="learn.modrift.org/mods/iridium" url="https://learn.modrift.org/mods/iridium" />
         </HBox>
 
-        <HBox align="center">
-            <Text text={localize('ShowPerfOverlay')} style="label" />
-            <Icon type="information" on-click="OnInfoToggle('ShowPerfOverlay')" />
-            <Fill />
-            <Switch value={settings.optimizer.showPerfOverlay} on-changed="OnShowPerfOverlayToggled" />
-        </HBox>
-        {isInfoExpanded('ShowPerfOverlay') && <Text text={localize('ShowPerfOverlayInfo')} style="hint" />}
-
         <Separator />
         <Text text={localize('UIBehavior')} style="subtitle" />
         <Separator />

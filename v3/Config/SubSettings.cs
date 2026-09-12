@@ -31,7 +31,6 @@ namespace Iridium.Config
         public bool optimizeFfxDecorations = false; // 新增：优化 ffx 装饰物更新
         public bool optimizeDecorationShaderCache = false; // 装饰物渲染脏检查缓存
         public bool enableStaticDecorationBatching = false; // 静态装饰物合批渲染（实验性，需缓速引擎）
-        public bool showPerfOverlay = false; // 性能拆解悬浮窗（诊断用）
 
         // Particle Optimization Patches (粒子优化)
         public bool optimizeParticle = false;             // 主开关

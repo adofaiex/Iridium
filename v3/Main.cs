@@ -92,22 +92,16 @@ namespace Iridium
 
             // 自定义缓速引擎帧驱动；开关关闭后继续驱动在飞的 tween 直到自然结束
             // （补丁已卸载不会再创建新的），避免精灵卡在中间状态。
-            Iridium.UI.PerfOverlay.TickFrame(dt);
-
             if (Settings.optimizer.enableCustomEasingEngine || Iridium.Core.CustomEasingEngine.ActiveCount > 0)
             {
-                var swEngine = Iridium.UI.PerfOverlay.Begin();
                 Iridium.Core.CustomEasingEngine.Update(dt);
-                Iridium.UI.PerfOverlay.RecordEngine(swEngine);
             }
 
             // 静态装饰物合批渲染（每帧提交）
             if (Settings.optimizer.enableStaticDecorationBatching
                 && Settings.optimizer.enableCustomEasingEngine)
             {
-                var swBatch = Iridium.UI.PerfOverlay.Begin();
                 Patches.Optimizer.StaticDecorationBatcher.FrameRender();
-                Iridium.UI.PerfOverlay.RecordBatcher(swBatch);
             }
         }
 
@@ -142,8 +136,6 @@ namespace Iridium
                 if (Main.Settings.optimizer.enableStaticDecorationBatching
                     && Main.Settings.optimizer.enableCustomEasingEngine)
                     Patches.Optimizer.StaticDecorationBatcher.SetEnabled(true);
-
-                Iridium.UI.PerfOverlay.Visible = Main.Settings.optimizer.showPerfOverlay;
 
                 if (Main.Settings.firstRun)
                 {
