@@ -166,11 +166,43 @@
                 <TextField value={settings.judgeText.earlyPerfect} on-text-submit="OnJudgeTextChanged" />
             </HBox>
 
-            <HBox align="center">
+            {!settings.judgeText.extendedHitMargins && <HBox align="center">
                 <Text text={localize('JudgeText_Perfect')} style="label" />
                 <Fill />
                 <TextField value={settings.judgeText.perfect} on-text-submit="OnJudgeTextChanged" />
-            </HBox>
+            </HBox>}
+
+            {settings.judgeText.extendedHitMargins && <>
+                <HBox align="center">
+                    <Text text={localize('JudgeText_PerfectMinus')} style="label" />
+                    <Fill />
+                    <TextField value={settings.judgeText.perfectMinus} on-text-submit="OnJudgeTextChanged" />
+                </HBox>
+
+                <HBox align="center">
+                    <Text text={localize('JudgeText_XPerfect')} style="label" />
+                    <Fill />
+                    <TextField value={settings.judgeText.xPerfect} on-text-submit="OnJudgeTextChanged" />
+                </HBox>
+
+                <HBox align="center">
+                    <Text text={localize('JudgeText_PerfectPlus')} style="label" />
+                    <Fill />
+                    <TextField value={settings.judgeText.perfectPlus} on-text-submit="OnJudgeTextChanged" />
+                </HBox>
+
+                <HBox align="center">
+                    <Text text={localize('JudgeText_Midspin')} style="label" />
+                    <Fill />
+                    <TextField value={settings.judgeText.midspin} on-text-submit="OnJudgeTextChanged" />
+                </HBox>
+
+                <HBox align="center">
+                    <Text text={localize('JudgeText_FailedFloor')} style="label" />
+                    <Fill />
+                    <TextField value={settings.judgeText.failedFloor} on-text-submit="OnJudgeTextChanged" />
+                </HBox>
+            </>}
 
             <HBox align="center">
                 <Text text={localize('JudgeText_LatePerfect')} style="label" />

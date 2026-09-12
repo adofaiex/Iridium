@@ -47,6 +47,7 @@ namespace Iridium.Runtime
                 if (Postfix != null) _appliedMethods.Add(Postfix);
             }
 
+            PatchExceptionGuard.Attach(harmony, _target);
             return PatchResult.Applied(GetType().Name);
         }
 

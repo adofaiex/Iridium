@@ -335,15 +335,6 @@ namespace Iridium
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeDecorationShaderCache = value;
-                if (!value) optimizer.optimizeDecorationFilterCache = false;
-                AsyncPatchManager.UpdateOptimizerPatchesAsync();
-                Save();
-            });
-
-            _renderer.RegisterHandler("OnDecorationFilterCacheToggled", (obj) =>
-            {
-                bool value = obj is bool b ? b : false;
-                optimizer.optimizeDecorationFilterCache = value;
                 AsyncPatchManager.UpdateOptimizerPatchesAsync();
                 Save();
             });
@@ -380,6 +371,7 @@ namespace Iridium
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeFilters = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
                 Save();
             });
 
@@ -1254,6 +1246,22 @@ namespace Iridium
         public void Save()
         {
             Main.Handler?.SaveSettings(this);
+        }
+
+        /// <summary>
+        /// 3.4.0 把 Perfect 拆分为 PerfectMinus/XPerfect/PerfectPlus。旧配置的
+        /// perfect 自定义文案在 4.0 下不再被任何判定命中，这里一次性继承到三个
+        /// 新字段（仅当新字段仍是默认值时，幂等）。
+        /// </summary>
+        public static void MigrateJudgeText(Settings settings)
+        {
+            var jt = settings.judgeText;
+            if (!jt.extendedHitMargins) return;
+            if (jt.perfect == "Perfect") return;
+
+            if (jt.perfectMinus == "PerfectMinus") jt.perfectMinus = jt.perfect;
+            if (jt.xPerfect == "XPerfect") jt.xPerfect = jt.perfect;
+            if (jt.perfectPlus == "PerfectPlus") jt.perfectPlus = jt.perfect;
         }
 
         public static void ValidateCustomEasingConflict(Settings settings)

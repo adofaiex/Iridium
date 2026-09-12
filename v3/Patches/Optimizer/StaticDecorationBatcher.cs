@@ -4,6 +4,7 @@ using ADOFAI;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
@@ -108,6 +109,17 @@ namespace Iridium.Patches.Optimizer
         private static readonly AccessTools.FieldRef<scrVisualDecoration, DecorationBlendMode>? _blendModeRef =
             AccessTools.FieldRefAccess<scrVisualDecoration, DecorationBlendMode>("blendMode");
 
+        // 3.4.0 新增裁剪枢轴（croppedPivotOffset，定义在基类 scrDecoration）；
+        // 3.3.x 无此字段。FieldRefAccess 在字段缺失时会抛异常，必须先取 FieldInfo
+        // 判空——否则旧版本会在静态初始化时 TypeInitializationException。
+        // 非零裁剪枢轴的装饰物在 MoveDecorations tween 下位置基准会变化，
+        // 合批只在旋转/缩放时重捕获四角，因此直接排除。
+        private static readonly FieldInfo? _croppedPivotField =
+            AccessTools.Field(typeof(scrVisualDecoration), "croppedPivotOffset");
+
+        private static readonly AccessTools.FieldRef<scrVisualDecoration, Vector2>? _croppedPivotOffsetRef =
+            _croppedPivotField == null ? null : AccessTools.FieldRefAccess<scrVisualDecoration, Vector2>(_croppedPivotField);
+
         // ---------------- 开关生命周期 ----------------
 
         public static bool Enabled => _enabled;
@@ -182,6 +194,7 @@ namespace Iridium.Patches.Optimizer
             if (dec.parallax.dontAlterX || dec.parallax.dontAlterY || dec.parallax.clampToScreen) return false;
             if (dec.lockScale) return false;                                     // 顶点随相机缩放变化
             if (_blendModeRef == null || _blendModeRef(dec) != DecorationBlendMode.None) return false;
+            if (_croppedPivotOffsetRef != null && _croppedPivotOffsetRef(dec) != Vector2.zero) return false;
 
             var mat = dec.meshRenderer != null && dec.meshRenderer.sharedMaterial != null
                 ? dec.meshRenderer.sharedMaterial.mainTexture as Texture2D : null;

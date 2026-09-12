@@ -174,16 +174,6 @@
             </HBox>
             {isInfoExpanded('OptimizeDecorationShaderCache') && <Text text={localize('OptimizeDecorationShaderCacheInfo')} style="hint" />}
 
-            {settings.optimizer.optimizeDecorationShaderCache && <>
-                <HBox align="center">
-                    <Text text={localize('OptimizeDecorationFilterCache')} style="label" />
-                    <Icon type="information" on-click="OnInfoToggle('OptimizeDecorationFilterCache')" />
-                    <Fill />
-                    <Checkbox value={settings.optimizer.optimizeDecorationFilterCache} on-changed="OnDecorationFilterCacheToggled" />
-                </HBox>
-                {isInfoExpanded('OptimizeDecorationFilterCache') && <Text text={localize('OptimizeDecorationFilterCacheInfo')} style="hint" />}
-            </>}
-
             <HBox align="center">
                 <Text text={localize('EnableStaticDecorationBatching')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('EnableStaticDecorationBatching')" />

@@ -8,7 +8,7 @@ namespace Iridium.Config
         public bool enableOptimizer = false;
         public bool optimizeMoveTrack = false;
         public bool optimizeRecolorTrack = false;
-        public bool optimizeFilters = false;
+        public bool optimizeFilters = false; // 装饰物滤镜 RT 缓存（参数/事件变化自动失效）
 		public int divideBy = 1;
         public bool dontShowSavedMemory = false;
         public bool dontCompress = false;
@@ -30,7 +30,6 @@ namespace Iridium.Config
         public bool optimizeFloorMesh = false;
         public bool optimizeFfxDecorations = false; // 新增：优化 ffx 装饰物更新
         public bool optimizeDecorationShaderCache = false; // 装饰物渲染脏检查缓存
-        public bool optimizeDecorationFilterCache = false; // 滤镜装饰物 RT 结果缓存（实验性）
         public bool enableStaticDecorationBatching = false; // 静态装饰物合批渲染（实验性，需缓速引擎）
         public bool showPerfOverlay = false; // 性能拆解悬浮窗（诊断用）
 
@@ -180,20 +179,46 @@ namespace Iridium.Config
         public string failMiss = "FailMiss";
         public string failOverload = "FailOverload";
 
-        public string GetTextForHitMargin(int hitMargin)
+        // 3.4.0 新增/拆分的判定（旧版本不显示、不生效）
+        public string perfectMinus = "PerfectMinus";
+        public string xPerfect = "XPerfect";
+        public string perfectPlus = "PerfectPlus";
+        public string midspin = "Midspin";
+        public string failedFloor = "FailedFloor";
+
+        private static readonly bool _extendedHitMargins = DetectExtendedHitMargins();
+
+        /// <summary>运行中的游戏是否具有 3.4.0 的扩展判定类型（XPerfect 等）。</summary>
+        public bool extendedHitMargins => _extendedHitMargins;
+
+        private static bool DetectExtendedHitMargins()
         {
-            return hitMargin switch
+            try { return Enum.IsDefined(typeof(HitMargin), "XPerfect"); }
+            catch { return false; }
+        }
+
+        // 按枚举名映射判定文本。禁止按数值/索引映射：3.4.0 重排了 HitMargin
+        // 的值（Perfect=3 在 4.0 变成 PerfectMinus），编译期常量与 (int) 转换
+        // 会在跨版本运行时静默指向错误的判定类型。
+        public string GetTextForHitMarginName(string name)
+        {
+            return name switch
             {
-                0 => tooEarly,
-                1 => veryEarly,
-                2 => earlyPerfect,
-                3 => perfect,
-                4 => latePerfect,
-                5 => veryLate,
-                6 => tooLate,
-                7 => multipress,
-                8 => failMiss,
-                9 => failOverload,
+                "TooEarly" => tooEarly,
+                "VeryEarly" => veryEarly,
+                "EarlyPerfect" => earlyPerfect,
+                "Perfect" => perfect,
+                "PerfectMinus" => perfectMinus,
+                "XPerfect" => xPerfect,
+                "PerfectPlus" => perfectPlus,
+                "LatePerfect" => latePerfect,
+                "VeryLate" => veryLate,
+                "TooLate" => tooLate,
+                "Multipress" => multipress,
+                "FailMiss" => failMiss,
+                "FailOverload" => failOverload,
+                "Midspin" => midspin,
+                "FailedFloor" => failedFloor,
                 _ => ""
             };
         }
@@ -236,6 +261,11 @@ namespace Iridium.Config
             multipress = "{offset}ms";
             failMiss = "{offset}ms";
             failOverload = "{offset}ms";
+            perfectMinus = "{offset}ms";
+            xPerfect = "{offset}ms";
+            perfectPlus = "{offset}ms";
+            midspin = "{offset}ms";
+            failedFloor = "{offset}ms";
         }
 
         public void ResetToDefault()
@@ -250,6 +280,11 @@ namespace Iridium.Config
             multipress = "Multipress";
             failMiss = "FailMiss";
             failOverload = "FailOverload";
+            perfectMinus = "PerfectMinus";
+            xPerfect = "XPerfect";
+            perfectPlus = "PerfectPlus";
+            midspin = "Midspin";
+            failedFloor = "FailedFloor";
         }
     }
 

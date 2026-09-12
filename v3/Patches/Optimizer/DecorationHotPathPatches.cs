@@ -3,6 +3,7 @@ using ADOFAI;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
@@ -26,9 +27,24 @@ namespace Iridium.Patches.Optimizer
 
         private static readonly HashSet<scrDecoration> _seen = new HashSet<scrDecoration>();
 
-        [HarmonyPatch(typeof(scrDecorationManager), "GetTaggedDecorations", new[] { typeof(IEnumerable<string>) })]
+        [HarmonyPatch]
         public static class GetTaggedDecorationsPatch
         {
+            // GetTaggedDecorations<T>(IEnumerable<string>) 与同参的非泛型重载会让
+            // AccessTools.Method 产生歧义，这里显式排除泛型版本。
+            [HarmonyTargetMethod]
+            public static MethodBase ResolveTarget()
+            {
+                foreach (var method in typeof(scrDecorationManager).GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (method.Name != "GetTaggedDecorations" || method.IsGenericMethod) continue;
+                    var parameters = method.GetParameters();
+                    if (parameters.Length == 1 && parameters[0].ParameterType == typeof(IEnumerable<string>))
+                        return method;
+                }
+                return null!;
+            }
+
             [HarmonyPrefix]
             public static bool Prefix(scrDecorationManager __instance, IEnumerable<string> tags,
                 ref IEnumerable<scrDecoration> __result)

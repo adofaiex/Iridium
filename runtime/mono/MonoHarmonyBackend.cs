@@ -60,6 +60,12 @@ namespace Iridium.Runtime
                 if (originals == null || originals.Count == 0)
                     return PatchResult.NotFound(type.Name);
 
+                // Safety net: a compiled-against-old-API patch may throw at
+                // runtime (e.g. MissingMethodException after a game update).
+                // The finalizer keeps such exceptions from breaking the game.
+                foreach (var patchedOriginal in originals)
+                    PatchExceptionGuard.Attach(Harmony, patchedOriginal);
+
                 var bindings = new List<(MethodBase Original, MethodInfo PatchMethod)>();
                 foreach (var original in originals)
                 {
@@ -150,6 +156,7 @@ namespace Iridium.Runtime
             }
             _adaptivePatches.Clear();
             Harmony?.UnpatchAll(Harmony.Id);
+            PatchExceptionGuard.Reset();
             _patchedBindings.Clear();
         }
 
