@@ -47,6 +47,7 @@ namespace Iridium
 
             // 补丁运行时异常隔离：patch 内抛出的异常记录后吞掉，不破坏游戏热路径
             Iridium.Runtime.PatchExceptionGuard.ErrorLogger = msg => Logger?.Error(msg);
+            Iridium.Runtime.PatchExceptionGuard.WarnLogger = msg => Logger?.Warning(msg);
 
             // 预加载 UI 纹理资源，避免首次打开面板时卡顿
             Iridium.UI.IridiumLayout.EnsureTexturesAlive();

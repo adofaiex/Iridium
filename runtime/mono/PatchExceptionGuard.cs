@@ -23,7 +23,11 @@ namespace Iridium.Runtime
         /// <summary>Set by the mod to route guard messages to its own logger.</summary>
         public static Action<string>? ErrorLogger;
 
+        /// <summary>Set by the mod to route guard warnings (non-fatal) to its logger.</summary>
+        public static Action<string>? WarnLogger;
+
         private static readonly HashSet<MethodBase> _guarded = new();
+        private static bool _attachFailureLogged;
         private static readonly MethodInfo? _finalizerMethod =
             AccessTools.Method(typeof(PatchExceptionGuard), nameof(Finalizer));
 
@@ -42,8 +46,18 @@ namespace Iridium.Runtime
             }
             catch (Exception error)
             {
-                lock (_guarded) _guarded.Remove(original);
-                Log($"[PatchGuard] Failed to attach finalizer to {original.DeclaringType?.Name}.{original.Name}: {error.Message}");
+                // Best-effort guard: some methods are already detoured in a way that
+                // rejects an extra finalizer. Warn once instead of flooding the log.
+                bool firstFailure;
+                lock (_guarded)
+                {
+                    _guarded.Remove(original);
+                    firstFailure = !_attachFailureLogged;
+                    _attachFailureLogged = true;
+                }
+
+                if (firstFailure)
+                    Warn($"[PatchGuard] finalizer attach skipped for some patched methods: {error.Message}");
             }
         }
 
@@ -72,6 +86,14 @@ namespace Iridium.Runtime
         {
             if (ErrorLogger != null)
                 ErrorLogger(message);
+            else
+                Debug.WriteLine(message);
+        }
+
+        private static void Warn(string message)
+        {
+            if (WarnLogger != null)
+                WarnLogger(message);
             else
                 Debug.WriteLine(message);
         }
