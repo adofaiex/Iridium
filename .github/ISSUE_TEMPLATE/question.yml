@@ -33,6 +33,15 @@ body:
       required: true
 
   - type: input
+    id: version
+    attributes:
+      label: Iridium 版本
+      description: 你使用的 Iridium 版本（游戏内 Iridium 设置面板顶部可见，或见 Mods/Iridium/Info.json 与下载的压缩包文件名）
+      placeholder: 2.0.1_beta1+adofai_v3
+    validations:
+      required: true
+
+  - type: input
     id: game_version
     attributes:
       label: ADOFAI 版本
