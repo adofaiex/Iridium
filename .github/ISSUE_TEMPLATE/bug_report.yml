@@ -9,17 +9,12 @@ body:
         ## 感谢反馈！
         请尽可能详细地填写以下信息，这能帮助我更快定位问题。
 
-  - type: dropdown
+  - type: input
     id: version
     attributes:
       label: Iridium 版本
-      description: 你使用的是哪个版本的 Iridium？（可在 Mods/Iridium/Info.json 中查看）
-      options:
-        - Iridium v2.10.0-beta6 (Frontline)
-        - Iridium v2.9.8-beta6 (Main)
-        - Iridium v2.10.0-beta5 (Frontline)
-        - Iridium v2.9.8-beta5 (Main)
-        - 其他（请在下方注明）
+      description: 你使用的 Iridium 版本（游戏内 Iridium 设置面板顶部可见，或见 Mods/Iridium/Info.json 与下载的压缩包文件名）
+      placeholder: 2.0.1_beta1+adofai_v3
     validations:
       required: true
 
