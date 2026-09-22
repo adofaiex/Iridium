@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net481</TargetFramework>
+		<OutputType>Library</OutputType>
+		<RootNamespace>Iridium.Loader</RootNamespace>
+		<AssemblyName>Iridium.Loader.UMM</AssemblyName>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<OutputPath>..\..\bin\loaders\umm\</OutputPath>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+	<ItemGroup>
+		<Reference Include="ModsTagLib">
+			<HintPath>..\..\lib\ModManager\ModsTagLib.dll</HintPath>
+		</Reference>
+		<Reference Include="ModsTagLib.Unity">
+			<HintPath>..\..\lib\ModManager\ModsTagLib.Unity.dll</HintPath>
+		</Reference>
+		<Reference Include="ModsTagLib.FileFormat">
+			<HintPath>..\..\lib\ModManager\ModsTagLib.FileFormat.dll</HintPath>
+		</Reference>
+		<Reference Include="0Harmony">
+			<HintPath>..\..\lib\ModManager\0Harmony.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine">
+			<HintPath>..\..\lib\v2.9.8\UnityEngine.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.CoreModule">
+			<HintPath>..\..\lib\v2.9.8\UnityEngine.CoreModule.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\..\v2\Iridium_v2.csproj" />
+		<ProjectReference Include="..\..\runtime\abstractions\Iridium.Runtime.Abstractions.csproj" />
+		<ProjectReference Include="..\..\runtime\mono\Iridium.Runtime.Mono.csproj" />
+	</ItemGroup>
+</Project>

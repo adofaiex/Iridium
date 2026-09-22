@@ -2,6 +2,7 @@
   <Project Path="loaders/melonloader/Iridium.Loader.Melon.csproj" />
   <Project Path="loaders/ummloader/Iridium.Loader.UMM.csproj" />
   <Project Path="loaders/bepinex/Iridium.Loader.BepInEx.csproj" />
+  <Project Path="loaders/minimodloader/Iridium.Loader.ModsTagLib.MiniModLoader.csproj" />
   <Project Path="v3/Iridium_v3.csproj" />
   <Project Path="v2/Iridium_v2.csproj" />
   <Project Path="architectury/Iris.Iml/Iris.Iml.csproj" />
