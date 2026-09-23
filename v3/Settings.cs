@@ -251,6 +251,23 @@ namespace Iridium
                 Save();
             });
 
+            _renderer.RegisterHandler("OnRenderScaleToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.enableRenderScale = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                Save();
+            });
+
+            _renderer.RegisterHandler("OnRenderScalePercentChanged", (obj) =>
+            {
+                if (obj is float f)
+                {
+                    optimizer.renderScalePercent = Mathf.Clamp((int)f, 30, 100);
+                    Save();
+                }
+            });
+
             _renderer.RegisterHandler("OnOptimizeDecorationUpdateToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;

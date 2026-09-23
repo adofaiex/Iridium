@@ -14,7 +14,7 @@ namespace Iridium
     public static class VersionManager
     {
         public static VersionType Type => VersionType.Snapshot;
-        public const int MinorVersion = 5;
+        public const int MinorVersion = 6;
 
         public static string GetFullVersionString()
         {

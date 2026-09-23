@@ -56,6 +56,7 @@
                 <Button text={getShortcutDisplay(settings.editorShortcuts.selectAllFloorsKey, settings.editorShortcuts.selectAllFloorsModifiers)} on-click="OnBindSelectAllFloorsKey" />
             </HBox>
 
+            <Separator />
             <HBox align="center">
                 <Text text={localize('CameraFollowOnFloorSelect')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('CameraFollowOnFloorSelect')" />
@@ -94,6 +95,7 @@
         {isInfoExpanded('EditorPauseAllowed') && <Text text={localize('EditorPauseAllowedInfo')} style="hint" />}
 
         {settings.compatibility.editorPauseAllowed && <>
+            <Separator />
             <HBox align="center">
                 <Text text={localize('EditorPauseEnabled')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('EditorPauseEnabled')" />
@@ -124,6 +126,7 @@
         {isInfoExpanded('EnableEditorFloorOptimization') && <Text text={localize('EnableEditorFloorOptimizationInfo')} style="hint" />}
 
         {settings.optimizer.enableEditorFloorOptimization && <>
+            <Separator />
             <HBox align="center">
                 <Text text={localize('IncrementalFloorInsert')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('IncrementalFloorInsert')" />
@@ -133,6 +136,7 @@
             {isInfoExpanded('IncrementalFloorInsert') && <Text text={localize('IncrementalFloorInsertInfo')} style="hint" />}
 
             {settings.optimizer.incrementalFloorInsert && <>
+                <Separator />
                 <HBox align="center">
                     <Text text={localize('RangeBasedRedraw')} style="label" />
                     <Icon type="information" on-click="OnInfoToggle('RangeBasedRedraw')" />
@@ -141,6 +145,7 @@
                 </HBox>
                 {isInfoExpanded('RangeBasedRedraw') && <Text text={localize('RangeBasedRedrawInfo')} style="hint" />}
 
+                <Separator />
                 <HBox align="center">
                     <Text text={localize('SkipRedundantRemakePath')} style="label" />
                     <Icon type="information" on-click="OnInfoToggle('SkipRedundantRemakePath')" />
@@ -149,6 +154,7 @@
                 </HBox>
                 {isInfoExpanded('SkipRedundantRemakePath') && <Text text={localize('SkipRedundantRemakePathInfo')} style="hint" />}
 
+                <Separator />
                 <HBox align="center">
                     <Text text={localize('OptimizeOffsetFloorEvents')} style="label" />
                     <Icon type="information" on-click="OnInfoToggle('OptimizeOffsetFloorEvents')" />

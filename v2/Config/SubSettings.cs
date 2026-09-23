@@ -6,6 +6,8 @@ namespace Iridium.Config
     public class OptimizerSettings
     {
         public bool enableOptimizer = false;
+        public bool enableRenderScale = false;   // 帧缓冲降分辨率（世界画面以较低分辨率渲染后放大）
+        public int renderScalePercent = 75;      // 30-100，越低越流畅
         public bool optimizeMoveTrack = false;
         public bool optimizeRecolorTrack = false;
         public bool optimizeFilters = false;

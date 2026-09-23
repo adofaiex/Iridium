@@ -40,6 +40,7 @@
         {isInfoExpanded('EnableLobbyMusicPatch') && <Text text={localize('EnableLobbyMusicPatchInfo')} style="hint" />}
 
         {settings.lobbyMusic.enableLobbyMusicPatch && <>
+            <Separator />
             <HBox align="center">
                 <Text text={localize('EnableCustomBpm')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('EnableCustomBpm')" />
@@ -49,6 +50,7 @@
             {isInfoExpanded('EnableCustomBpm') && <Text text={localize('EnableCustomBpmInfo')} style="hint" />}
 
             {settings.lobbyMusic.enableCustomBpm && <>
+                <Separator />
                 <HBox align="center">
                     <Text text={localize('CustomBpm')} style="label" />
                     <Fill />
@@ -56,6 +58,7 @@
                 </HBox>
             </>}
 
+            <Separator />
             <HBox align="center">
                 <Text text={localize('LobbyFastMusic')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('LobbyFastMusic')" />
@@ -64,6 +67,7 @@
             </HBox>
             {isInfoExpanded('LobbyFastMusic') && <Text text={localize('LobbyFastMusicInfo')} style="hint" />}
 
+            <Separator />
             <HBox align="center">
                 <Text text={localize('LobbyCustomMusic')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('LobbyCustomMusic')" />
@@ -73,6 +77,7 @@
             {isInfoExpanded('LobbyCustomMusic') && <Text text={localize('LobbyCustomMusicInfo')} style="hint" />}
 
             {settings.lobbyMusic.customMusic && <>
+                <Separator />
                 <HBox align="center">
                     <Text text={localize('LobbyDefaultMusicPath')} style="label" />
                     <Fill />
@@ -80,6 +85,7 @@
                     <Button text={localize('Apply')} on-click="OnApplyDefaultMusic" />
                 </HBox>
 
+                <Separator />
                 <HBox align="center">
                     <Text text={localize('LobbyFastMusicPath')} style="label" />
                     <Fill />

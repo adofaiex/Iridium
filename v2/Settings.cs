@@ -177,6 +177,23 @@ namespace Iridium
                 OptimizerPatches.ResetTextureOptimizationState();
             }, "CompressImage"));
 
+            image.Add(Separator());
+            image.Add(IridiumPreset.SwitchOption(sizes, optimizer.enableRenderScale, v =>
+            {
+                optimizer.enableRenderScale = v;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+            }, "RenderScale"));
+            image.Add(IridiumPreset.IconText(sizes, IconStyle.Information, "RenderScaleHint"));
+            if (optimizer.enableRenderScale)
+            {
+                image.Add(Separator());
+                image.Add(IridiumPreset.IntOption(sizes, optimizer.renderScalePercent, v =>
+                {
+                    var clamped = Mathf.Clamp(v, 30, 100);
+                    if (clamped != optimizer.renderScalePercent) optimizer.renderScalePercent = clamped;
+                }, "RenderScalePercent", IntFormat(30, 100)));
+            }
+
             bool compressEnabled = !optimizer.dontCompress;
             if (compressEnabled)
             {

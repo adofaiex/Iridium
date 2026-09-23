@@ -91,6 +91,10 @@ namespace Iridium.Patches
             RegisterNestedPatches(typeof(OptimizerPatches), optCond);
             RegisterNestedPatches(typeof(TrackOptimizationPatches), optCond);
 
+            // --- Render Scale (帧缓冲降分辨率) ---
+            var renderScaleCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.enableRenderScale;
+            RegisterNestedPatches(typeof(RenderScalePatches), renderScaleCond);
+
             // --- Ffx Optimization Patches ---
             RegisterNestedPatches(typeof(FfxOptimizationPatches), optCond);
 
@@ -293,6 +297,7 @@ _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), cus
             var optimizerParentTypes = new HashSet<Type>
             {
                 typeof(OptimizerPatches),
+                typeof(RenderScalePatches),
                 typeof(TrackOptimizationPatches),
                 typeof(SceneOptimizationPatches),
                 typeof(LoadingOptimizationPatches),
