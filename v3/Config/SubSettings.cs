@@ -20,6 +20,7 @@ namespace Iridium.Config
         public int lossyQuality = 90;
         public bool disableShadows = false;
         public bool optimizeDecorationUpdate = false;
+        public bool optimizeHitboxDetection = false; // 命中框判定热路径优化
         public bool optimizeTileUpdate = false;
         public bool fastLoading = false;
         public bool skipEventIfPaused = false;

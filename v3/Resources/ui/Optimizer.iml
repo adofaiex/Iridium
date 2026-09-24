@@ -129,6 +129,15 @@
 
             <Separator />
             <HBox align="center">
+                <Text text={localize('OptimizeHitboxDetection')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('OptimizeHitboxDetection')" />
+                <Fill />
+                <Switch value={settings.optimizer.optimizeHitboxDetection} on-changed="OnOptimizeHitboxDetectionToggled" />
+            </HBox>
+            {isInfoExpanded('OptimizeHitboxDetection') && <Text text={localize('OptimizeHitboxDetectionInfo')} style="hint" />}
+
+            <Separator />
+            <HBox align="center">
                 <Text text={localize('OptimizeTileUpdate')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('OptimizeTileUpdate')" />
                 <Fill />

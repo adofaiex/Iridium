@@ -275,6 +275,14 @@ namespace Iridium
                 Save();
             });
 
+            _renderer.RegisterHandler("OnOptimizeHitboxDetectionToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.optimizeHitboxDetection = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                Save();
+            });
+
             _renderer.RegisterHandler("OnOptimizeTileUpdateToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
