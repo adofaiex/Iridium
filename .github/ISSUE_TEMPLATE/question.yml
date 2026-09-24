@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         ## 提问前请先查阅 README
-        大部分常见问题（安装步骤、版本选择、UMM 要求等）已在 README 中说明。
+        大部分常见问题（安装步骤、版本选择、加载器要求等）已在 README 中说明。
 
   - type: dropdown
     id: category
@@ -48,8 +48,19 @@ body:
       description: 你的游戏版本号
       placeholder: 2.10.0
 
-  - type: input
-    id: umm_version
+  - type: dropdown
+    id: loader
     attributes:
-      label: UnityModManager 版本
+      label: 使用的模组加载器
+      description: 你通过哪个加载器运行 Iridium？
+      options:
+        - UnityModManager (UMM)
+        - MelonLoader
+        - BepInEx
+        - 其他
+
+  - type: input
+    id: loader_version
+    attributes:
+      label: 加载器版本
       placeholder: 0.32.5.0

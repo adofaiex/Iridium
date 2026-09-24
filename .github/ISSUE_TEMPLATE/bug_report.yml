@@ -27,11 +27,24 @@ body:
     validations:
       required: true
 
-  - type: input
-    id: umm_version
+  - type: dropdown
+    id: loader
     attributes:
-      label: UnityModManager 版本
-      description: 你使用的 UMM 版本号
+      label: 使用的模组加载器
+      description: 你通过哪个加载器运行 Iridium？
+      options:
+        - UnityModManager (UMM)
+        - MelonLoader
+        - BepInEx
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: loader_version
+    attributes:
+      label: 加载器版本
+      description: 你使用的模组加载器版本号
       placeholder: 0.32.5.0
     validations:
       required: true
@@ -63,7 +76,12 @@ body:
     id: logs
     attributes:
       label: 日志 / 错误信息
-      description: 粘贴 Unity 控制台输出、Player.log 或错误弹窗内容
+      description: |
+        粘贴 Unity 控制台输出或错误弹窗内容。
+        Player.log 文件路径：
+        - Windows: %userprofile%\AppData\LocalLow\7th Beat Games\A Dance of Fire and Ice\Player.log
+        - Linux: ~/.config/unity3d/7th Beat Games/A Dance of Fire and Ice/Player.log
+        - macOS: ~/Library/Logs/7th Beat Games/A Dance of Fire and Ice/Player.log
       placeholder: 如果有错误日志，请粘贴在这里
       render: shell
 
