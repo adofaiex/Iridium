@@ -1,7 +1,8 @@
 name: Bug Report
 description: 报告 Iridium 的崩溃、异常或功能故障
-title: "[Bug] "
-labels: ["bug"]
+title: ""
+labels: []
+type: "bug"
 body:
   - type: markdown
     attributes:
