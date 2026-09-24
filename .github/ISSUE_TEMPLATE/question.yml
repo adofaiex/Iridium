@@ -1,7 +1,7 @@
 name: Question / Support
 description: 关于 Iridium 的安装、使用或兼容性问题
-title: "[Question] "
-labels: ["question"]
+labels: []
+type: "questions"
 body:
   - type: markdown
     attributes:
@@ -28,7 +28,7 @@ body:
       label: 问题内容
       description: 请详细描述你遇到的问题
       placeholder: |
-        例如：我按照 README 部署后，游戏中没有出现 Iridium 的选项卡。
+        例如：我按照 README 部署后，游戏中没有出现 Iridium 的选项卡，我需要输入什么快捷键打开它。
     validations:
       required: true
 
