@@ -17,6 +17,20 @@ namespace Iridium.Patches
 
 		#region Static State for Incremental Mode
 
+		// NOTE(isOldLevel 与 compatibility/forceAngleData 的交互，改代码前必读):
+		//
+		// 增量重建只对"现代表示"成立：几何由 angleData → InstantiateFloatFloors
+		// 构建，floorAngles.Length + 1 == listFloors.Count，angles[j] 是第 j+1 块
+		// 的朝向。旧谱面（isOldLevel == true）的 LevelData.angleData 是空的，
+		// 几何由 InstantiateStringFloors(pathData) 构建，本文件并未接管；此时
+		// 任何基于 floorAngles 的重建都会算错。所以所有增量入口都必须对
+		// isOldLevel 直接放行给原版。
+		//
+		// 开启 compatibility/forceAngleData 时，LevelData.Decode 会把 pathData
+		// 转成角度制 angleData 并移除 pathData（见 ForceAngleDataPatch），
+		// isOldLevel 最终为 false —— 旧谱面也因此走 float 路径，增量重建才合法。
+		// 也就是说 ForceAngleData 与本优化是叠加关系，不是冲突；但一旦将来
+		// Decode / isOldLevel 的判定逻辑改动，这里的哨兵就是防线。
 		private static bool _incrementalMode;
 		private static bool _incrementalIsInsert;
 		private static int _incrementalSeqID;
@@ -32,11 +46,32 @@ namespace Iridium.Patches
 
 		// Cached open delegate — created once, reused every call
 		private static Action<scnEditor>? _drawFloorNumsAction;
+		private static Action<scnEditor>? _drawFloorOffsetLinesAction;
+		private static Action<scnEditor, bool>? _drawHoldsAction;
+		private static Action<scnEditor>? _drawMultiPlanetAction;
 
 		private static void DrawFloorNums(scnEditor editor)
 		{
 			(_drawFloorNumsAction ??= AccessTools.MethodDelegate<Action<scnEditor>>(
 				AccessTools.Method(typeof(scnEditor), "DrawFloorNums"), null))?.Invoke(editor);
+		}
+
+		private static void DrawFloorOffsetLines(scnEditor editor)
+		{
+			(_drawFloorOffsetLinesAction ??= AccessTools.MethodDelegate<Action<scnEditor>>(
+				AccessTools.Method(typeof(scnEditor), "DrawFloorOffsetLines"), null))?.Invoke(editor);
+		}
+
+		private static void DrawHolds(scnEditor editor, bool unfillHolds)
+		{
+			(_drawHoldsAction ??= AccessTools.MethodDelegate<Action<scnEditor, bool>>(
+				AccessTools.Method(typeof(scnEditor), "DrawHolds", new[] { typeof(bool) }), null))?.Invoke(editor, unfillHolds);
+		}
+
+		private static void DrawMultiPlanet(scnEditor editor)
+		{
+			(_drawMultiPlanetAction ??= AccessTools.MethodDelegate<Action<scnEditor>>(
+				AccessTools.Method(typeof(scnEditor), "DrawMultiPlanet"), null))?.Invoke(editor);
 		}
 
 		#endregion
@@ -87,6 +122,10 @@ namespace Iridium.Patches
 				if (!Main.Settings.optimizer.enableEditorFloorOptimization) return true;
 				if (!Main.Settings.optimizer.incrementalFloorInsert) return true;
 
+				// 哨兵：旧谱面走 InstantiateStringFloors(pathData)，增量重建不适用
+				// （见文件顶部 NOTE / forceAngleData 交互）。
+				if (__instance.levelData.isOldLevel) return true;
+
 				var lm = scrLevelMaker.instance;
 				var floors = lm.listFloors;
 				if (floors == null || floors.Count < 2) return true;
@@ -135,6 +174,9 @@ namespace Iridium.Patches
 				if (!Main.Settings.optimizer.enableEditorFloorOptimization) return true;
 				if (!Main.Settings.optimizer.incrementalFloorInsert) return true;
 
+				// 哨兵：同上，旧谱面一律交还原版
+				if (__instance.levelData.isOldLevel) return true;
+
 				var lm = scrLevelMaker.instance;
 				var floors = lm.listFloors;
 				if (floors == null || floors.Count < 2) return true;
@@ -173,6 +215,25 @@ namespace Iridium.Patches
 			public static bool Prefix(scrLevelMaker __instance)
 			{
 				if (!_incrementalMode) return true; // normal mode - let original run
+
+				// 哨兵：旧谱面由 InstantiateStringFloors 构建，角度/楼层数约定不同
+				// （angleData 为空），不允许走增量重建。
+				if (__instance.isOldLevel)
+				{
+					_incrementalMode = false;
+					return true;
+				}
+
+				// 与原版 scrLevelMaker.InstantiateFloatFloors 的选择保持一致：
+				// 非播放中、或精灵砖块（FloorSpriteRenderer）时，原版会整批销毁重建，
+				// 增量复用只对网格砖块安全 —— 这些情况一律交还原版。
+				var initialFloors = __instance.listFloors;
+				if (!Application.isPlaying ||
+					(initialFloors.Count > 0 && initialFloors[0].GetComponent<FloorSpriteRenderer>() != null))
+				{
+					_incrementalMode = false;
+					return true;
+				}
 
 				try
 				{
@@ -387,6 +448,15 @@ namespace Iridium.Patches
 			floor.transform.position = position;
 			floor.transform.rotation = Quaternion.identity;
 			floor.transform.localScale = Vector3.one;
+
+			// 对齐原版 scrLevelMaker.ResetFloor：播放中把砖块材质重置为默认，
+			// 否则复用砖块会残留上一次编辑造成的材质改动。
+			if (Application.isPlaying && floor.floorRenderer != null &&
+				RDConstants.data != null && RDConstants.data.floorMeshDefault != null)
+			{
+				floor.floorRenderer.material.CopyPropertiesFromMaterial(RDConstants.data.floorMeshDefault);
+			}
+
 			floor.Reset();
 		}
 
@@ -480,13 +550,19 @@ namespace Iridium.Patches
 				if (!Main.Settings.optimizer.enableEditorFloorOptimization) return true;
 				if (!Main.Settings.optimizer.skipRedundantRemakePath) return true;
 
-				// Visual-only refresh (e.g. ToggleFloorNums calls RemakePath(false, false))
-				// scnGame.RemakePath(false, false) does nothing meaningful
-				// scnEditor.RemakePath then calls DrawFloorOffsetLines + DrawHolds + DrawFloorNums + DrawMultiPlanet
-				// We skip the scnGame call and do only the minimum editor-level draws.
+				// Visual-only refresh (e.g. ToggleFloorNums calls RemakePath(false, false)).
+				// 原版 scnEditor.RemakePath 会先调 customLevel.RemakePath(false,false)
+				// （内部做 SetupConductor + DrawHolds + DrawMultiPlanet），再执行
+				// DrawFloorOffsetLines / DrawHolds / DrawFloorNums / DrawMultiPlanet。
+				// 我们跳过 scnGame 那一份重复的 Holds/MultiPlanet，但仍按原版补齐
+				// 导体设置与全部编辑器级绘制，避免悬浮线/长条/多星球残留旧状态。
 				if (!applyEventsToFloors && !remakeLevel)
 				{
+					ADOBase.conductor.SetupConductorWithLevelData(__instance.levelData);
+					DrawFloorOffsetLines(__instance);
+					DrawHolds(__instance, true);
 					DrawFloorNums(__instance);
+					DrawMultiPlanet(__instance);
 					return false;
 				}
 
