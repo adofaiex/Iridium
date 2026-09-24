@@ -1,7 +1,7 @@
 name: Feature Request
 description: 为 Iridium 提出新功能或改进建议
 labels: []
-type: "questions"
+type: "feature"
 body:
   - type: markdown
     attributes:
