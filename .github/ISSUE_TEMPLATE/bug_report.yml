@@ -77,12 +77,12 @@ body:
     attributes:
       label: 日志 / 错误信息
       description: |
-        粘贴 Unity 控制台输出或错误弹窗内容。
+        粘贴 Unity 控制台输出或错误弹窗内容；也可以直接把 Player.log（.log）文件拖拽/粘贴到下方文本框上传。
         Player.log 文件路径：
         - Windows: %userprofile%\AppData\LocalLow\7th Beat Games\A Dance of Fire and Ice\Player.log
         - Linux: ~/.config/unity3d/7th Beat Games/A Dance of Fire and Ice/Player.log
         - macOS: ~/Library/Logs/7th Beat Games/A Dance of Fire and Ice/Player.log
-      placeholder: 如果有错误日志，请粘贴在这里
+      placeholder: 拖动 .log 文件到此处上传，或直接粘贴日志内容
       render: shell
 
   - type: checkboxes
