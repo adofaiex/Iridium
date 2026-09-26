@@ -186,6 +186,10 @@
   "UseILPatchHint": "IL Transpiler 模式：直接 IL 注入，性能最佳",
   "UsePrefixPostfixHint": "Prefix/Postfix 模式：标准 Harmony 补丁，兼容性最佳",
   "FrameSpreadDecorationLoading": "装饰物分帧加载",
+  "OptimizeLargeLevelLoading": "大谱面加载优化",
+  "OptimizeLargeLevelLoadingInfo": "加载/开局时跳过无特效砖块的组件扫描，并启用发光贴片/线号按需生成与 [LoadProfiler] 阶段计时。不依赖优化器总开关。",
+  "ChunkedFloorSpawn": "分帧激活砖块（实验性）",
+  "ChunkedFloorSpawnInfo": "大谱面实例化出来的砖块先保持未激活，之后按帧分批激活，编辑器不再单帧卡死；进播放前会强制全部激活。若出现显示或编辑器交互异常，关掉本项即可（加载优化的其它部分仍然生效）。",
   "DecorationsPerFrame": "每帧装饰物数量",
   "FrameSpreadLoadingHint": "将装饰物创建分散到多帧，防止加载大量装饰物谱面时的卡顿",
   "LoadingDecorationsProgress": "加载装饰物: {0}/{1}",
@@ -202,6 +206,7 @@
   "RangeBasedRedraw": "范围式重绘 (仅重绘受影响的砖块)",
   "SkipRedundantRemakePath": "跳过冗余的 RemakePath 调用",
   "OptimizeOffsetFloorEvents": "优化事件中的砖块 ID 偏移",
+  "SkipApplyEventsOnInsert": "增量插入时跳过全量事件重应用",
   "EditorFloorOptimizationWarning": "这些优化会改变编辑器的砖块重建逻辑。如果遇到显示异常，请尝试关闭它们。",
   "EditorShortcuts": "编辑器快捷键",
   "EnableEditorShortcuts": "启用编辑器快捷键",
@@ -233,5 +238,10 @@
   "IgnoreRequiredModsWarning": "将忽略缺失的第三方Mod，谱面可能无法正常游玩。",
   "MissingModsNotice": "有{0} 等{1}个Mod缺失",
   "MissingModsNoticeSingle": "有{0} Mod缺失",
-  "CustomEventReadOnlyNotice": "这些事件仅在安装了第三方Mod的情况下才能生效，你只能禁用和移除，不能修改它们。"
+  "CustomEventReadOnlyNotice": "这些事件仅在安装了第三方Mod的情况下才能生效，你只能禁用和移除，不能修改它们。",
+  "V3LevelCompatSection": "v3 谱面兼容",
+  "EnableV3LevelCompat": "打开 v3 谱面（版本 16-19）",
+  "V3LevelCompatHint": "允许 2.9.8 加载、游玩和编辑 ADOFAI 3.x 制作的谱面。保存时 v3 专属属性不会丢失，谱面仍保持 v3 版本号。不支持的事件会像第三方Mod事件一样以只读方式保留。",
+  "V3LevelCompatWarning": "部分 v3 功能无法在 2.9.8 中还原（如自定义背景 prefab），游玩时会被忽略。",
+  "V3CompatCustomBGPrefabIgnored": "2.9.8 不支持自定义背景 prefab\"{0}\"，已忽略。"
 }

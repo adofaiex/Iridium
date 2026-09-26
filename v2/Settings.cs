@@ -562,20 +562,67 @@ namespace Iridium
             if (optimizer.enableEditorFloorOptimization)
             {
                 editorFloor.Add(Separator());
-                editorFloor.Add(IridiumPreset.SwitchOption(sizes, optimizer.incrementalFloorInsert, v => optimizer.incrementalFloorInsert = v, "IncrementalFloorInsert"));
+                editorFloor.Add(IridiumPreset.SwitchOption(sizes, optimizer.incrementalFloorInsert, v =>
+                {
+                    optimizer.incrementalFloorInsert = v;
+                    AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                }, "IncrementalFloorInsert"));
                 if (optimizer.incrementalFloorInsert)
                 {
                     editorFloor.Add(Separator());
-                    editorFloor.Add(IridiumPreset.SwitchOption(sizes, optimizer.rangeBasedRedraw, v => optimizer.rangeBasedRedraw = v, "RangeBasedRedraw"));
+                    editorFloor.Add(IridiumPreset.SwitchOption(sizes, optimizer.skipApplyEventsOnInsert, v =>
+                    {
+                        optimizer.skipApplyEventsOnInsert = v;
+                        AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                    }, "SkipApplyEventsOnInsert"));
                     editorFloor.Add(Separator());
-                    editorFloor.Add(IridiumPreset.SwitchOption(sizes, optimizer.skipRedundantRemakePath, v => optimizer.skipRedundantRemakePath = v, "SkipRedundantRemakePath"));
+                    editorFloor.Add(IridiumPreset.SwitchOption(sizes, optimizer.rangeBasedRedraw, v =>
+                    {
+                        optimizer.rangeBasedRedraw = v;
+                        AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                    }, "RangeBasedRedraw"));
                     editorFloor.Add(Separator());
-                    editorFloor.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeOffsetFloorEvents, v => optimizer.optimizeOffsetFloorEvents = v, "OptimizeOffsetFloorEvents"));
+                    editorFloor.Add(IridiumPreset.SwitchOption(sizes, optimizer.skipRedundantRemakePath, v =>
+                    {
+                        optimizer.skipRedundantRemakePath = v;
+                        AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                    }, "SkipRedundantRemakePath"));
+                    editorFloor.Add(Separator());
+                    editorFloor.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeOffsetFloorEvents, v =>
+                    {
+                        optimizer.optimizeOffsetFloorEvents = v;
+                        AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                    }, "OptimizeOffsetFloorEvents"));
                 }
                 editorFloor.Add(Separator());
                 editorFloor.Add(IridiumPreset.IconText(sizes, IconStyle.Warning, "EditorFloorOptimizationWarning"));
             }
             body.Add(VBox(ContainerStyle.Background, null, WithWidthMax(editorFloor.ToArray())));
+
+            // 大谱面加载优化：独立于优化器总开关的功能（不放在 Enabled 里）
+            elements.Add(Separator());
+            elements.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeLargeLevelLoading, v =>
+            {
+                // 关闭前先把未激活砖块补完，避免 A 的 Awake 替换卸载后与 FastInit 重复初始化
+                Iridium.Patches.ChunkedFloorSpawnPatch.FlushAll();
+                optimizer.optimizeLargeLevelLoading = v;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+            }, "OptimizeLargeLevelLoading"));
+            elements.Add(Separator());
+            elements.Add(IridiumPreset.IconText(sizes, IconStyle.Information, "OptimizeLargeLevelLoadingInfo"));
+
+            // B：分帧激活砖块（依赖大谱面加载优化开启）
+            var chunkedSpawnElements = new List<Element>
+            {
+                IridiumPreset.SwitchOption(sizes, optimizer.chunkedFloorSpawn, v =>
+                {
+                    Iridium.Patches.ChunkedFloorSpawnPatch.FlushAll();
+                    optimizer.chunkedFloorSpawn = v;
+                    AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                }, "ChunkedFloorSpawn"),
+                IridiumPreset.IconText(sizes, IconStyle.Information, "ChunkedFloorSpawnInfo")
+            };
+            elements.Add(Enabled(() => optimizer.optimizeLargeLevelLoading, chunkedSpawnElements.ToArray()));
 
             elements.Add(Enabled(() => optimizer.enableOptimizer, body.ToArray()));
             return elements.ToArray();
@@ -984,6 +1031,28 @@ namespace Iridium
                 thirdParty.Add(IridiumPreset.IconText(sizes, IconStyle.Warning, "IgnoreRequiredModsWarning"));
 
             elements.Add(VBox(ContainerStyle.Background, null, WithWidthMax(thirdParty.ToArray())));
+            elements.Add(Separator());
+
+            elements.Add(Text(Localization.Get("V3LevelCompatSection"), TextStyle.Subtitle));
+            elements.Add(Separator());
+
+            var v3compat = new List<Element>
+            {
+                IridiumPreset.SwitchOption(sizes, compatibility.enableV3LevelCompat, v =>
+                {
+                    compatibility.enableV3LevelCompat = v;
+                    V3LevelCompatPatches.UpdatePatches();
+                    CustomEventsPatches.UpdatePatches();
+                }, "EnableV3LevelCompat")
+            };
+            v3compat.Add(Separator());
+            v3compat.Add(IridiumPreset.IconText(sizes, IconStyle.Information, "V3LevelCompatHint"));
+            if (compatibility.enableV3LevelCompat)
+            {
+                v3compat.Add(Separator());
+                v3compat.Add(IridiumPreset.IconText(sizes, IconStyle.Warning, "V3LevelCompatWarning"));
+            }
+            elements.Add(VBox(ContainerStyle.Background, null, WithWidthMax(v3compat.ToArray())));
             return elements.ToArray();
         }
 

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
+using GDMiniJSON;
 using HarmonyLib;
 using ADOFAI;
 
@@ -14,10 +16,14 @@ namespace Iridium.Patches
     /// crashes on levelEvent.info.taroDLCCheck → the chart fails to load.
     ///
     /// Iridium temporarily registers fake LevelEventInfo entries for every unknown
-    /// event type found in the chart's actions, so decoding succeeds and the events
-    /// survive save/load untouched. In the editor inspector these events are
-    /// read-only (disable / delete only), since their real behavior comes from the
-    /// third-party mod that is not installed.
+    /// event type found in the chart's actions/decorations, so decoding succeeds and
+    /// the events survive save/load untouched. In the editor inspector these events
+    /// are read-only (disable / delete only), since their real behavior comes from
+    /// the third-party mod that is not installed.
+    ///
+    /// The same machinery also covers unknown event types in v3 (version &gt; 15)
+    /// charts when the "v3 level compatibility" option is on: they must not break
+    /// loading, but there is no need to backport their behavior.
     /// </summary>
     public static class CustomEventsPatches
     {
@@ -26,6 +32,19 @@ namespace Iridium.Patches
 
         private static bool IsFakeEventName(string? name) => name != null && FakeEventNames.Contains(name);
         private static bool IsFakeInfo(LevelEventInfo? info) => info != null && info.name != null && FakeInfos.ContainsKey(info.name);
+
+        /// <summary>
+        /// uGUI 会把点击过的 Button 留在 EventSystem.currentSelectedGameObject 上：
+        /// 第三方事件的 Tab 会一直保持「选中 / 聚焦」高亮，之后按 Enter/Space
+        /// 还会再次触发它。处理完 fake tab 点击后主动释放焦点。
+        /// （与隔壁 Litematica 的 ReleaseUiFocus 同思路）
+        /// </summary>
+        private static void ReleaseUiFocus()
+        {
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            if (eventSystem != null)
+                eventSystem.SetSelectedGameObject(null);
+        }
 
         private static void HideFakePanels(ADOFAI.InspectorPanel? panel)
         {
@@ -87,6 +106,21 @@ namespace Iridium.Patches
             return info;
         }
 
+        /// <summary>
+        /// 为未知事件类型准备（必要时注册）一个只读 fake LevelEventInfo。
+        /// v3 谱面兼容的兜底路径（事件解码失败 / 未知事件漏注册）会用到。
+        /// </summary>
+        internal static LevelEventInfo? EnsureFakeInfo(string? eventName, Dictionary<string, object>? eventDict)
+        {
+            if (string.IsNullOrEmpty(eventName) || GCS.levelEventsInfo == null) return null;
+            if (GCS.levelEventsInfo.TryGetValue(eventName!, out var existing) && existing != null)
+                return existing;
+
+            var info = BuildFakeInfo(eventName!, eventDict ?? new Dictionary<string, object>());
+            GCS.levelEventsInfo[eventName!] = info;
+            return info;
+        }
+
         private static void ClearFakeEvents()
         {
             if (GCS.levelEventsInfo != null)
@@ -96,17 +130,75 @@ namespace Iridium.Patches
             FakeInfos.Clear();
         }
 
+        /// <summary>设置界面切换「v3 谱面兼容 / 忽略第三方Mod」后调用，重挂本类补丁。</summary>
+        public static void UpdatePatches()
+        {
+            try
+            {
+                foreach (var type in typeof(CustomEventsPatches).GetNestedTypes(
+                             System.Reflection.BindingFlags.Public
+                             | System.Reflection.BindingFlags.NonPublic
+                             | System.Reflection.BindingFlags.Static))
+                {
+                    if (type.GetCustomAttributes(typeof(HarmonyPatch), true).Length > 0)
+                        AsyncPatchManager.UpdatePatchByTypeAsync(type);
+                }
+            }
+            catch (Exception e)
+            {
+                Main.Logger?.Log($"[CustomEvents] UpdatePatches failed: {e}");
+            }
+        }
+
         private static void ScanAndRegister(Dictionary<string, object>? dict)
         {
             if (dict == null || GCS.levelEventsInfo == null) return;
-            if (!dict.TryGetValue("actions", out var actions) || actions is not List<object> actionList) return;
+            if (!Main.Settings.compatibility.ignoreRequiredMods
+                && !V3LevelCompatPatches.IsDecodingV3Chart(dict)) return;
 
-            foreach (var item in actionList)
+            ScanEventArray(dict, "actions");
+            ScanEventArray(dict, "decorations");
+        }
+
+        private static void ScanEventArray(Dictionary<string, object> dict, string arrayKey)
+        {
+            if (!dict.TryGetValue(arrayKey, out var raw) || raw is not List<object> list) return;
+
+            foreach (var item in list)
             {
                 if (item is not Dictionary<string, object> ev) continue;
                 if (!ev.TryGetValue("eventType", out var et) || et is not string name) continue;
-                if (name.Length == 0 || GCS.levelEventsInfo.ContainsKey(name)) continue;
-                GCS.levelEventsInfo[name] = BuildFakeInfo(name, ev);
+                if (name.Length == 0) continue;
+
+                if (!GCS.levelEventsInfo.TryGetValue(name, out var existing))
+                {
+                    GCS.levelEventsInfo[name] = BuildFakeInfo(name, ev);
+                    continue;
+                }
+
+                // Same custom type may appear with different key sets; merge new
+                // keys into the cached fake info so every instance round-trips.
+                if (IsFakeEventName(name)) MergeFakeInfoKeys(existing, ev);
+            }
+        }
+
+        private static void MergeFakeInfoKeys(LevelEventInfo info, Dictionary<string, object> ev)
+        {
+            if (info.propertiesInfo == null) return;
+            foreach (var kv in ev)
+            {
+                switch (kv.Key)
+                {
+                    case "eventType":
+                    case "floor":
+                    case "active":
+                    case "visible":
+                    case "locked":
+                        continue;
+                }
+                if (info.propertiesInfo.ContainsKey(kv.Key)) continue;
+                var propDict = new Dictionary<string, object> { ["name"] = kv.Key, ["type"] = "String" };
+                info.propertiesInfo[kv.Key] = new ADOFAI.PropertyInfo(propDict, info);
             }
         }
 
@@ -212,17 +304,72 @@ namespace Iridium.Patches
         }
 
         /// <summary>
-        /// Encode fake events with their original eventType name (eventType would
-        /// otherwise serialize as "None" and the event data would be lost).
+        /// Encode fake (custom / unknown) events by hand.
+        ///
+        /// The 2.9.8 Encode() builds its output from info.propertiesInfo (whose
+        /// mirrored keys are all typed as String), casts every value to string and
+        /// would both crash on non-string values and write eventType "None" —
+        /// so fake events could never round-trip. Emit the original eventType
+        /// name plus each stored raw value instead.
         /// </summary>
         [HarmonyPatch(typeof(LevelEvent), nameof(LevelEvent.Encode))]
         public static class FakeEventEncodePatch
         {
-            [HarmonyPostfix]
-            public static void Postfix(LevelEvent __instance, ref Dictionary<string, object> __result)
+            [HarmonyPrefix]
+            public static bool Prefix(LevelEvent __instance, bool settings, ref string __result)
             {
-                if (__result == null || !IsFakeInfo(__instance.info)) return;
-                __result["eventType"] = __instance.info.name;
+                if (settings || __instance == null || !IsFakeInfo(__instance.info)) return true;
+                try
+                {
+                    __result = EncodeFakeEvent(__instance);
+                    return false;
+                }
+                catch (Exception e)
+                {
+                    Main.Logger?.Log($"[CustomEvents] encode error: {e.Message}");
+                    return true;
+                }
+            }
+
+            private static string EncodeFakeEvent(LevelEvent ev)
+            {
+                var sb = new StringBuilder(256);
+                bool first = true;
+
+                void Field(string key, string rawJson)
+                {
+                    if (!first) sb.Append(", ");
+                    first = false;
+                    sb.Append('"').Append(key).Append("\": ").Append(rawJson);
+                }
+
+                if (ev.floor != -1) Field("floor", ev.floor.ToString());
+                Field("eventType", Json.Serialize(ev.info.name));
+                if (!ev.active) Field("active", "false");
+                if (!ev.visible) Field("visible", "false");
+                if (ev.locked) Field("locked", "true");
+
+                if (ev.data != null)
+                {
+                    foreach (var kv in ev.data)
+                    {
+                        switch (kv.Key)
+                        {
+                            case "floor":
+                            case "eventType":
+                            case "active":
+                            case "visible":
+                            case "locked":
+                                continue;
+                        }
+                        // Keys absent from the original JSON decode as disabled
+                        // defaults; keep them out of the encoded output.
+                        if (ev.disabled != null && ev.disabled.TryGetValue(kv.Key, out bool disabled) && disabled)
+                            continue;
+                        Field(kv.Key, Json.Serialize(kv.Value));
+                    }
+                }
+                return sb.ToString();
             }
         }
 
@@ -578,6 +725,7 @@ namespace Iridium.Patches
                         ADOBase.editor.DecideInspectorTabsAtSelected();
                         __instance.panel.selectedEventType = LevelEventType.None;
                         __instance.panel.ShowPanel(LevelEventType.None, idx);
+                        ReleaseUiFocus();
                         return false;
                     }
                     if (eventData.button == UnityEngine.EventSystems.PointerEventData.InputButton.Right && __instance.panel.floorPanel)

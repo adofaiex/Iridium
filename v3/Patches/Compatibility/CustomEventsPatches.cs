@@ -29,6 +29,19 @@ namespace Iridium.Patches.Compatibility
 		private static bool IsFakeEventName(string name) => name != null && FakeEventNames.Contains(name);
 		private static bool IsFakeInfo(LevelEventInfo info) => info != null && info.name != null && FakeInfos.ContainsKey(info.name);
 
+		/// <summary>
+		/// uGUI 会把点击过的 Button 留在 EventSystem.currentSelectedGameObject 上：
+		/// 第三方事件的 Tab 会一直保持「选中 / 聚焦」高亮，之后按 Enter/Space
+		/// 还会再次触发它。处理完 fake tab 点击后主动释放焦点。
+		/// （与隔壁 Litematica 的 ReleaseUiFocus 同思路）
+		/// </summary>
+		private static void ReleaseUiFocus()
+		{
+			var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+			if (eventSystem != null)
+				eventSystem.SetSelectedGameObject(null);
+		}
+
 		private static void HideFakePanels(ADOFAI.InspectorPanel panel)
 		{
 			if (panel == null) return;
@@ -580,6 +593,7 @@ namespace Iridium.Patches.Compatibility
 						ADOBase.editor.DecideInspectorTabsAtSelected();
 						__instance.panel.selectedEventType = LevelEventType.None;
 						__instance.panel.ShowPanel(LevelEventType.None, idx);
+						ReleaseUiFocus();
 						return false;
 					}
 					if (eventData.button == UnityEngine.EventSystems.PointerEventData.InputButton.Right && __instance.panel.floorPanel)

@@ -10,6 +10,24 @@
         </HBox>
         {isInfoExpanded('EnableOptimizer') && <Text text={localize('EnableOptimizerInfo')} style="hint" />}
 
+        <Separator />
+        <HBox align="center">
+            <Text text={localize('OptimizeLargeLevelLoading')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeLargeLevelLoading')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeLargeLevelLoading} on-changed="OnLargeLevelLoadingToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeLargeLevelLoading') && <Text text={localize('OptimizeLargeLevelLoadingInfo')} style="hint" />}
+        {settings.optimizer.optimizeLargeLevelLoading && <>
+            <HBox align="center">
+                <Text text={localize('ChunkedFloorSpawn')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('ChunkedFloorSpawn')" />
+                <Fill />
+                <Switch value={settings.optimizer.chunkedFloorSpawn} on-changed="OnChunkedFloorSpawnToggled" />
+            </HBox>
+            {isInfoExpanded('ChunkedFloorSpawn') && <Text text={localize('ChunkedFloorSpawnInfo')} style="hint" />}
+        </>}
+
         {settings.optimizer.enableOptimizer && <>
             <Separator />
             <HBox align="center">

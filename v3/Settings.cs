@@ -493,6 +493,25 @@ namespace Iridium
                 Save();
             });
 
+            _renderer.RegisterHandler("OnLargeLevelLoadingToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                // 关闭前先把未激活砖块补完，避免 A 的 Awake 替换卸载后与 FastInit 重复初始化
+                Iridium.Patches.Optimizer.ChunkedFloorSpawnPatch.FlushAll();
+                optimizer.optimizeLargeLevelLoading = value;
+                LargeLoadPatches.Update();
+                Save();
+            });
+
+            _renderer.RegisterHandler("OnChunkedFloorSpawnToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                Iridium.Patches.Optimizer.ChunkedFloorSpawnPatch.FlushAll();
+                optimizer.chunkedFloorSpawn = value;
+                LargeLoadPatches.Update();
+                Save();
+            });
+
             _renderer.RegisterHandler("OnDecorationsPerFrameChanged", (obj) =>
             {
                 if (obj is float f)
@@ -620,6 +639,7 @@ namespace Iridium
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.incrementalFloorInsert = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
                 Save();
             });
 
@@ -627,6 +647,7 @@ namespace Iridium
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.rangeBasedRedraw = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
                 Save();
             });
 
@@ -634,6 +655,7 @@ namespace Iridium
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.skipRedundantRemakePath = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
                 Save();
             });
 
@@ -641,6 +663,15 @@ namespace Iridium
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeOffsetFloorEvents = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                Save();
+            });
+
+            _renderer.RegisterHandler("OnSkipApplyEventsOnInsertToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.skipApplyEventsOnInsert = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
                 Save();
             });
         }

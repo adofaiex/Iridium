@@ -34,6 +34,9 @@ namespace Iridium.Patches
 		private static bool _incrementalMode;
 		private static bool _incrementalIsInsert;
 		private static int _incrementalSeqID;
+		private static int _rebuildTick;
+
+		internal static bool IncrementalActive => _incrementalMode;
 
 		#endregion
 
@@ -43,6 +46,7 @@ namespace Iridium.Patches
 		private static AccessTools.FieldRef<scnEditor, bool>? _refreshDecSpritesRef;
 		private static AccessTools.FieldRef<scrLevelMaker, GameObject>? _meshFloorRef;
 		private static AccessTools.FieldRef<scrLevelMaker, GameObject>? _spriteFloorRef;
+		private static AccessTools.FieldRef<scrLevelMaker, List<GameObject>>? _holdGOsRef;
 
 		// Cached open delegate — created once, reused every call
 		private static Action<scnEditor>? _drawFloorNumsAction;
@@ -335,16 +339,15 @@ namespace Iridium.Patches
 			var angles = lm.floorAngles;
 			if (floors == null || floors.Count == 0 || angles == null) return;
 
-			// Destroy all ffxPlusBase on floors before the rebuild range.
-			// These floors are not touched by ResetFloorState, so their event
-			// components (holds, twirls, etc.) would persist and accumulate.
 			int start = Math.Max(0, fromSeqID);
-			for (int i = 0; i < start && i < floors.Count; i++)
-			{
-				var ffx = floors[i].GetComponents<ffxPlusBase>();
-				for (int j = 0; j < ffx.Length; j++)
-					UnityEngine.Object.DestroyImmediate(ffx[j]);
-			}
+
+			// 旧实现在每次增量重建时都会对 [0, start) 的每块砖做
+			// GetComponents<ffxPlusBase>() + DestroyImmediate 清理。150k 砖时这是
+			// 15 万次原生查询，是「新建一块就卡一下」的主要来源，且没有必要：
+			//   - 未开启 skipApplyEventsOnInsert：随后的 scnGame.ApplyEventsToFloors
+			//     会自己清空并重建所有砖块的 ffx；
+			//   - 开启时：本次操作不会向该范围重新添加 ffx，不存在累积。
+			// 重建范围内的砖块由下面的 ResetFloorState 负责清理。
 
 			// Full rebuild from floor 0
 			if (start == 0)
@@ -357,25 +360,43 @@ namespace Iridium.Patches
 				floor0.prevfloor = null;
 			}
 
-			// Recompute cumulative position from floor 0 to the anchor.
-			// Using floors[start].transform.position directly would compound
-			// floating-point error across multiple incremental edits.
-			Vector3 cumulativePos = Vector3.zero;
-			double entryAngle = Pi1_5;
-			double tileRadius = scrController.instance.tileSize;
-			for (int i = 0; i < start && i < angles.Length; i++)
+			// 插入点之前的砖块本次不会被改动，锚点直接用砖块上已保存的位置/入射角，
+			// 避免每次插入都从 0 号砖重算一遍（O(start) 三角函数）。
+			// 为防止增量累加的浮点误差无限累积，每 64 次重建做一次完整重算。
+			Vector3 cumulativePos;
+			double prevEntryAngle;
+			bool fullRecompute = start <= 0 || (++_rebuildTick & 63) == 0;
+			if (start > 0 && !fullRecompute)
 			{
-				float ang = angles[i];
-				double exitAngle = ang == SentinelNoAngle ? entryAngle : (-ang + 90f) * (Math.PI / 180.0);
-				cumulativePos += scrMisc.getVectorFromAngle(exitAngle, tileRadius);
-				entryAngle = (exitAngle + Math.PI) % (2.0 * Math.PI);
+				cumulativePos = floors[start].transform.position;
+				prevEntryAngle = floors[start].entryangle;
 			}
-			double prevEntryAngle = entryAngle;
+			else
+			{
+				cumulativePos = Vector3.zero;
+				double entryAngle = Pi1_5;
+				double tileRadius = scrController.instance.tileSize;
+				for (int i = 0; i < start && i < angles.Length; i++)
+				{
+					float ang = angles[i];
+					double exitAngle = ang == SentinelNoAngle ? entryAngle : (-ang + 90f) * (Math.PI / 180.0);
+					cumulativePos += scrMisc.getVectorFromAngle(exitAngle, tileRadius);
+					entryAngle = (exitAngle + Math.PI) % (2.0 * Math.PI);
+				}
+				prevEntryAngle = entryAngle;
+			}
 
 			// Reset the anchor floor if we're not doing a full rebuild (floor 0 was
 			// already reset above). All other floors are reset once as nextFloor below.
 			if (start > 0)
+			{
+				if (float.IsNaN(cumulativePos.x) || float.IsNaN(cumulativePos.y) || double.IsNaN(prevEntryAngle))
+				{
+					cumulativePos = floors[start].transform.position;
+					prevEntryAngle = floors[start].entryangle;
+				}
 				ResetFloorState(floors[start], cumulativePos);
+			}
 
 			for (int i = start; i < floors.Count - 1 && i < angles.Length; i++)
 			{
@@ -469,6 +490,13 @@ namespace Iridium.Patches
 			new Type[] { typeof(int), typeof(bool) })]
 		public static class DeleteFloorOptimizationPatch
 		{
+			/// <summary>记录本次删除的砖块序号，供 LightweightDeleteRemakePath / DrawFloorNums 使用。</summary>
+			[HarmonyPrefix]
+			public static void Prefix(int sequenceIndex)
+			{
+				_incrementalSeqID = Math.Max(0, sequenceIndex);
+			}
+
 			[HarmonyTranspiler]
 			public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
 			{
@@ -518,9 +546,9 @@ namespace Iridium.Patches
 					// Data already removed by DeleteFloor. Let RemakePath run the full
 					// chain (scnGame.RemakePath → MakeLevel → post-process → draws).
 					// InstantiateFloatFloors is intercepted to reuse existing floors.
+					// 删除序号由 DeleteFloorOptimizationPatch.Prefix 记录，这里不要覆盖。
 					_incrementalMode = true;
 					_incrementalIsInsert = false;
-					_incrementalSeqID = 0;
 
 					editor.RemakePath(applyEventsToFloors, remakeLevel);
 
@@ -614,7 +642,10 @@ namespace Iridium.Patches
 				if (floors == null) return false;
 
 				bool showNums = __instance.showFloorNums && !__instance.playMode;
-				for (int i = 0; i < floors.Count; i++)
+				// 增量插入/删除只会改变插入点之后的编号；前缀砖块的显示状态没变，
+				// 没必要每次编辑都对 15 万块砖调一遍 SetActive。
+				int first = _incrementalMode ? Math.Max(0, _incrementalSeqID - 1) : 0;
+				for (int i = first; i < floors.Count; i++)
 				{
 					var floor = floors[i];
 					if (floor != null && floor.enabled && floor.editorNumText != null)
@@ -699,6 +730,64 @@ namespace Iridium.Patches
 
 				// Events already offset by OffsetFloorIDsInEvents / FloorWasCreatedOrDeleted.
 				// Skip the full re-application for massive level performance.
+				return false;
+			}
+		}
+
+		#endregion
+
+		#region Patch: Skip duplicated draws during incremental rebuild
+
+		[IriPatch(Path = "optimizer/editorFloor/insert", Pre = typeof(OptimizerSettings), Condition = "enableEditorFloorOptimization,incrementalFloorInsert")]
+		[HarmonyPatch(typeof(scnEditor), "DrawHolds", new[] { typeof(bool) })]
+		public static class EditorDrawHoldsDuplicateSkipPatch
+		{
+			[HarmonyPrefix]
+			public static bool Prefix()
+			{
+				if (!Main.Settings.optimizer.enableEditorFloorOptimization) return true;
+				if (!Main.Settings.optimizer.incrementalFloorInsert) return true;
+				// scnGame.RemakePath 里已经调用过 levelMaker.DrawHolds(false)，
+				// scnEditor.RemakePath 紧接着的这一遍是重复的整表重建。
+				return !_incrementalMode;
+			}
+		}
+
+		[IriPatch(Path = "optimizer/editorFloor/insert", Pre = typeof(OptimizerSettings), Condition = "enableEditorFloorOptimization,incrementalFloorInsert")]
+		[HarmonyPatch(typeof(scnEditor), "DrawMultiPlanet", new Type[0])]
+		public static class EditorDrawMultiPlanetDuplicateSkipPatch
+		{
+			[HarmonyPrefix]
+			public static bool Prefix()
+			{
+				if (!Main.Settings.optimizer.enableEditorFloorOptimization) return true;
+				if (!Main.Settings.optimizer.incrementalFloorInsert) return true;
+				// 同上：DrawMultiPlanet 在 scnGame.RemakePath 里已经整表扫描过一次。
+				return !_incrementalMode;
+			}
+		}
+
+		[IriPatch(Path = "optimizer/editorFloor/insert", Pre = typeof(OptimizerSettings), Condition = "enableEditorFloorOptimization,incrementalFloorInsert")]
+		[HarmonyPatch(typeof(scrLevelMaker), "DrawHolds", new[] { typeof(bool) })]
+		public static class LevelMakerDrawHoldsNoHoldsSkipPatch
+		{
+			[HarmonyPrefix]
+			public static bool Prefix(scrLevelMaker __instance)
+			{
+				if (!Main.Settings.optimizer.enableEditorFloorOptimization) return true;
+				if (!Main.Settings.optimizer.incrementalFloorInsert) return true;
+				if (!_incrementalMode) return true;
+
+				var floors = __instance.listFloors;
+				if (floors == null) return true;
+
+				// 还有旧的 hold 对象时必须走原版清理流程
+				_holdGOsRef ??= AccessTools.FieldRefAccess<scrLevelMaker, List<GameObject>>("holdGOs");
+				var holdGOs = _holdGOsRef(__instance);
+				if (holdGOs != null && holdGOs.Count > 0) return true;
+
+				// 没有任何 hold 砖块时重建 Hold 容器是空操作，跳过整表扫描。
+				if (AnyFloorsHaveHolds(floors)) return true;
 				return false;
 			}
 		}

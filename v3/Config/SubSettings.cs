@@ -77,6 +77,11 @@ namespace Iridium.Config
         public bool skipRedundantRemakePath = false;       // 跳过重复的RemakePath调用
         public bool optimizeOffsetFloorEvents = false;     // 优化 OffsetFloorIDsInEvents
         public bool skipApplyEventsOnInsert = false;       // 增量插入时跳过 ApplyEventsToFloors
+
+        // 大谱面加载优化（几十万砖）：跳过无特效砖块的 GetComponents 扫描 + 加载阶段计时日志
+        public bool optimizeLargeLevelLoading = false;
+        // 大谱面加载优化 B：分帧激活砖块（实验性；关闭则退回一次性激活）
+        public bool chunkedFloorSpawn = true;
     }
 
     public class UISettings

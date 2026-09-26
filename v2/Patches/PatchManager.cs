@@ -174,6 +174,62 @@ namespace Iridium.Patches
                 () => editorMaster() && Main.Settings.optimizer.incrementalFloorInsert && Main.Settings.optimizer.optimizeOffsetFloorEvents));
             _definitions.Add(new PatchDef(typeof(EditorFloorOptimizationPatches.SkipApplyEventsOnInsertPatch),
                 () => editorMaster() && Main.Settings.optimizer.incrementalFloorInsert && Main.Settings.optimizer.skipApplyEventsOnInsert));
+            _definitions.Add(new PatchDef(typeof(EditorFloorOptimizationPatches.EditorDrawHoldsDuplicateSkipPatch),
+                () => editorMaster() && Main.Settings.optimizer.incrementalFloorInsert));
+            _definitions.Add(new PatchDef(typeof(EditorFloorOptimizationPatches.EditorDrawMultiPlanetDuplicateSkipPatch),
+                () => editorMaster() && Main.Settings.optimizer.incrementalFloorInsert));
+            _definitions.Add(new PatchDef(typeof(EditorFloorOptimizationPatches.LevelMakerDrawHoldsNoHoldsSkipPatch),
+                () => editorMaster() && Main.Settings.optimizer.incrementalFloorInsert));
+
+            // --- Editor event index (选中/切换砖块卡顿) ---
+            _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.GetFloorEventsIndexPatch), editorMaster));
+            _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.ShowEventIndicatorsIndexPatch), editorMaster));
+            _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.DestroyEventIndicatorsFastPatch), editorMaster));
+            _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.EditorApplyDirtyPatch), editorMaster));
+            _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.GameApplyDirtyPatch), editorMaster));
+            _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.LevelDecodeDirtyPatch), editorMaster));
+            _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.OffsetFloorIdsDirtyPatch), editorMaster));
+
+            // --- Ffx 组件扫描快速路径 & 加载计时（大谱面加载优化） ---
+            // 只挂「大谱面加载优化」开关，不依赖优化器总开关（这是独立功能）。
+            var largeLoadCond = () => Main.Settings.optimizer.optimizeLargeLevelLoading;
+            _definitions.Add(new PatchDef(typeof(FfxGetComponentsFastPatch.ApplyEventsFfxScanPatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.LoadLevelProfiler), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.DecodeProfiler), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.JsonParseProfiler), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.FloatFloorsProfiler), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.ApplyEventsProfiler), largeLoadCond));
+
+            // --- 惰性 topGlow（大谱面加载优化 A） ---
+            _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.AwakePatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.ResetPatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.StartPatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.LightUpPatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.RandomColorPatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.FinishLoadingPatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.ObjectDecorationGlowPatch), largeLoadCond));
+
+            // --- 线号文本按需生成（大谱面加载优化 A2） ---
+            _definitions.Add(new PatchDef(typeof(LazyFloorNumberPatch.StrippedPrefabPatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LazyFloorNumberPatch.OnBecameVisiblePatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LazyFloorNumberPatch.DrawFloorNumsPatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(LazyFloorNumberPatch.PlayPatch), largeLoadCond));
+
+            // --- 解码/事件分组分配削减（大谱面加载优化） ---
+            _definitions.Add(new PatchDef(typeof(DecodeAllocationPatch.DecodeDictionaryCapacityPatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(DecodeAllocationPatch.EventListCapacityPatch), largeLoadCond));
+
+            // --- B：分帧激活砖块（大谱面加载优化，实验性） ---
+            var chunkedSpawnCond = () => Main.Settings.optimizer.optimizeLargeLevelLoading
+                && Main.Settings.optimizer.chunkedFloorSpawn;
+            _definitions.Add(new PatchDef(typeof(ChunkedFloorSpawnPatch.InstantiateFloorsChunkedPatch), chunkedSpawnCond));
+            _definitions.Add(new PatchDef(typeof(ChunkedFloorSpawnPatch.CheckpointDecodePatch), chunkedSpawnCond));
+            _definitions.Add(new PatchDef(typeof(ChunkedFloorSpawnPatch.SetHitsoundDecodePatch), chunkedSpawnCond));
+            _definitions.Add(new PatchDef(typeof(ChunkedFloorSpawnPatch.EditorPlayFlushPatch), chunkedSpawnCond));
+            _definitions.Add(new PatchDef(typeof(ChunkedFloorSpawnPatch.FinishLoadingFlushPatch), chunkedSpawnCond));
+
+            // --- 大谱面撤销历史深度上限（内存保护） ---
+            _definitions.Add(new PatchDef(typeof(UndoMemoryCapPatch.SaveStateCapPatch), largeLoadCond));
 
             // --- UI / Misc ---
             _definitions.Add(new PatchDef(typeof(MiscPatches.RemoveNewsPatch), () => Main.Settings.ui.removeNews));
@@ -197,6 +253,10 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(CompatibilityPatches.LegacyPauseFixPatch_Play), pauseFixCond));
 _definitions.Add(new PatchDef(typeof(CompatibilityPatches.LegacyPauseFixPatch_Apply), pauseFixCond));
             _definitions.Add(new PatchDef(typeof(CompatibilityPatches.NoFailTooEarlyPatch), () => Main.Settings.compatibility.enableNoFailTooEarly));
+
+            // v3 谱面兼容（ADOFAI 3.x 谱面 version 16~19 的加载/播放/编辑 polyfill）
+            var v3LevelCompatCond = () => Main.Settings.compatibility.enableV3LevelCompat;
+            RegisterNestedPatches(typeof(V3LevelCompatPatches), v3LevelCompatCond);
             _definitions.Add(new PatchDef(typeof(CompatibilityPatches.ScaleFilterSpeedWithPitchPatch), () => Main.Settings.compatibility.scaleFilterSpeedWithPitch));
             _definitions.Add(new PatchDef(typeof(CameraRelativeDragPatches), () => Main.Settings.compatibility.fixCameraRelativeDrag));
             _definitions.Add(new PatchDef(typeof(JsonPatches.ForceAngleDataPatch), () => Main.Settings.compatibility.forceAngleData));
@@ -212,10 +272,12 @@ _definitions.Add(new PatchDef(typeof(CompatibilityPatches.LegacyPauseFixPatch_Ap
             _definitions.Add(new PatchDef(typeof(RequiredModsClearPatches.EncodeRestorePatch), requiredModsCond));
             _definitions.Add(new PatchDef(typeof(RequiredModsClearPatches.LevelLoadNotifyPatch), requiredModsCond));
 
-            // Third-party custom events (fake event registration; always-on, runtime-gated)
-                        // Third-party custom events (fake event registration; applied on demand
-            // together with the "ignore required third-party mods" toggle)
-            var customEventsCond = () => Main.Settings.compatibility.ignoreRequiredMods;
+            // Third-party custom events (fake event registration, read-only panels).
+            // Also used by the v3 level compatibility layer: unknown v3 event types
+            // must load read-only instead of crashing (registration is additionally
+            // gated on the chart's version inside CustomEventsPatches).
+            var customEventsCond = () => Main.Settings.compatibility.ignoreRequiredMods
+                                         || Main.Settings.compatibility.enableV3LevelCompat;
 _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), customEventsCond));
             _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterCLSPatch), customEventsCond));
             _definitions.Add(new PatchDef(typeof(CustomEventsPatches.FakeEventDecodePatch), customEventsCond));
@@ -302,7 +364,15 @@ _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), cus
                 typeof(SceneOptimizationPatches),
                 typeof(LoadingOptimizationPatches),
                 typeof(ExtremeOptimizationPatches),
-                typeof(EditorFloorOptimizationPatches)
+                typeof(EditorFloorOptimizationPatches),
+                typeof(EditorEventIndexPatch),
+                typeof(FfxGetComponentsFastPatch),
+                typeof(LoadProfilerPatch),
+                typeof(LazyTopGlowPatch),
+                typeof(LazyFloorNumberPatch),
+                typeof(DecodeAllocationPatch),
+                typeof(ChunkedFloorSpawnPatch),
+                typeof(UndoMemoryCapPatch)
             };
 
             foreach (var def in _definitions)

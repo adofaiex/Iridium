@@ -135,6 +135,15 @@
             </HBox>
             {isInfoExpanded('IncrementalFloorInsert') && <Text text={localize('IncrementalFloorInsertInfo')} style="hint" />}
 
+            <Separator />
+            <HBox align="center">
+                <Text text={localize('SkipApplyEventsOnInsert')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('SkipApplyEventsOnInsert')" />
+                <Fill />
+                <Checkbox value={settings.optimizer.skipApplyEventsOnInsert} on-changed="OnSkipApplyEventsOnInsertToggled" />
+            </HBox>
+            {isInfoExpanded('SkipApplyEventsOnInsert') && <Text text={localize('SkipApplyEventsOnInsertInfo')} style="hint" />}
+
             {settings.optimizer.incrementalFloorInsert && <>
                 <Separator />
                 <HBox align="center">

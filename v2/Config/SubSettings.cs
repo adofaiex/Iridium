@@ -71,6 +71,11 @@ namespace Iridium.Config
 
         public bool enableCustomEasingEngine = false; // 自定义缓速引擎（替代 DOTween）
 
+        // 大谱面加载优化（几十万砖）：跳过无特效砖块的 GetComponents 扫描 + 加载阶段计时日志
+        public bool optimizeLargeLevelLoading = false;
+        // 大谱面加载优化 B：分帧激活砖块（实验性；关闭则退回一次性激活）
+        public bool chunkedFloorSpawn = true;
+
         // --- Editor Floor Performance Optimizations ---
         public bool enableEditorFloorOptimization = false; // 主开关
         public bool incrementalFloorInsert = false;        // 增量式砖块插入/删除
@@ -123,6 +128,7 @@ namespace Iridium.Config
         public bool scaleFilterSpeedWithPitch = false;
         public bool fixCameraRelativeDrag = false;
         public bool ignoreRequiredMods = false;
+        public bool enableV3LevelCompat = true; // v3 谱面兼容（版本 16~19 加载/播放/保存）
         public LegacyBehaviorMode legacyFlashMode = LegacyBehaviorMode.Default;
         public LegacyBehaviorMode legacyCamRelativeToMode = LegacyBehaviorMode.Default;
     }

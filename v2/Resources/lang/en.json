@@ -186,6 +186,10 @@
   "UseILPatchHint": "IL Transpiler mode: Direct IL injection, best performance",
   "UsePrefixPostfixHint": "Prefix/Postfix mode: Standard Harmony patches, best compatibility",
   "FrameSpreadDecorationLoading": "Frame-Spread Decoration Loading",
+  "OptimizeLargeLevelLoading": "Large Level Loading Optimization",
+  "OptimizeLargeLevelLoadingInfo": "Skips the per-floor effect-component scan for floors without effects when loading/starting large charts, plus lazy glow/number objects and per-phase [LoadProfiler] timing logs. Works independently of the optimization master switch.",
+  "ChunkedFloorSpawn": "Chunked Floor Activation (Experimental)",
+  "ChunkedFloorSpawnInfo": "Instantiates large charts' floors inactive and activates them across frames, so the editor no longer freezes on a single frame. Forced to finish before gameplay starts. If visuals or editor interactions look wrong, turn this off (the rest of the large-level optimization keeps working).",
   "DecorationsPerFrame": "Decorations Per Frame",
   "FrameSpreadLoadingHint": "Spreads decoration creation across multiple frames to prevent lag when loading levels with many decorations",
   "LoadingDecorationsProgress": "Loading decorations: {0}/{1}",
@@ -202,6 +206,7 @@
   "RangeBasedRedraw": "Range-Based Redraw (Only redraw affected floors)",
   "SkipRedundantRemakePath": "Skip Redundant RemakePath Calls",
   "OptimizeOffsetFloorEvents": "Optimize Floor ID Offset in Events",
+  "SkipApplyEventsOnInsert": "Skip Full Event Re-Apply on Insert",
   "EditorFloorOptimizationWarning": "These optimizations alter the editor's floor rebuild logic. If you encounter visual glitches, disable them.",
   "EditorShortcuts": "Editor Shortcuts",
   "EnableEditorShortcuts": "Enable Editor Keyboard Shortcuts",
@@ -233,5 +238,10 @@
   "IgnoreRequiredModsWarning": "Required third-party mods will be ignored. The level may not play correctly.",
   "MissingModsNotice": "Missing mods: {0} and {1} more",
   "MissingModsNoticeSingle": "Missing mod: {0}",
-  "CustomEventReadOnlyNotice": "These events only work when the third-party mod is installed. You can only disable or remove them."
+  "CustomEventReadOnlyNotice": "These events only work when the third-party mod is installed. You can only disable or remove them.",
+  "V3LevelCompatSection": "v3 Level Compatibility",
+  "EnableV3LevelCompat": "Open v3 Levels (version 16-19)",
+  "V3LevelCompatHint": "Lets 2.9.8 load, play and edit charts made with ADOFAI 3.x. v3-only chart properties are preserved when saving, so the file stays a v3 level. Unknown events are kept like third-party events (read-only, but not lost).",
+  "V3LevelCompatWarning": "Some v3 features cannot be emulated on 2.9.8 (e.g. custom background prefabs) and will be ignored while playing.",
+  "V3CompatCustomBGPrefabIgnored": "Custom background prefab \"{0}\" is not supported on 2.9.8 and was ignored."
 }

@@ -83,6 +83,9 @@ namespace Iridium
             }
             Logger.TaskRun();
 
+            // 大谱面加载优化 B：分帧激活砖块
+            Iridium.Patches.ChunkedFloorSpawnPatch.Tick();
+
             // 自定义缓速引擎帧驱动
             if (Settings.optimizer.enableCustomEasingEngine)
                 Iridium.Core.CustomEasingEngine.Update(dt);
