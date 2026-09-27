@@ -11,7 +11,6 @@ using Iridium.Patches.Editor;
 using Iridium.Patches.Optimizer;
 using Iridium.Patches.UI;
 using System.Linq;
-using static Iridium.UI.IridiumLayout;
 using Iris.Iml;
 
 namespace Iridium
@@ -76,7 +75,6 @@ namespace Iridium
             return (IsSectionExpanded(key) ? "▾ " : "▸ ") + Localization.Get(labelKey);
         }
         private Vector2 _contentScrollPosition = Vector2.zero;
-        private SizesGroup.Holder _sizesHolder = new();
 
         private int _compatFlashMode = -1;
         private int _compatCamRelMode = -1;
@@ -149,8 +147,6 @@ namespace Iridium
                 args.Length > 0 && args[0] is string key && IsInfoExpanded(key));
 
             RegisterShortcutHandlers();
-
-            _renderer.SetLayout(new IridiumLayoutAdapter());
 
             RegisterOptimizerHandlers();
             RegisterUIHandlers();
@@ -1198,12 +1194,8 @@ namespace Iridium
 
         public void OnGUI()
         {
-            int initialStackDepth = IridiumLayout.Engine.ContainerStack.Count;
-
             try
             {
-                EnsureTexturesAlive();
-
                 _defaultLobbyMusicPathCache ??= lobbyMusic.defaultMusicPath;
                 _fastLobbyMusicPathCache ??= lobbyMusic.fastMusicPath;
 
@@ -1219,14 +1211,7 @@ namespace Iridium
                 }
                 else
                 {
-                    // fallback: hardcoded minimal UI if IML file missing
-                    IridiumLayout.Render(
-                        IridiumLayout.VBox(
-                            IridiumLayout.ContainerStyle.Padding,
-                            null,
-                            IridiumLayout.Text("IML file not found: Settings.iml", IridiumLayout.TextStyle.Secondary)
-                        )
-                    );
+                    Main.Logger?.Error($"[Settings] IML file not found: {imlPath}");
                 }
 
                 // Key binding capture — real-time display
@@ -1281,14 +1266,6 @@ namespace Iridium
                 Main.Logger?.Error($"[OnGUI] Settings.OnGUI failed: {ex}");
                 throw;
             }
-            finally
-            {
-                while (IridiumLayout.Engine.ContainerStack.Count > initialStackDepth)
-                {
-                    try { IridiumLayout.Engine.End(); }
-                    catch { break; }
-                }
-            }
         }
 
         public void Save()
@@ -1339,39 +1316,6 @@ namespace Iridium
                 if (opt.optimizeMoveDecorations) { opt.optimizeMoveDecorations = false; changed = true; }
                 if (changed) AsyncPatchManager.UpdateOptimizerPatchesAsync();
             }
-        }
-    }
-
-    public class IridiumLayoutAdapter : Iris.Iml.IIrrLayout
-    {
-        public void BeginHorizontal(Iris.Iml.IrrContStyle style, GUILayoutOption[] options)
-            => IridiumLayout.Engine.Begin(ContainerDirection.Horizontal, (ContainerStyle)(int)style, null, options);
-
-        public void BeginVertical(Iris.Iml.IrrContStyle style, GUILayoutOption[] options)
-            => IridiumLayout.Engine.Begin(ContainerDirection.Vertical, (ContainerStyle)(int)style, null, options);
-
-        public void End() => IridiumLayout.Engine.End();
-
-        public bool Button(string text, Iris.Iml.IrrButStyle style)
-            => IridiumLayout.Engine.Button(text, (ButtonStyle)(int)style);
-
-        public void Text(string text, Iris.Iml.IrrTextStyle style)
-            => IridiumLayout.Engine.Text(text, (TextStyle)(int)style);
-
-        public bool? Switch(bool on) => IridiumLayout.Engine.Switch(on);
-        public bool? Checkbox(bool on) => IridiumLayout.Engine.Checkbox(on);
-        public void Separator() => IridiumLayout.Engine.Separator();
-        public void Space(double size) => IridiumLayout.Engine.Space(size);
-        public void Fill() => IridiumLayout.Engine.Fill();
-        public string? TextField(string content) => IridiumLayout.Engine.TextField(content);
-
-        public bool Icon(Iris.Iml.IrrIconStyle style)
-            => IridiumLayout.Engine.Icon((IconStyle)(int)style);
-
-        public void Link(string text, string url)
-        {
-            if (IridiumLayout.Engine.Link(text))
-                Application.OpenURL(url);
         }
     }
 }

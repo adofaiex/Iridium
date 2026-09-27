@@ -28,8 +28,9 @@ namespace Iridium.UI;
 //       )
 //   );
 //
-// The imperative engine is kept internally (IridiumLayout.Engine) and is used as
-// the bridge for Iris.Iml's IIrrLayout adapter (IridiumLayoutAdapter in Settings.cs).
+// The imperative engine is kept internally (IridiumLayout.Engine) for legacy
+// call sites; Iris.Iml no longer bridges to it — the IML renderer now has its
+// own shared layout engine + backends (see architectury/Iris.Iml/README.md).
 public static class IridiumLayout
 {
     public enum ArrowStyle
@@ -782,10 +783,8 @@ public static class IridiumLayout
 
     public static void EnsureTexturesAlive()
     {
-        // 设置界面 (Iris.Iml) 的分区箭头按钮改用本引擎的 DrawArrow 渲染链，
-        // 且背景+边框+箭头烘焙为单张纹理，替代内置的逐像素实心三角 + 叠加绘制。
-        Iris.Iml.GuiTextureFactory.ExternalArrowButtonRenderer = RenderArrowButtonTexture;
-
+        // Iris.Iml 现在自带独立渲染管线（共享布局引擎 + 后端自绘），
+        // 不再注入 ExternalArrowButtonRenderer —— IML 渲染与 IridiumLayout 彻底解耦。
         if (Resolution.Textures.Any(x => x == null))
         {
             var oldResources = ResolutionTrigger.ResetWithOld();

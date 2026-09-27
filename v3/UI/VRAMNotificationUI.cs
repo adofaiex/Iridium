@@ -184,6 +184,10 @@ namespace Iridium.UI
             {
                 ParentTransform = transform,
                 RootObject = canvasGo,
+                // Fixed panel size: the shared layout engine lays the root out at
+                // exactly this size (Fill grows to fill it), and the wrapper is
+                // sized to match — _PostProcessLayout only pins the position.
+                RootSizeOverride = new Vector2(400, 50),
             };
 
             string imlPath = Path.Combine(
@@ -231,102 +235,22 @@ namespace Iridium.UI
         {
             if (_renderer.RootObject == null) return;
             // IMPORTANT: the renderer's RebuildUI loop only queues the previous-frame
-            // wrapper for destruction (Destroy is end-of-frame). The new wrapper is
+            // wrapper for destruction (Destroy is end of frame). The new wrapper is
             // appended to the end of the children list, so we must pick the LAST
             // child — Transform.Find("DialogWrapper") would otherwise return the
-            // old pending-destroy wrapper, leaving the new one at its default
-            // center anchor and stale text.
+            // old pending-destroy wrapper.
             int lastIdx = _renderer.RootObject.transform.childCount - 1;
             if (lastIdx < 0) return;
             var wrapper = _renderer.RootObject.transform.GetChild(lastIdx) as RectTransform;
             if (wrapper == null || wrapper.gameObject.name != "DialogWrapper") return;
 
-            // Disable the wrapper's ContentSizeFitter — without this, every layout
-            // pass would overwrite our sizeDelta with the HBox's preferred width
-            // (~254px), making the wrapper oscillate between 254 and 400.
-            DisableContentSizeFitter(wrapper);
-
-            // Pin to top-left with a fixed size.
+            // Pin to top-left. Size comes from the renderer (RootSizeOverride),
+            // and children rects are laid out by the shared layout engine — no
+            // ContentSizeFitter / LayoutGroup surgery needed anymore.
             wrapper.anchorMin = new Vector2(0, 1);
             wrapper.anchorMax = new Vector2(0, 1);
             wrapper.pivot = new Vector2(0, 1);
             wrapper.anchoredPosition = new Vector2(20, -20);
-            wrapper.sizeDelta = new Vector2(400, 50);
-
-            // The HBox (built by BuildContainer) also carries a ContentSizeFitter
-            // and a LayoutElement. The ContentSizeFitter was shrinking it to the
-            // HBox's preferred width; the LayoutElement — even with minWidth=0
-            // and minHeight=0 — was driving the HBox's height to the LayoutGroup's
-            // intrinsic preferred height (max of children's preferred heights ≈
-            // 150px after text + padding), which made the HBox much taller than
-            // the 50px wrapper and turned the Icon into a tall pill and the
-            // message text into one character per line.
-            //
-            // Strip both entirely so the HBox's RectTransform is governed solely
-            // by its anchor (stretch to fill wrapper).
-            var hbox = wrapper.Find("HBox") as RectTransform;
-            if (hbox != null)
-            {
-                DisableContentSizeFitter(hbox);
-                var le = hbox.GetComponent<LayoutElement>();
-                if (le != null) UnityEngine.Object.Destroy(le);
-
-                // Stop the HBox from forcing its children to expand to fill its
-                // height (BuildContainer sets childForceExpandHeight = true). With
-                // a 50px wrapper the children would otherwise be stretched into
-                // tall pills / 50px-tall buttons. Instead let each child keep its
-                // own preferred size and center them vertically in the HBox.
-                var hlg = hbox.GetComponent<HorizontalLayoutGroup>();
-                if (hlg != null)
-                {
-                    hlg.childForceExpandHeight = false;
-                    hlg.childControlHeight = true;
-                    hlg.childAlignment = TextAnchor.MiddleLeft;
-                }
-
-                // Re-assert the stretch anchor post-BuildContainer so the HBox
-                // is guaranteed to fill the wrapper, not fall back to a fixed
-                // preferred size.
-                hbox.anchorMin = Vector2.zero;
-                hbox.anchorMax = Vector2.one;
-                hbox.offsetMin = Vector2.zero;
-                hbox.offsetMax = Vector2.zero;
-                hbox.sizeDelta = Vector2.zero; // (anchor stretch) → fill wrapper
-
-                // Make the panel background non-blocking so the rest of the screen
-                // still receives clicks. The Stop button itself keeps its
-                // raycastTarget.
-                var img = hbox.GetComponent<Image>();
-                if (img != null) img.raycastTarget = false;
-
-                // Belt-and-suspenders for the Stop button: make sure it's enabled
-                // and its image accepts raycasts. BuildButton already sets these,
-                // but if anything ever flipped them off the click would silently
-                // stop registering.
-                var btn = hbox.Find("Button");
-                if (btn != null)
-                {
-                    var btnComp = btn.GetComponent<Button>();
-                    if (btnComp != null) btnComp.enabled = true;
-                    var btnImg = btn.GetComponent<Image>();
-                    if (btnImg != null) btnImg.raycastTarget = true;
-                }
-            }
-
-            // Force a layout rebuild on the wrapper so the HBox's newly-stripped
-            // LayoutElement + reassigned anchor take effect this frame instead of
-            // next.
-            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(wrapper);
-        }
-
-        private static void DisableContentSizeFitter(RectTransform rt)
-        {
-            if (rt == null) return;
-            var csf = rt.GetComponent<ContentSizeFitter>();
-            if (csf == null) return;
-            csf.enabled = false;
-            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            csf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
         }
 
         private void _CacheUIRefs()
