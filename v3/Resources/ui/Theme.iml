@@ -1,0 +1,163 @@
+<Iris>
+    <Resources>
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- Iris.Iml 基础样式表（等价 base.css）。                      -->
+        <!-- 引擎不内置任何主题值：控件默认外观与共享排版类都在这里，     -->
+        <!-- 颜色一律经 @Colors.iml 的 var() 令牌引用。               -->
+        <!-- 层叠顺序（平局时后者胜）：Colors.iml → 本文件 → 页面样式。  -->
+        <!-- 伪类：:hover 悬停 / :active 按下 / :checked 选中。          -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <Reference path="@Colors.iml" />
+
+        <!-- ── 排版类（对应 IridiumLayout TextStyle） ─────────────── -->
+        <Style name="title" on=".title">
+            <Setter property="fontSize" value="24" />
+            <Setter property="color" value="var(--text-title)" />
+            <Setter property="marginTop" value="8" />
+            <Setter property="marginBottom" value="8" />
+        </Style>
+        <Style name="subtitle" on=".subtitle">
+            <Setter property="fontSize" value="18" />
+            <Setter property="color" value="var(--text-subtitle)" />
+            <Setter property="marginTop" value="4" />
+            <Setter property="marginBottom" value="4" />
+        </Style>
+        <Style name="normal" on=".normal">
+            <Setter property="fontSize" value="12" />
+            <Setter property="color" value="var(--text-normal)" />
+        </Style>
+        <Style name="label" on=".label">
+            <Setter property="fontSize" value="12" />
+            <Setter property="color" value="var(--text-normal)" />
+        </Style>
+        <Style name="secondary" on=".secondary">
+            <Setter property="fontSize" value="12" />
+            <Setter property="color" value="var(--text-secondary)" />
+        </Style>
+        <Style name="hint" on=".hint">
+            <Setter property="fontSize" value="12" />
+            <Setter property="color" value="var(--text-secondary)" />
+        </Style>
+
+        <!-- ── 容器类 ─────────────────────────────────────────────── -->
+        <Style name="padding" on=".padding">
+            <Setter property="padding" value="8" />
+        </Style>
+        <Style name="background" on=".background">
+            <Setter property="background" value="var(--bg-alt)" />
+            <Setter property="radius" value="16" />
+        </Style>
+
+        <!-- ── 控件标签默认（特异性 1，任何 class 均可覆盖） ───────── -->
+        <Style on="Text">
+            <Setter property="fontSize" value="12" />
+            <Setter property="color" value="var(--text-normal)" />
+        </Style>
+        <Style on="Link">
+            <Setter property="fontSize" value="12" />
+            <Setter property="color" value="var(--primary)" />
+        </Style>
+        <Style on="Link:hover">
+            <Setter property="color" value="var(--primary-bright)" />
+        </Style>
+        <Style on="Link:active">
+            <Setter property="color" value="var(--primary-hover)" />
+        </Style>
+        <Style on="Button">
+            <Setter property="background" value="var(--element)" />
+            <Setter property="color" value="var(--text-title)" />
+            <Setter property="radius" value="8" />
+            <Setter property="padding" value="6,10" />
+            <Setter property="fontSize" value="12" />
+        </Style>
+        <Style on="TextField">
+            <Setter property="background" value="var(--bg-input)" />
+            <Setter property="borderColor" value="var(--textfield-border)" />
+            <Setter property="borderWidth" value="1" />
+            <Setter property="radius" value="8" />
+            <Setter property="color" value="var(--text-normal)" />
+            <Setter property="fontSize" value="12" />
+            <Setter property="focusBorder" value="var(--primary)" />
+        </Style>
+        <Style on="TextArea">
+            <Setter property="background" value="var(--bg-input)" />
+            <Setter property="borderColor" value="var(--textfield-border)" />
+            <Setter property="borderWidth" value="1" />
+            <Setter property="radius" value="8" />
+            <Setter property="color" value="var(--text-normal)" />
+            <Setter property="fontSize" value="12" />
+            <Setter property="focusBorder" value="var(--primary)" />
+        </Style>
+        <Style on="Separator">
+            <Setter property="background" value="var(--bg-separator)" />
+        </Style>
+        <Style on="Switch">
+            <Setter property="switchOn" value="var(--primary)" />
+            <Setter property="switchOff" value="var(--element)" />
+            <Setter property="knobColor" value="var(--text-title)" />
+        </Style>
+        <Style on="Switch:hover">
+            <Setter property="switchOn" value="var(--primary-hover)" />
+            <Setter property="switchOff" value="var(--element-hover)" />
+        </Style>
+        <Style on="Switch:active">
+            <Setter property="switchOn" value="var(--primary-active)" />
+            <Setter property="switchOff" value="var(--element)" />
+        </Style>
+        <Style on="Checkbox">
+            <Setter property="background" value="var(--element)" />
+            <Setter property="borderColor" value="var(--element-border)" />
+            <Setter property="checkColor" value="var(--text-title)" />
+            <Setter property="checkBg" value="var(--primary)" />
+        </Style>
+        <Style on="Checkbox:hover">
+            <Setter property="background" value="var(--element-hover)" />
+            <Setter property="checkBg" value="var(--primary-hover)" />
+        </Style>
+        <Style on="Checkbox:active">
+            <Setter property="checkBg" value="var(--primary-active)" />
+        </Style>
+        <Style on="Slider">
+            <Setter property="sliderTrack" value="var(--element)" />
+            <Setter property="sliderFill" value="var(--primary)" />
+            <Setter property="sliderThumb" value="var(--text-title)" />
+        </Style>
+        <Style on="Icon">
+            <Setter property="background" value="var(--element-border)" />
+            <Setter property="borderColor" value="var(--element)" />
+            <Setter property="color" value="var(--text-title)" />
+        </Style>
+        <Style on="ArrowButton">
+            <Setter property="background" value="var(--element)" />
+            <Setter property="borderColor" value="var(--element-border)" />
+            <Setter property="color" value="var(--text-title)" />
+            <Setter property="radius" value="4" />
+        </Style>
+        <Style on="ArrowButton:hover">
+            <Setter property="background" value="var(--element-hover)" />
+        </Style>
+        <Style on="ArrowButton:active">
+            <Setter property="background" value="var(--element)" />
+        </Style>
+
+        <!-- ── 语义类的状态变体（特异性 4，压过标签默认的 3） ──────── -->
+        <Style on=".primary:hover">
+            <Setter property="background" value="var(--primary-hover)" />
+        </Style>
+        <Style on=".primary:active">
+            <Setter property="background" value="var(--primary-active)" />
+        </Style>
+        <Style on=".element:hover">
+            <Setter property="background" value="var(--element-hover)" />
+        </Style>
+        <Style on=".element:active">
+            <Setter property="background" value="var(--element)" />
+        </Style>
+
+        <!-- ── Selector 选项（选中态由运行时烘焙进选项样式） ───────── -->
+        <Style on="Selector">
+            <Setter property="selectedBg" value="var(--primary)" />
+            <Setter property="selectedColor" value="var(--text-title)" />
+        </Style>
+    </Resources>
+</Iris>

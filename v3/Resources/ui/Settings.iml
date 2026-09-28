@@ -1,6 +1,6 @@
 <Iris>
     <Resources>
-        <Reference path="@Colors.iml" />
+        <Reference path="@Theme.iml" />
 
         <Template name="LangBtn">
             <Button text={item.displayName} class={settings.language == item.key ? 'primary' : 'element'} on-click="OnLanguageClick(item.key)" />

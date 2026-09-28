@@ -1,59 +1,74 @@
 <Iris>
     <Resources>
         <!-- ════════════════════════════════════════════════════ -->
-        <!-- Iridium Theme Colors — Edit here to retheme the UI -->
+        <!-- Iris 主题色板（等价 CSS 变量层）— 换肤只改这里        -->
+        <!-- 控件默认样式在 @Theme.iml；页面样式在各页面 .iml 内   -->
         <!-- ════════════════════════════════════════════════════ -->
 
-        <!-- ── Backgrounds ──────────────────────────────────── -->
+        <!-- ── 设计令牌（自定义属性，全局可 var() 引用） ─────── -->
+        <Style name="palette">
+            <Setter property="--bg-default" value="#151617" />
+            <Setter property="--bg-alt" value="#0D0E0F" />
+            <Setter property="--bg-input" value="#151719" />
+            <Setter property="--bg-separator" value="#20FFFFFF" />
+            <Setter property="--element" value="#313338" />
+            <Setter property="--element-hover" value="#36393E" />
+            <Setter property="--element-border" value="#494F5C" />
+            <Setter property="--textfield-border" value="#222326" />
+            <Setter property="--primary" value="#D973A5" />
+            <Setter property="--primary-hover" value="#C16692" />
+            <Setter property="--primary-active" value="#9C5276" />
+            <Setter property="--primary-bright" value="#FF87C2" />
+            <Setter property="--text-title" value="#F8F9FA" />
+            <Setter property="--text-subtitle" value="#F1F3F5" />
+            <Setter property="--text-normal" value="#E9ECEF" />
+            <Setter property="--text-secondary" value="#7D7E7F" />
+        </Style>
+
+        <!-- ── 语义类（令牌消费者，供页面 class= 直接使用） ──── -->
         <Style name="bg-default" on=".bg-default">
-            <Setter property="background" value="#151617" />
+            <Setter property="background" value="var(--bg-default)" />
         </Style>
         <Style name="bg-alt" on=".bg-alt">
-            <Setter property="background" value="#0D0E0F" />
+            <Setter property="background" value="var(--bg-alt)" />
         </Style>
         <Style name="bg-input" on=".bg-input">
-            <Setter property="background" value="#151719" />
+            <Setter property="background" value="var(--bg-input)" />
         </Style>
-
-        <!-- ── Separator ───────────────────────────────────── -->
         <Style name="bg-separator" on=".bg-separator">
-            <Setter property="background" value="#20FFFFFF" />
+            <Setter property="background" value="var(--bg-separator)" />
         </Style>
-
-        <!-- ── Text Colors ─────────────────────────────────── -->
-        <Style name="text-title" on=".text-title">
-            <Setter property="color" value="#F8F9FA" />
-        </Style>
-        <Style name="text-subtitle" on=".text-subtitle">
-            <Setter property="color" value="#F1F3F5" />
-        </Style>
-        <Style name="text-normal" on=".text-normal">
-            <Setter property="color" value="#E9ECEF" />
-        </Style>
-        <Style name="text-secondary" on=".text-secondary">
-            <Setter property="color" value="#7D7E7F" />
-        </Style>
-
-        <!-- ── Interactive Elements ────────────────────────── -->
-        <!-- primary accent (currently rose/pink) -->
-        <Style name="primary" on=".primary">
-            <Setter property="background" value="#D973A5" />
-            <Setter property="color" value="#FFFFFF" />
-            <Setter property="radius" value="8" />
-        </Style>
-        <!-- default element (dark gray) -->
-        <Style name="element" on=".element">
-            <Setter property="background" value="#313338" />
-            <Setter property="color" value="#E9ECEF" />
-            <Setter property="radius" value="8" />
-        </Style>
-
-        <!-- ── Misc ────────────────────────────────────────── -->
         <Style name="bg-element-border" on=".bg-element-border">
-            <Setter property="background" value="#494F5C" />
+            <Setter property="background" value="var(--element-border)" />
         </Style>
         <Style name="bg-textfield-border" on=".bg-textfield-border">
-            <Setter property="background" value="#222326" />
+            <Setter property="background" value="var(--textfield-border)" />
+        </Style>
+        <Style name="text-title" on=".text-title">
+            <Setter property="color" value="var(--text-title)" />
+        </Style>
+        <Style name="text-subtitle" on=".text-subtitle">
+            <Setter property="color" value="var(--text-subtitle)" />
+        </Style>
+        <Style name="text-normal" on=".text-normal">
+            <Setter property="color" value="var(--text-normal)" />
+        </Style>
+        <Style name="text-secondary" on=".text-secondary">
+            <Setter property="color" value="var(--text-secondary)" />
+        </Style>
+
+        <!-- ── 交互元素语义类 ────────────────────────────────── -->
+        <!-- primary accent（主题粉）：悬停加深/按下更暗，见 @Theme.iml -->
+        <Style name="primary" on=".primary">
+            <Setter property="background" value="var(--primary)" />
+            <Setter property="color" value="var(--text-title)" />
+            <Setter property="radius" value="8" />
+        </Style>
+        <!-- 默认元素（深灰） -->
+        <Style name="element" on=".element">
+            <Setter property="background" value="var(--element)" />
+            <Setter property="color" value="var(--text-title)" />
+            <Setter property="radius" value="8" />
         </Style>
     </Resources>
 </Iris>

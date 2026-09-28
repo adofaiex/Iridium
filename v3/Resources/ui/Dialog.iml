@@ -1,6 +1,6 @@
 <Iris>
     <Resources>
-        <Reference path="@Colors.iml" />
+        <Reference path="@Theme.iml" />
 
         <!-- Modal dialog style — used by first-run / upgrade notices.
              Colors (bg-default, primary, element, text-title, ...) come from

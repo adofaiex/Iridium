@@ -1,6 +1,6 @@
 <Iris>
     <Resources>
-        <Reference path="@Colors.iml" />
+        <Reference path="@Theme.iml" />
 
         <Style name="panel" on=".panel">
             <Setter property="padding" value="12,12,12,12" />
