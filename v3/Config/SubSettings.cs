@@ -82,6 +82,22 @@ namespace Iridium.Config
         public bool optimizeLargeLevelLoading = false;
         // 大谱面加载优化 B：分帧激活砖块（实验性；关闭则退回一次性激活）
         public bool chunkedFloorSpawn = true;
+
+        // --- 2.1.0 新增热路径优化 ---
+        // 编辑器交互优化：SaveState 冗余全谱拷贝、备份编码、装饰/事件查找索引与搜索
+        public bool optimizeEditorInteractions = false;
+        // 死亡重开复位优化：跳过未变化砖块的 ResetToLevelStart、复用 Hold/Planet 对象
+        public bool optimizeDeathReset = false;
+        // 装饰物复位优化：只对播放期被改动过的装饰物重跑 Setup
+        public bool optimizeDecorationReset = false;
+        // Hold 渲染器每帧脏检查：几何未变时只更新完成度
+        public bool optimizeHoldRenderer = false;
+        // 每拍 OnBeat 去重：砖块只执行一次 OnBeat
+        public bool optimizeOnBeat = false;
+        // 频谱 FFT 每帧缓存：多消费者共享同一次 GetSpectrumData
+        public bool optimizeSpectrum = false;
+        // 命中文本池按需分配：不再每关预建约 1400 个对象
+        public bool optimizeHitTextPool = false;
     }
 
     public class UISettings

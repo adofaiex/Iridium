@@ -25,6 +25,13 @@ namespace Iridium.Patches
 			.WithChild("json", new PatchNode())
 			.WithChild("tweenSafety", new PatchNode())
 			.WithChild("customEasing", new PatchNode())
+			.WithChild("editorPerf", new PatchNode())
+			.WithChild("deathReset", new PatchNode())
+			.WithChild("decorReset", new PatchNode())
+			.WithChild("hold", new PatchNode())
+			.WithChild("onBeat", new PatchNode())
+			.WithChild("spectrum", new PatchNode())
+			.WithChild("hitText", new PatchNode())
 			.WithChild("editorFloor", new PatchNode()
 				.WithChild("insert", new PatchNode()));
 
