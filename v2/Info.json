@@ -2,7 +2,7 @@
   "Id": "Iridium",
   "DisplayName": "Iridium",
   "Author": "Xbodwf",
-  "Version": "2.0.1",
+  "Version": "2.1.0",
   "Requirements": [],
   "AssemblyName": "Iridium.Loader.UMM.dll",
   "EntryMethod": "Iridium.Loader.UmmEntry.Load",
