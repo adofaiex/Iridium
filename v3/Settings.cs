@@ -40,6 +40,167 @@ namespace Iridium
         private string _currentTab = "general";
         public string currentTab => _currentTab;
 
+        // Optimizer 子 Tab（basics/gameplay/fx/advanced），与 currentTab 同构
+        private string _optimizerSubTab = "basics";
+        public string optimizerSubTab => _optimizerSubTab;
+
+        // ── 全局搜索 ──
+        // 顶层 Tab 栏的搜索框：非空时显示全局结果页（跨所有 Tab 匹配选项），
+        // 点击结果跳转到对应 Tab/子 Tab 并自动展开区块与 Info 说明。
+        private string _searchQuery = "";
+        public string searchQuery => _searchQuery;
+        public bool IsSearching => _searchQuery.Trim().Length > 0;
+
+        public void SetSearchQuery(string value)
+        {
+            _searchQuery = value ?? "";
+        }
+
+        /// <summary>单个搜索结果（供 IML ForEach/Template 渲染的字段集合）。</summary>
+        public sealed class SearchResultItem
+        {
+            public string LabelKey = "";   // 选项显示名（已本地化）
+            public string TabKey = "";     // 顶层 Tab
+            public string TabName = "";    // 顶层 Tab 显示名（已本地化）
+            public string SubTabKey = "";  // Optimizer 子 Tab（可为空）
+            public string SubTabName = ""; // 子 Tab 显示名（可为空）
+            public string JumpKey = "";    // 跳转用键（= LabelKey）
+        }
+
+        // 搜索结果卡片第二行（位置文本）的富文本字号
+        private const int SearchLocFontSize = 11;
+
+        /// <summary>
+        /// 富文本高亮：把 label 中匹配 q 的片段（不区分大小写）包上主题色标记。
+        /// 无匹配或 q 为空时原样返回。转义 XML 特殊字符防止 richText 注入。
+        /// </summary>
+        private static string HighlightMatch(string label, string q)
+        {
+            if (string.IsNullOrEmpty(label))
+                return label ?? "";
+            label = System.Security.SecurityElement.Escape(label);
+            if (string.IsNullOrEmpty(q))
+                return label;
+
+            int idx = label.IndexOf(q, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0)
+                return label;
+
+            // 只高亮第一处匹配（与IndexOf匹配语义一致）
+            return label.Substring(0, idx)
+                + "<color=#D973A5>" + label.Substring(idx, q.Length) + "</color>"
+                + label.Substring(idx + q.Length);
+        }
+
+        /// <summary>按当前搜索词查询全部命中项（最多 30 条，按索引顺序 = Tab 顺序）。</summary>
+        public List<SearchResultItem> GetSearchResults()
+        {
+            var results = new List<SearchResultItem>();
+            string q = _searchQuery.Trim();
+            if (q.Length == 0)
+                return results;
+
+            foreach (var entry in SettingsSearchIndex.Entries)
+            {
+                if (!MatchesKey(entry.LabelKey, q))
+                    continue;
+                results.Add(new SearchResultItem
+                {
+                    LabelKey = Localization.Get(entry.LabelKey),
+                    TabKey = entry.Tab,
+                    TabName = Localization.Get(TabDisplayNameKey(entry.Tab)),
+                    SubTabKey = entry.SubTab ?? "",
+                    SubTabName = entry.SubTab != null ? Localization.Get(SubTabDisplayNameKey(entry.SubTab)) : "",
+                    JumpKey = entry.LabelKey,
+                });
+                if (results.Count >= 30)
+                    break;
+            }
+            return results;
+        }
+
+        private static string TabDisplayNameKey(string tab) => tab switch
+        {
+            "general" => "GeneralSettings",
+            "optimizer" => "OptimizerSettings",
+            "editor" => "EditorSettings",
+            "compatibility" => "CompatibilitySettings",
+            "audio" => "AudioSettings",
+            _ => tab,
+        };
+
+        public static string SubTabDisplayNameKey(string subTab) => subTab switch
+        {
+            "basics" => "SubTabBasics",
+            "gameplay" => "SubTabGameplay",
+            "fx" => "SubTabFx",
+            "advanced" => "SubTabAdvanced",
+            _ => subTab,
+        };
+
+        /// <summary>点击搜索结果：跳转 Tab/子 Tab 并自动展开区块、高亮目标选项。</summary>
+        public void JumpToSearchResult(string labelKey)
+        {
+            foreach (var entry in SettingsSearchIndex.Entries)
+            {
+                if (entry.LabelKey != labelKey)
+                    continue;
+
+                _currentTab = entry.Tab;
+                if (entry.SubTab != null)
+                    _optimizerSubTab = entry.SubTab;
+
+                // 跳转目标在 optimizer 内时必须确保总开关已开，
+                // 否则子页整体不渲染（Optimizer.iml 壳的 enableOptimizer 门控），
+                // 表现为跳转后页面空白。
+                if (entry.Tab == "optimizer" && !optimizer.enableOptimizer)
+                {
+                    optimizer.enableOptimizer = true;
+                    if (optimizer.disableShadows)
+                        QualitySettings.shadows = ShadowQuality.Disable;
+                    AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                }
+
+                // 精准定位：展开目标子页的全部折叠区块（不知道选项属于哪个
+                // 区块，全展开保证可见；用户收起后不会再次自动展开）
+                if (entry.Tab == "optimizer")
+                {
+                    foreach (string s in new[] { "image", "rendering", "easing", "particle", "scene", "loading", "tween", "extreme", "memory", "advancedMemory" })
+                        _sectionExpanded[s] = true;
+                }
+
+                // 自动展开 Info 说明（默认用 LabelKey + "Info"）
+                string infoKey = entry.InfoKey ?? entry.LabelKey + "Info";
+                if (Localization.Get(infoKey) != infoKey) // 存在该键才展开
+                    _infoExpanded.Add(infoKey);
+
+                // 行高亮：目标选项显示高亮标记，数秒后自动消失
+                _highlightedKey = labelKey;
+                _highlightExpireTime = Time.unscaledTime + 6f;
+
+                _searchQuery = "";
+                return;
+            }
+        }
+
+        // 跳转定位高亮：目标选项行显示标记直到过期
+        private string _highlightedKey = "";
+        private float _highlightExpireTime;
+        public string highlightedKey =>
+            (Time.unscaledTime < _highlightExpireTime) ? _highlightedKey : "";
+
+        /// <summary>IML 查询：某个选项当前是否处于跳转高亮状态。</summary>
+        public bool IsHighlighted(string labelKey) => highlightedKey == labelKey;
+
+        private static bool MatchesKey(string key, string q)
+        {
+            string label = Localization.Get(key);
+            if (label.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            // 也匹配键名本身（便于用英文设置名搜索）
+            return key.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         // Collapsible section states (default collapsed). Used by the settings IML
         // to show/hide option groups so the panel stays readable.
         private readonly Dictionary<string, bool> _sectionExpanded = new();
@@ -142,11 +303,57 @@ namespace Iridium
             });
 
             _renderer.RegisterHandler<string>("OnTabClick", key => { _currentTab = key; });
+            _renderer.RegisterHandler<string>("OnOptimizerSubTabClick", key => { _optimizerSubTab = key; });
+            _renderer.RegisterHandler<string>("OnSearchChanged", value => SetSearchQuery(value));
+            _renderer.RegisterHandler("OnSearchClear", () => SetSearchQuery(""));
+            _renderer.RegisterHandler<string>("OnSearchResultClick", key => JumpToSearchResult(key));
+            _renderer.RegisterFunction("getSearchResults", args =>
+            {
+                var list = new List<object>();
+                string q = _searchQuery.Trim();
+                foreach (var r in GetSearchResults())
+                {
+                    // 双行卡片：第一行选项名（匹配片段高亮），
+                    // 第二行小号灰色位置文本（richText 由 BuildGuiStyle 开启）
+                    string loc = r.SubTabName.Length > 0
+                        ? $"{r.TabName} / {r.SubTabName}"
+                        : r.TabName;
+
+                    string nameHtml = HighlightMatch(r.LabelKey, q);
+                    string title =
+                        nameHtml + "\n" +
+                        $"<size={SearchLocFontSize}><color=#8A9097>{loc}</color></size>";
+
+                    list.Add(new
+                    {
+                        label = r.LabelKey,
+                        name = r.LabelKey,
+                        loc = loc,
+                        title = title,
+                        tab = r.TabName,
+                        subTab = r.SubTabName,
+                        jumpKey = r.JumpKey,
+                    });
+                }
+                return list;
+            });
             _renderer.RegisterHandler<string>("OnSectionToggle", key => ToggleSection(key));
             _renderer.RegisterHandler<string>("OnLanguageClick", lang => { language = lang; Save(); });
             _renderer.RegisterHandler<string>("OnInfoToggle", key => ToggleInfo(key));
             _renderer.RegisterFunction("isInfoExpanded", args =>
                 args.Length > 0 && args[0] is string key && IsInfoExpanded(key));
+            _renderer.RegisterFunction("isHighlighted", args =>
+                args.Length > 0 && args[0] is string key && IsHighlighted(key));
+            // 选项行文本：跳转高亮期间返回主题色富文本，使对应行文字变色定位
+            _renderer.RegisterFunction("optLabel", args =>
+            {
+                if (args.Length < 1 || args[0] is not string key)
+                    return "";
+                string label = Localization.Get(key);
+                if (IsHighlighted(key))
+                    return $"<color=#D973A5>{label}</color>";
+                return label;
+            });
 
             RegisterShortcutHandlers();
 
@@ -509,6 +716,63 @@ namespace Iridium
                 Iridium.Patches.Optimizer.ChunkedFloorSpawnPatch.FlushAll();
                 optimizer.chunkedFloorSpawn = value;
                 LargeLoadPatches.Update();
+                Save();
+            });
+
+            // --- 2.1.0 new hot-path optimizations ---
+            _renderer.RegisterHandler("OnOptimizeEditorInteractionsToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.optimizeEditorInteractions = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                Save();
+            });
+
+            _renderer.RegisterHandler("OnOptimizeDeathResetToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.optimizeDeathReset = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                Save();
+            });
+
+            _renderer.RegisterHandler("OnOptimizeDecorationResetToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.optimizeDecorationReset = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                Save();
+            });
+
+            _renderer.RegisterHandler("OnOptimizeHoldRendererToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.optimizeHoldRenderer = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                Save();
+            });
+
+            _renderer.RegisterHandler("OnOptimizeOnBeatToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.optimizeOnBeat = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                Save();
+            });
+
+            _renderer.RegisterHandler("OnOptimizeSpectrumToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.optimizeSpectrum = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                Save();
+            });
+
+            _renderer.RegisterHandler("OnOptimizeHitTextPoolToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.optimizeHitTextPool = value;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
                 Save();
             });
 
@@ -1364,6 +1628,8 @@ namespace Iridium
         public void Space(double size) => IridiumLayout.Engine.Space(size);
         public void Fill() => IridiumLayout.Engine.Fill();
         public string? TextField(string content) => IridiumLayout.Engine.TextField(content);
+        public string? TextField(string content, string? hint, int? width)
+            => IridiumLayout.Engine.TextField(content, hint, width);
 
         public bool Icon(Iris.Iml.IrrIconStyle style)
             => IridiumLayout.Engine.Icon((IconStyle)(int)style);

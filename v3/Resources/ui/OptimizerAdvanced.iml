@@ -1,0 +1,188 @@
+<Iris>
+    <Resources>
+        <Style name="indent" on=".indent">
+            <Setter property="margin" value="16" />
+        </Style>
+    </Resources>
+    <VBox gap="4">
+        <!-- 高级 / 实验性：大谱面加载、编辑器性能、极端优化 -->
+        <HBox align="center">
+            <ArrowButton direction={settings.expandLoadingOpts ? 'down' : 'right'} on-click="OnSectionToggle('loading')" />
+            <Text text={localize('LoadingOptimizations')} style="subtitle" />
+        </HBox>
+        {settings.expandLoadingOpts && <View class="background">
+        <HBox align="center">
+            <Text text={optLabel('OptimizeLargeLevelLoading')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeLargeLevelLoading')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeLargeLevelLoading} on-changed="OnLargeLevelLoadingToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeLargeLevelLoading') && <Text text={localize('OptimizeLargeLevelLoadingInfo')} style="hint" />}
+        {settings.optimizer.optimizeLargeLevelLoading && <>
+            <HBox align="center" class="indent">
+                <Text text={optLabel('ChunkedFloorSpawn')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('ChunkedFloorSpawn')" />
+                <Fill />
+                <Switch value={settings.optimizer.chunkedFloorSpawn} on-changed="OnChunkedFloorSpawnToggled" />
+            </HBox>
+            {isInfoExpanded('ChunkedFloorSpawn') && <Text text={localize('ChunkedFloorSpawnInfo')} style="hint" />}
+        </>}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('FrameSpreadDecorationLoading')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('FrameSpreadDecorationLoading')" />
+            <Fill />
+            <Switch value={settings.optimizer.frameSpreadDecorationLoading} on-changed="OnFrameSpreadDecorationLoadingToggled" />
+        </HBox>
+        {isInfoExpanded('FrameSpreadDecorationLoading') && <Text text={localize('FrameSpreadDecorationLoadingInfo')} style="hint" />}
+        {settings.optimizer.frameSpreadDecorationLoading && <>
+            <HBox align="center" class="indent">
+                <Text text={optLabel('DecorationsPerFrame')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('DecorationsPerFrame')" />
+                <Fill />
+                <Slider value={settings.optimizer.decorationsPerFrame} min="10" max="500" showValue="true" on-changed="OnDecorationsPerFrameChanged" />
+            </HBox>
+            {isInfoExpanded('DecorationsPerFrame') && <Text text={localize('DecorationsPerFrameInfo')} style="hint" />}
+        </>}
+
+        </View>}
+
+        <HBox align="center">
+            <ArrowButton direction={settings.expandSceneOpts ? 'down' : 'right'} on-click="OnSectionToggle('scene')" />
+            <Text text={localize('SceneOptimizations')} style="subtitle" />
+        </HBox>
+        {settings.expandSceneOpts && <View class="background">
+        <HBox align="center">
+            <Text text={optLabel('OptimizeEditorInteractions')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeEditorInteractions')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeEditorInteractions} on-changed="OnOptimizeEditorInteractionsToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeEditorInteractions') && <Text text={localize('OptimizeEditorInteractionsInfo')} style="hint" />}
+
+        <HBox align="center">
+            <Text text={optLabel('OptimizeEventProcessing')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeEventProcessing')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeEventProcessing} on-changed="OnOptimizeEventProcessingToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeEventProcessing') && <Text text={localize('OptimizeEventProcessingInfo')} style="hint" />}
+
+        <HBox align="center">
+            <Text text={optLabel('OptimizeEditorMouseDetection')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeEditorMouseDetection')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeEditorMouseDetection} on-changed="OnOptimizeEditorMouseDetectionToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeEditorMouseDetection') && <Text text={localize('OptimizeEditorMouseDetectionInfo')} style="hint" />}
+
+        <HBox align="center">
+            <Text text={optLabel('OptimizeEditorEventIndicators')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeEditorEventIndicators')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeEditorEventIndicators} on-changed="OnOptimizeEditorEventIndicatorsToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeEditorEventIndicators') && <Text text={localize('OptimizeEditorEventIndicatorsInfo')} style="hint" />}
+
+        <Separator />
+        <Text text={localize('LoadingOptimizations')} style="subtitle" />
+        <HBox align="center">
+            <Text text={optLabel('CustomLevelReadOptimization')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('CustomLevelReadOptimization')" />
+            <Fill />
+            <Switch value={settings.optimizer.customLevelReadOptimization} on-changed="OnCustomLevelReadOptimizationToggled" />
+        </HBox>
+        {isInfoExpanded('CustomLevelReadOptimization') && <Text text={localize('CustomLevelReadOptimizationInfo')} style="hint" />}
+
+        <HBox align="center">
+            <Text text={optLabel('OptimizeHitTextPool')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeHitTextPool')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeHitTextPool} on-changed="OnOptimizeHitTextPoolToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeHitTextPool') && <Text text={localize('OptimizeHitTextPoolInfo')} style="hint" />}
+
+        <HBox align="center">
+            <Text text={optLabel('FastLoading')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('FastLoading')" />
+            <Fill />
+            <Switch value={settings.optimizer.fastLoading} on-changed="OnFastLoadingToggled" />
+        </HBox>
+        {isInfoExpanded('FastLoading') && <Text text={localize('FastLoadingInfo')} style="hint" />}
+
+        <HBox align="center">
+            <Text text={optLabel('OptimizeMoveTrackTweens')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeMoveTrackTweens')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeMoveTrackTweens} on-changed="OnOptimizeMoveTrackTweensToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeMoveTrackTweens') && <Text text={localize('OptimizeMoveTrackTweensInfo')} style="hint" />}
+
+        <HBox align="center">
+            <Text text={optLabel('BatchMoveDecorations')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('BatchMoveDecorations')" />
+            <Fill />
+            <Switch value={settings.optimizer.batchMoveDecorations} on-changed="OnBatchMoveDecorationsToggled" />
+        </HBox>
+        {isInfoExpanded('BatchMoveDecorations') && <Text text={localize('BatchMoveDecorationsInfo')} style="hint" />}
+
+        <HBox align="center">
+            <Text text={optLabel('OptimizeMoveTrack')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeMoveTrack')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeMoveTrack} on-changed="OnOptimizeMoveTrackToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeMoveTrack') && <Text text={localize('OptimizeMoveTrackInfo')} style="hint" />}
+
+        <HBox align="center">
+            <Text text={optLabel('OptimizeRecolorTrack')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeRecolorTrack')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeRecolorTrack} on-changed="OnOptimizeRecolorTrackToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeRecolorTrack') && <Text text={localize('OptimizeRecolorTrackInfo')} style="hint" />}
+
+        <HBox align="center">
+            <Text text={optLabel('OptimizeFloorMesh')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeFloorMesh')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeFloorMesh} on-changed="OnOptimizeFloorMeshToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeFloorMesh') && <Text text={localize('OptimizeFloorMeshInfo')} style="hint" />}
+
+        </View>}
+
+        <HBox align="center">
+            <ArrowButton direction={settings.expandExtremeOpts ? 'down' : 'right'} on-click="OnSectionToggle('extreme')" />
+            <Text text={localize('ExtremeOptimizations')} style="subtitle" />
+        </HBox>
+        {settings.expandExtremeOpts && <View class="background">
+        <HBox align="center">
+            <Text text={optLabel('EnableExtremeOptimization')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('EnableExtremeOptimization')" />
+            <Fill />
+            <Switch value={settings.optimizer.enableExtremeOptimization} on-changed="OnExtremeOptimizationToggled" />
+        </HBox>
+        {isInfoExpanded('EnableExtremeOptimization') && <Text text={localize('EnableExtremeOptimizationInfo')} style="hint" />}
+
+        {settings.optimizer.enableExtremeOptimization && <>
+            <HBox align="center" class="indent">
+                <Text text={optLabel('MaxTweensPerFrame')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('MaxTweensPerFrame')" />
+                <Fill />
+                <Slider value={settings.optimizer.maxTweensPerFrame} min="50" max="500" showValue="true" on-changed="OnMaxTweensPerFrameChanged" />
+            </HBox>
+            {isInfoExpanded('MaxTweensPerFrame') && <Text text={localize('MaxTweensPerFrameInfo')} style="hint" />}
+        </>}
+
+        <HBox align="center">
+            <Text text={optLabel('EnableStaticDecorationBatching')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('EnableStaticDecorationBatching')" />
+            <Fill />
+            <Switch value={settings.optimizer.enableStaticDecorationBatching} on-changed="OnStaticDecorationBatchingToggled" />
+        </HBox>
+        {isInfoExpanded('EnableStaticDecorationBatching') && <Text text={localize('EnableStaticDecorationBatchingInfo')} style="hint" />}
+        </View>}
+    </VBox>
+</Iris>
