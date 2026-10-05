@@ -198,6 +198,26 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.DecodeProfiler), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.JsonParseProfiler), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.FloatFloorsProfiler), largeLoadCond));
+
+            // --- 2.1.0 新增热路径优化（自 v3 移植） ---
+            var editorInteractionsCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeEditorInteractions;
+            _definitions.Add(new PatchDef(typeof(EditorSaveStateCopyPatch.SaveStateSuppressPatch), editorInteractionsCond));
+            _definitions.Add(new PatchDef(typeof(EditorSaveStateCopyPatch.LevelDataCopySuppressPatch), editorInteractionsCond));
+            _definitions.Add(new PatchDef(typeof(DecorationLookupIndexPatch.GetDecorationPatch), editorInteractionsCond));
+            _definitions.Add(new PatchDef(typeof(DecorationLookupIndexPatch.GetDecorationIndexPatch), editorInteractionsCond));
+            _definitions.Add(new PatchDef(typeof(EditorSearchOptimizationPatch.ShowTabsForFloorPatch), editorInteractionsCond));
+            _definitions.Add(new PatchDef(typeof(EditorSearchOptimizationPatch.ShowPanelOfEventPatch), editorInteractionsCond));
+            _definitions.Add(new PatchDef(typeof(EditorSearchOptimizationPatch.SearchByCommentPatch), editorInteractionsCond));
+
+            var deathResetCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeDeathReset;
+            _definitions.Add(new PatchDef(typeof(DeathResetFloorPatch), deathResetCond));
+            _definitions.Add(new PatchDef(typeof(HoldReusePatch), deathResetCond));
+
+            var decorResetCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeDecorationReset;
+            _definitions.Add(new PatchDef(typeof(DecorationResetPatch), decorResetCond));
+
+            var holdRendererCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeHoldRenderer;
+            _definitions.Add(new PatchDef(typeof(HoldRendererDirtyCheckPatch), holdRendererCond));
             _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.ApplyEventsProfiler), largeLoadCond));
 
             // --- 惰性 topGlow（大谱面加载优化 A） ---
