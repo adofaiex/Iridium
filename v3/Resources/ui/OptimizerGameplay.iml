@@ -1,0 +1,159 @@
+<Iris>
+    <VBox gap="4">
+        <!-- 游戏性能（总开关在 Optimizer.iml 壳上） -->
+        <HBox align="center">
+            <ArrowButton direction={settings.expandRenderingOpts ? 'down' : 'right'} on-click="OnSectionToggle('rendering')" />
+            <Text text={localize('RenderingOptimizations')} style="subtitle" />
+        </HBox>
+        {settings.expandRenderingOpts && <View class="background">
+        <HBox align="center">
+            <Text text={optLabel('OptimizeDecorationUpdate')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeDecorationUpdate')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeDecorationUpdate} on-changed="OnOptimizeDecorationUpdateToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeDecorationUpdate') && <Text text={localize('OptimizeDecorationUpdateInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeHitboxDetection')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeHitboxDetection')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeHitboxDetection} on-changed="OnOptimizeHitboxDetectionToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeHitboxDetection') && <Text text={localize('OptimizeHitboxDetectionInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeTileUpdate')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeTileUpdate')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeTileUpdate} on-changed="OnOptimizeTileUpdateToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeTileUpdate') && <Text text={localize('OptimizeTileUpdateInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeHoldRenderer')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeHoldRenderer')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeHoldRenderer} on-changed="OnOptimizeHoldRendererToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeHoldRenderer') && <Text text={localize('OptimizeHoldRendererInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeMoveDecorations')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeMoveDecorations')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeMoveDecorations} on-changed="OnOptimizeMoveDecorationsToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeMoveDecorations') && <Text text={localize('OptimizeMoveDecorationsInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeFfxDecorations')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeFfxDecorations')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeFfxDecorations} on-changed="OnOptimizeFfxDecorationsToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeFfxDecorations') && <Text text={localize('OptimizeFfxDecorationsInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeDecorationShaderCache')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeDecorationShaderCache')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeDecorationShaderCache} on-changed="OnDecorationShaderCacheToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeDecorationShaderCache') && <Text text={localize('OptimizeDecorationShaderCacheInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeScnGameUpdate')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeScnGameUpdate')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeScnGameUpdate} on-changed="OnOptimizeScnGameUpdateToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeScnGameUpdate') && <Text text={localize('OptimizeScnGameUpdateInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('SkipEventIfPaused')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('SkipEventIfPaused')" />
+            <Fill />
+            <Switch value={settings.optimizer.skipEventIfPaused} on-changed="OnSkipEventIfPausedToggled" />
+        </HBox>
+        {isInfoExpanded('SkipEventIfPaused') && <Text text={localize('SkipEventIfPausedInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeDeathReset')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeDeathReset')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeDeathReset} on-changed="OnOptimizeDeathResetToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeDeathReset') && <Text text={localize('OptimizeDeathResetInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeDecorationReset')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeDecorationReset')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeDecorationReset} on-changed="OnOptimizeDecorationResetToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeDecorationReset') && <Text text={localize('OptimizeDecorationResetInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeOnBeat')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeOnBeat')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeOnBeat} on-changed="OnOptimizeOnBeatToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeOnBeat') && <Text text={localize('OptimizeOnBeatInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeSpectrum')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeSpectrum')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeSpectrum} on-changed="OnOptimizeSpectrumToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeSpectrum') && <Text text={localize('OptimizeSpectrumInfo')} style="hint" />}
+
+        </View>}
+
+        <HBox align="center">
+            <ArrowButton direction={settings.expandTweenOpts ? 'down' : 'right'} on-click="OnSectionToggle('tween')" />
+            <Text text={localize('CorePerformanceOptimizations')} style="subtitle" />
+        </HBox>
+        {settings.expandTweenOpts && <View class="background">
+        <HBox align="center">
+            <Text text={optLabel('OptimizeGameplayAllocations')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeGameplayAllocations')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeGameplayAllocations} on-changed="OnOptimizeGameplayAllocationsToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeGameplayAllocations') && <Text text={localize('OptimizeGameplayAllocationsInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizePlayerInputAllocations')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizePlayerInputAllocations')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizePlayerInputAllocations} on-changed="OnOptimizePlayerInputAllocationsToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizePlayerInputAllocations') && <Text text={localize('OptimizePlayerInputAllocationsInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeRDInputAllocations')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeRDInputAllocations')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeRDInputAllocations} on-changed="OnOptimizeRDInputAllocationsToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeRDInputAllocations') && <Text text={localize('OptimizeRDInputAllocationsInfo')} style="hint" />}
+        </View>}
+    </VBox>
+</Iris>

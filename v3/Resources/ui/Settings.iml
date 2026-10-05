@@ -2,33 +2,61 @@
     <Resources>
         <Reference path="@Colors.iml" />
 
+        <!-- 搜索结果卡片样式：必须在 Resources 直接子级（Template 内的 Style 不会被注册） -->
+        <Style name="searchResultBtn" on=".searchResultBtn">
+            <Setter property="background" value="#1E2023" />
+            <Setter property="color" value="#F1F3F5" />
+            <Setter property="radius" value="8" />
+            <Setter property="padding" value="8,8,8,8" />
+            <Setter property="align" value="left" />
+        </Style>
+
         <Template name="LangBtn">
             <Button text={item.displayName} class={settings.language == item.key ? 'primary' : 'element'} on-click="OnLanguageClick(item.key)" />
+        </Template>
+
+        <Template name="SearchResultBtn">
+            <Button text={item.title} class="searchResultBtn" on-click="OnSearchResultClick(item.jumpKey)" />
         </Template>
     </Resources>
 
     <VBox class="padding">
-        <!-- Tab bar -->
-        <HBox>
-            <Button text={localize('GeneralSettings')} class={settings.currentTab == 'general' ? 'primary' : 'element'} on-click="OnTabClick('general')" />
-            <Button text={localize('OptimizerSettings')} class={settings.currentTab == 'optimizer' ? 'primary' : 'element'} on-click="OnTabClick('optimizer')" />
-            <Button text={localize('EditorSettings')} class={settings.currentTab == 'editor' ? 'primary' : 'element'} on-click="OnTabClick('editor')" />
-            <Button text={localize('CompatibilitySettings')} class={settings.currentTab == 'compatibility' ? 'primary' : 'element'} on-click="OnTabClick('compatibility')" />
-            <Button text={localize('AudioSettings')} class={settings.currentTab == 'audio' ? 'primary' : 'element'} on-click="OnTabClick('audio')" />
-            <Fill />
-            <Text text={"Iridium " + getVersion()} style="text-secondary" />
+        <!-- Global search: always on top; while searching, tabs & content are
+             replaced entirely by the result list -->
+        <HBox align="center">
+            <TextField value={settings.searchQuery} on-changed="OnSearchChanged" hint={localize('SearchHint')} width="280" />
+            {settings.IsSearching && <Icon type="error" on-click="OnSearchClear" />}
         </HBox>
 
-        <!-- Content area -->
-        <View class="background">
-            <ScrollView scrollPosition="contentScroll" height="500">
-                {settings.currentTab == 'general' && <Reference path="@General.iml" />}
-                {settings.currentTab == 'optimizer' && <Reference path="@Optimizer.iml" />}
-                {settings.currentTab == 'editor' && <Reference path="@Editor.iml" />}
-                {settings.currentTab == 'compatibility' && <Reference path="@Compatibility.iml" />}
-                {settings.currentTab == 'audio' && <Reference path="@Audio.iml" />}
-            </ScrollView>
-        </View>
+        {!settings.IsSearching && <>
+            <!-- Tab bar -->
+            <HBox>
+                <Button text={localize('GeneralSettings')} class={settings.currentTab == 'general' ? 'primary' : 'element'} on-click="OnTabClick('general')" />
+                <Button text={localize('OptimizerSettings')} class={settings.currentTab == 'optimizer' ? 'primary' : 'element'} on-click="OnTabClick('optimizer')" />
+                <Button text={localize('EditorSettings')} class={settings.currentTab == 'editor' ? 'primary' : 'element'} on-click="OnTabClick('editor')" />
+                <Button text={localize('CompatibilitySettings')} class={settings.currentTab == 'compatibility' ? 'primary' : 'element'} on-click="OnTabClick('compatibility')" />
+                <Button text={localize('AudioSettings')} class={settings.currentTab == 'audio' ? 'primary' : 'element'} on-click="OnTabClick('audio')" />
+                <Fill />
+                <Text text={"Iridium " + getVersion()} style="text-secondary" />
+            </HBox>
+
+            <!-- Content area -->
+            <View class="background">
+                <ScrollView scrollPosition="contentScroll" height="500">
+                    {settings.currentTab == 'general' && <Reference path="@General.iml" />}
+                    {settings.currentTab == 'optimizer' && <Reference path="@Optimizer.iml" />}
+                    {settings.currentTab == 'editor' && <Reference path="@Editor.iml" />}
+                    {settings.currentTab == 'compatibility' && <Reference path="@Compatibility.iml" />}
+                    {settings.currentTab == 'audio' && <Reference path="@Audio.iml" />}
+                </ScrollView>
+            </View>
+        </>}
+
+        {settings.IsSearching && <>
+            <Text text={localize('SearchResults')} style="subtitle" />
+            {getSearchResults().length == 0 && <Text text={localize('SearchNoResults')} style="text-secondary" />}
+            <ForEach items={getSearchResults()} template="SearchResultBtn" />
+        </>}
 
         <!-- Async processing status -->
         <Text text={getAsyncStatus()} style="text-secondary" />

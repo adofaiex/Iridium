@@ -1362,6 +1362,44 @@ public static class IridiumLayout
             return result;
         }
 
+        /// <summary>
+        /// 带 placeholder 提示与固定宽度的文本框（Iris.Iml 适配层入口）。
+        /// hint = 空内容时叠加显示的灰色提示；width = 固定宽度（像素，null 时撑满）。
+        /// </summary>
+        internal static string? TextField(string content, string? hint, int? width)
+        {
+            // 固定高度：防止容器边距把圆角下边裁掉；有宽度指定时用固定宽度，否则撑满
+            var options = new List<object> { GUILayout.Height(28) };
+            if (width.HasValue)
+                options.Add(GUILayout.Width(width.Value));
+            else
+                options.Add(GUILayout.ExpandWidth(true));
+
+            string? result = TextField(content, null, options.ToArray());
+
+            // placeholder：空内容时在文本框区域上叠加灰色提示文本。
+            // 注意：只复制字体/对齐/内边距，不复制背景纹理——否则提示层的
+            // normal 背景（无高亮边框）会盖住聚焦时的粉色高亮边框。
+            if (!string.IsNullOrEmpty(hint) && content.Length == 0)
+            {
+                var rect = GUILayoutUtility.GetLastRect();
+                if (rect.height > 0)
+                {
+                    var baseStyle = OffsetStyle(Resolution.TextField);
+                    var hintStyle = new GUIStyle
+                    {
+                        fontSize = baseStyle.fontSize,
+                        alignment = baseStyle.alignment,
+                        padding = baseStyle.padding,
+                        contentOffset = baseStyle.contentOffset,
+                        normal = new GUIStyleState { textColor = new Color(0.42f, 0.44f, 0.46f) },
+                    };
+                    GUI.Label(rect, hint, hintStyle);
+                }
+            }
+            return result;
+        }
+
         internal static string? TextField(
             ref string? content,
             int? maxLength = null,
@@ -2548,6 +2586,8 @@ public static class IridiumLayout
             };
             ApplyFontSize(style, fontSize, true);
             ApplyTextPalette(style, textColors);
+            // 富文本：支持 <color>/<b> 等内联标记（如搜索跳转的行高亮 optLabel）
+            style.richText = true;
             return style;
         }
 

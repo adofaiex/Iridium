@@ -1,0 +1,143 @@
+<Iris>
+    <Resources>
+        <Style name="indent" on=".indent">
+            <Setter property="margin" value="16" />
+        </Style>
+    </Resources>
+    <VBox gap="4">
+        <!-- 通用：用户直接感知的画质/资源项（总开关在 Optimizer.iml 壳上） -->
+        <HBox align="center">
+            <Text text={optLabel('RenderScale')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('RenderScale')" />
+            <Fill />
+            <Switch value={settings.optimizer.enableRenderScale} on-changed="OnRenderScaleToggled" />
+        </HBox>
+        {isInfoExpanded('RenderScale') && <Text text={localize('RenderScaleInfo')} style="hint" />}
+
+        {settings.optimizer.enableRenderScale && <>
+            <HBox align="center" class="indent">
+                <Text text={optLabel('RenderScalePercent')} style="label" />
+                <Fill />
+                <Slider value={settings.optimizer.renderScalePercent} min="30" max="100" showValue="true" on-changed="OnRenderScalePercentChanged" />
+            </HBox>
+        </>}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('CompressImage')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('CompressImage')" />
+            <Fill />
+            <Switch value={!settings.optimizer.dontCompress} on-changed="OnCompressToggled" />
+        </HBox>
+        {isInfoExpanded('CompressImage') && <Text text={localize('CompressImageInfo')} style="hint" />}
+
+        {!settings.optimizer.dontCompress && <>
+            <HBox align="center" class="indent">
+                <Text text={optLabel('ShowSavedMemory')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('ShowSavedMemory')" />
+                <Fill />
+                <Checkbox value={!settings.optimizer.dontShowSavedMemory} on-changed="OnShowSavedMemoryToggled" />
+            </HBox>
+            {isInfoExpanded('ShowSavedMemory') && <Text text={localize('ShowSavedMemoryInfo')} style="hint" />}
+
+            <Separator />
+            <HBox align="center" class="indent">
+                <Text text={optLabel('UseLossyCompression')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('UseLossyCompression')" />
+                <Fill />
+                <Switch value={settings.optimizer.useLossyCompression} on-changed="OnLossyCompressionToggled" />
+            </HBox>
+            {isInfoExpanded('UseLossyCompression') && <Text text={localize('UseLossyCompressionInfo')} style="hint" />}
+
+            {settings.optimizer.useLossyCompression && <>
+                <HBox align="center" class="indent">
+                    <Text text={optLabel('LossyQuality')} style="label" />
+                    <Icon type="information" on-click="OnInfoToggle('LossyQuality')" />
+                    <Fill />
+                    <Slider value={settings.optimizer.lossyQuality} min="10" max="100" showValue="true" on-changed="OnLossyQualityChanged" />
+                </HBox>
+                {isInfoExpanded('LossyQuality') && <Text text={localize('LossyQualityInfo')} style="hint" />}
+            </>}
+
+            <Separator />
+            <HBox align="center">
+                <Text text={optLabel('MultipleOf4')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('MultipleOf4')" />
+                <Fill />
+                <Checkbox value={!settings.optimizer.dontResizeMultipleOf4} on-changed="OnMultipleOf4Toggled" />
+            </HBox>
+            {isInfoExpanded('MultipleOf4') && <Text text={localize('MultipleOf4Info')} style="hint" />}
+
+            <Separator />
+            <HBox align="center">
+                <Text text={optLabel('DivideImageBy')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('DivideImageBy')" />
+                <Fill />
+                <Slider value={settings.optimizer.divideBy} min="1" max="4" showValue="true" on-changed="OnDivideByChanged" />
+            </HBox>
+            {isInfoExpanded('DivideImageBy') && <Text text={localize('DivideImageByInfo')} style="hint" />}
+
+            <Separator />
+            <HBox align="center">
+                <Text text={optLabel('DontResizeCollider')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('DontResizeCollider')" />
+                <Fill />
+                <Checkbox value={settings.optimizer.dontResizeCollider} on-changed="OnDontResizeColliderToggled" />
+            </HBox>
+            {isInfoExpanded('DontResizeCollider') && <Text text={localize('DontResizeColliderInfo')} style="hint" />}
+        </>}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('DisableShadows')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('DisableShadows')" />
+            <Fill />
+            <Switch value={settings.optimizer.disableShadows} on-changed="OnDisableShadowsToggled" />
+        </HBox>
+        {isInfoExpanded('DisableShadows') && <Text text={localize('DisableShadowsInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <ArrowButton direction={settings.expandMemoryOpts ? 'down' : 'right'} on-click="OnSectionToggle('memory')" />
+            <Text text={localize('MemorySettings')} style="subtitle" />
+        </HBox>
+        {settings.expandMemoryOpts && <View class="background">
+
+        <HBox align="center">
+            <Text text={optLabel('BasicMemoryOptimization')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('BasicMemoryOptimization')" />
+            <Fill />
+            <Switch value={settings.memory.enableBasicOptimization} on-changed="OnBasicMemoryOptimizationToggled" />
+        </HBox>
+        {isInfoExpanded('BasicMemoryOptimization') && <Text text={localize('BasicMemoryOptimizationInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('EnableVirtualMemoryOptimization')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('EnableVirtualMemoryOptimization')" />
+            <Fill />
+            <Switch value={settings.memory.enableVirtualMemoryOptimization} on-changed="OnVirtualMemoryOptimizationToggled" />
+        </HBox>
+        {isInfoExpanded('EnableVirtualMemoryOptimization') && <Text text={localize('EnableVirtualMemoryOptimizationInfo')} style="hint" />}
+        {settings.memory.enableVirtualMemoryOptimization && <Text text={localize('VmTrimWindowsOnlyHint')} style="hint" />}
+
+        {settings.memory.enableVirtualMemoryOptimization && <>
+            <HBox align="center" class="indent">
+                <Text text={optLabel('VmTrimOnLevelLoad')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('VmTrimOnLevelLoad')" />
+                <Fill />
+                <Switch value={settings.memory.vmTrimOnLevelLoad} on-changed="OnVmTrimOnLevelLoadToggled" />
+            </HBox>
+            {isInfoExpanded('VmTrimOnLevelLoad') && <Text text={localize('VmTrimOnLevelLoadInfo')} style="hint" />}
+
+            <HBox align="center" class="indent">
+                <Text text={optLabel('VmTrimOnEditorEnter')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('VmTrimOnEditorEnter')" />
+                <Fill />
+                <Switch value={settings.memory.vmTrimOnEditorEnter} on-changed="OnVmTrimOnEditorEnterToggled" />
+            </HBox>
+            {isInfoExpanded('VmTrimOnEditorEnter') && <Text text={localize('VmTrimOnEditorEnterInfo')} style="hint" />}
+        </>}
+        </View>}
+    </VBox>
+</Iris>

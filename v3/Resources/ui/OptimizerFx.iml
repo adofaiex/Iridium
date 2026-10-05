@@ -1,0 +1,105 @@
+<Iris>
+    <Resources>
+        <!-- 树形缩进：从属于主开关的子选项行 -->
+        <Style name="indent" on=".indent">
+            <Setter property="margin" value="16" />
+        </Style>
+    </Resources>
+    <VBox gap="4">
+        <!-- 特效与动画：缓动引擎（主开关）→ DOTween → 粒子，树形从属 -->
+        <HBox align="center">
+            <Text text={optLabel('EnableCustomEasingEngine')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('EnableCustomEasingEngine')" />
+            <Fill />
+            <Switch value={settings.optimizer.enableCustomEasingEngine} on-changed="OnCustomEasingEngineToggled" />
+        </HBox>
+        {isInfoExpanded('EnableCustomEasingEngine') && <Text text={localize('EnableCustomEasingEngineInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeFilters')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeFilters')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeFilters} on-changed="OnOptimizeFiltersToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeFilters') && <Text text={localize('OptimizeFiltersInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('EnableDOTweenOptimization')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('EnableDOTweenOptimization')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeDOTweenGlobal} on-changed="OnDOTweenGlobalToggled" />
+        </HBox>
+        {isInfoExpanded('EnableDOTweenOptimization') && <Text text={localize('EnableDOTweenOptimizationInfo')} style="hint" />}
+
+        {settings.optimizer.optimizeDOTweenGlobal && <>
+            <HBox align="center" class="indent">
+                <Text text={optLabel('TweenerCapacity')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('TweenerCapacity')" />
+                <Fill />
+                <Slider value={settings.optimizer.dotweenTweenerCapacity} min="200" max="2000" showValue="true" on-changed="OnTweenerCapacityChanged" />
+            </HBox>
+            {isInfoExpanded('TweenerCapacity') && <Text text={localize('TweenerCapacityInfo')} style="hint" />}
+
+            <HBox align="center">
+                <Text text={optLabel('SequenceCapacity')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('SequenceCapacity')" />
+                <Fill />
+                <Slider value={settings.optimizer.dotweenSequenceCapacity} min="50" max="500" showValue="true" on-changed="OnSequenceCapacityChanged" />
+            </HBox>
+            {isInfoExpanded('SequenceCapacity') && <Text text={localize('SequenceCapacityInfo')} style="hint" />}
+
+            <HBox align="center">
+                <Text text={optLabel('DOTweenDefaultRecyclable')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('DOTweenDefaultRecyclable')" />
+                <Fill />
+                <Checkbox value={settings.optimizer.dotweenDefaultRecyclable} on-changed="OnDOTweenDefaultRecyclableToggled" />
+            </HBox>
+            {isInfoExpanded('DOTweenDefaultRecyclable') && <Text text={localize('DOTweenDefaultRecyclableInfo')} style="hint" />}
+
+            <HBox align="center">
+                <Text text={optLabel('DOTweenDisableSafeMode')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('DOTweenDisableSafeMode')" />
+                <Fill />
+                <Checkbox value={settings.optimizer.dotweenDisableSafeMode} on-changed="OnDOTweenDisableSafeModeToggled" />
+            </HBox>
+            {isInfoExpanded('DOTweenDisableSafeMode') && <Text text={localize('DOTweenDisableSafeModeInfo')} style="hint" />}
+        </>}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('OptimizeParticle')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('OptimizeParticle')" />
+            <Fill />
+            <Switch value={settings.optimizer.optimizeParticle} on-changed="OnOptimizeParticleToggled" />
+        </HBox>
+        {isInfoExpanded('OptimizeParticle') && <Text text={localize('OptimizeParticleInfo')} style="hint" />}
+
+        {settings.optimizer.optimizeParticle && <>
+            <HBox align="center" class="indent">
+                <Text text={optLabel('OptimizeParticleInactive')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('OptimizeParticleInactive')" />
+                <Fill />
+                <Checkbox value={settings.optimizer.optimizeParticleInactive} on-changed="OnOptimizeParticleInactiveToggled" />
+            </HBox>
+            {isInfoExpanded('OptimizeParticleInactive') && <Text text={localize('OptimizeParticleInactiveInfo')} style="hint" />}
+
+            <HBox align="center">
+                <Text text={optLabel('OptimizeParticleCulling')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('OptimizeParticleCulling')" />
+                <Fill />
+                <Checkbox value={settings.optimizer.optimizeParticleCulling} on-changed="OnOptimizeParticleCullingToggled" />
+            </HBox>
+            {isInfoExpanded('OptimizeParticleCulling') && <Text text={localize('OptimizeParticleCullingInfo')} style="hint" />}
+
+            <HBox align="center">
+                <Text text={optLabel('OptimizeParticleLod')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('OptimizeParticleLod')" />
+                <Fill />
+                <Checkbox value={settings.optimizer.optimizeParticleLod} on-changed="OnOptimizeParticleLodToggled" />
+            </HBox>
+            {isInfoExpanded('OptimizeParticleLod') && <Text text={localize('OptimizeParticleLodInfo')} style="hint" />}
+        </>}
+    </VBox>
+</Iris>
