@@ -83,6 +83,16 @@ namespace Iridium.Config
         public bool skipRedundantRemakePath = false;       // 跳过重复的RemakePath调用
         public bool optimizeOffsetFloorEvents = false;     // 优化 OffsetFloorIDsInEvents
         public bool skipApplyEventsOnInsert = false;       // 增量插入时跳过 ApplyEventsToFloors
+
+        // --- 2.1.0 新增热路径优化（自 v3 移植，适用 2.9.8 的部分） ---
+        // 编辑器交互优化：SaveState 冗余全谱拷贝、装饰/事件查找索引与搜索
+        public bool optimizeEditorInteractions = false;
+        // 死亡重开复位优化：跳过未变化砖块的 ResetToLevelStart、复用 Hold 对象
+        public bool optimizeDeathReset = false;
+        // 装饰物复位优化：只对播放期被改动过的装饰物重跑 Setup
+        public bool optimizeDecorationReset = false;
+        // Hold 渲染器每帧脏检查：几何未变时只更新完成度
+        public bool optimizeHoldRenderer = false;
     }
 
     public class UISettings

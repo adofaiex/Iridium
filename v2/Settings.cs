@@ -340,6 +340,32 @@ namespace Iridium
             rendering.Add(Separator());
             rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.fastLoading, v => optimizer.fastLoading = v, "FastLoading"));
 
+            // --- 2.1.0 新增热路径优化（自 v3 移植） ---
+            rendering.Add(Separator());
+            rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeHoldRenderer, v =>
+            {
+                optimizer.optimizeHoldRenderer = v;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+            }, "OptimizeHoldRenderer"));
+            rendering.Add(Separator());
+            rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeEditorInteractions, v =>
+            {
+                optimizer.optimizeEditorInteractions = v;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+            }, "OptimizeEditorInteractions"));
+            rendering.Add(Separator());
+            rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeDeathReset, v =>
+            {
+                optimizer.optimizeDeathReset = v;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+            }, "OptimizeDeathReset"));
+            rendering.Add(Separator());
+            rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeDecorationReset, v =>
+            {
+                optimizer.optimizeDecorationReset = v;
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
+            }, "OptimizeDecorationReset"));
+
             body.Add(VBox(ContainerStyle.Background, null, WithWidthMax(rendering.ToArray())));
             body.Add(Separator());
 
