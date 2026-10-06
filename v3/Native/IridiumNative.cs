@@ -120,13 +120,22 @@ namespace Iridium.Native
         internal static RemakePathFn RemakePath => _remakePath;
 
         /// <summary>True when the batch easing export is present.</summary>
-        internal static bool HasEvaluateBatch => _evaluateBatch != null;
+        internal static bool HasEvaluateBatch
+        {
+            get { EnsureProbed(); return _available && _evaluateBatch != null; }
+        }
 
         /// <summary>True when the JSON parse/view/release exports are present.</summary>
-        internal static bool HasJson => _jsonParse != null && _jsonView != null && _jsonRelease != null;
+        internal static bool HasJson
+        {
+            get { EnsureProbed(); return _available && _jsonParse != null && _jsonView != null && _jsonRelease != null; }
+        }
 
         /// <summary>True when the spatial index exports are present.</summary>
-        internal static bool HasSpatial => _spatialRebuild != null && _spatialQuery != null;
+        internal static bool HasSpatial
+        {
+            get { EnsureProbed(); return _available && _spatialRebuild != null && _spatialQuery != null; }
+        }
 
         /// <summary>
         /// Single easing evaluation on the native side. Returns 0 when the
@@ -247,20 +256,43 @@ namespace Iridium.Native
         }
 
         /// <summary>Rebuilds the spatial index from packed AABBs (4 f32 each).</summary>
-        internal static void SpatialRebuild(float[] packed, int count)
+        internal static bool SpatialRebuild(float[] packed, int count)
         {
             var fn = _spatialRebuild;
-            if (fn == null) return;
+            if (fn == null) return false;
             GCHandle h = default;
             try
             {
                 h = GCHandle.Alloc(packed, GCHandleType.Pinned);
-                fn((uint)count, h.AddrOfPinnedObject());
+                return fn((uint)count, h.AddrOfPinnedObject()) == 0;
             }
-            catch { /* feature gates on HasSpatial; failure leaves a stale/empty index */ }
+            catch
+            {
+                return false;
+            }
             finally
             {
                 if (h.IsAllocated) h.Free();
+            }
+        }
+
+        /// <summary>
+        /// Queries the spatial index with a pre-allocated unmanaged output
+        /// buffer (avoids a GCHandle per call on hot frames).
+        /// Returns candidate count (may exceed <paramref name="cap"/>). -1 on error.
+        /// </summary>
+        internal static int SpatialQueryRaw(
+            float minX, float minY, float maxX, float maxY, IntPtr outIds, int cap)
+        {
+            var fn = _spatialQuery;
+            if (fn == null) return -1;
+            try
+            {
+                return fn(minX, minY, maxX, maxY, outIds, (uint)cap);
+            }
+            catch
+            {
+                return -1;
             }
         }
 
