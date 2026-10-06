@@ -7,7 +7,7 @@ This workflow automatically builds and releases the Iridium mod when changes are
 ### Features
 
 - **Automatic Build**: Builds the .NET project using the same process as `build.sh`
-- **Native Rust Library**: Builds `iridium-core` (`libiridium_core.so` + cross-compiled `iridium_core.dll` via mingw-w64) and packages it into the zip, then runs its bit-exactness test suite — without this step `out/` would be empty on a clean checkout and every hot path would silently fall back to managed code
+- **Native Rust Library**: Builds `iridium-core` for all three platforms — `libiridium_core.so` + cross-compiled `iridium_core.dll` (mingw-w64) on the Linux job, and a universal `libiridium_core.dylib` (arm64 + x86_64) from a dedicated `native-macos` job — packages all three into one zip (the loader picks per OS at runtime), then runs the bit-exactness test suite; without these steps `out/` would be empty on a clean checkout and every hot path would silently fall back to managed code
 - **Version Detection**: Automatically extracts version information from `Info.json` and `VersionManager.cs`
 - **Artifact Packaging**: Creates a zip file with the build output
 - **Release Management**: Creates GitHub releases with the built artifacts

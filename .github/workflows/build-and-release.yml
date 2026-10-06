@@ -16,7 +16,35 @@ permissions:
   packages: write
 
 jobs:
+  # Mach-O can't be produced on the Linux runners, so the macOS dylib comes
+  # from a dedicated mac job as a universal (arm64 + x86_64) fat binary.
+  # Its artifact feeds both build jobs, so every version zip ends up with all
+  # three native files (.so / .dll / .dylib) in one package -- the loader
+  # picks the right one per OS at runtime.
+  native-macos:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+    - name: Build universal dylib
+      run: ./scripts/build-native.sh --universal
+
+    - name: Upload dylib artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: native-dylib
+        path: out/native/libiridium_core.dylib
+        if-no-files-found: error
+        retention-days: 7
+
   build:
+    needs: native-macos
     strategy:
       matrix:
         include:
@@ -69,6 +97,14 @@ jobs:
     # the csproj CopyToOut target picks them up for the zip.
     - name: Build native library (.so + .dll)
       run: ./scripts/build-native.sh --cross
+
+    # Fat dylib from the native-macos job -> same out/native/, so the zip
+    # carries all three platforms' libraries side by side.
+    - name: Add macOS dylib (from native-macos job)
+      uses: actions/download-artifact@v4
+      with:
+        name: native-dylib
+        path: out/native
 
     # Bit-exactness kernels: fail the release if a port drifts from C#.
     - name: Test native library
