@@ -8,33 +8,35 @@ pub const ERR_NULL_ARG: i32 = -1;
 pub const ERR_BAD_LEN: i32 = -2;
 pub const ERR_PANIC: i32 = -3;
 
-/// Per-tile base data for path rebuild (SoA).
+/// Path-rebuild input (SoA). Field order is padding-free on all ABIs:
+/// two pointers, one f64, then two 4-byte scalars.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FloorPathInput {
-    /// Turn angle per tile in degrees (vanilla floorAngles[i]).
+    /// Absolute turn angle per step in degrees; 999.0 = midspin sentinel.
     pub angles: *const f32,
-    pub angles_len: u32,
-    /// Start angle in radians (vanilla 270deg or chart startAngle).
-    pub start_angle: f32,
-    /// Vanilla controller.baseFloorDimensions.x.
-    pub tile_size: f32,
-    /// Per-tile length multiplier (vanilla lengthMult).
+    /// Per-step length multiplier (all ones unless mods scale tiles).
     pub length_mults: *const f32,
+    /// First tile entry angle in radians (vanilla 3/2 pi).
+    pub start_angle: f64,
+    /// Vanilla controller.tileSize (tile spacing radius).
+    pub tile_size: f32,
+    /// Number of direction steps (= floor count - 1).
+    pub steps: u32,
 }
 
-/// Rebuild results; buffers are caller-allocated.
+/// Path-rebuild output; all buffers caller-allocated with `steps + 1` slots.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FloorPathOutput {
-    /// Entry angle per tile in radians (scrFloor.entryangle), n+1 entries.
-    pub entry_angles: *mut f32,
-    /// Exit angle per tile in radians (scrFloor.exitangle), n+1 entries.
-    pub exit_angles: *mut f32,
-    /// Tile center world position (transform.position), n entries.
+    /// Entry angle per tile in radians (scrFloor.entryangle, f64 in vanilla).
+    pub entry_angles: *mut f64,
+    /// Exit angle per tile in radians; the last tile gets entry + pi.
+    pub exit_angles: *mut f64,
+    /// Tile center world position (floor 0 at origin).
     pub positions_x: *mut f32,
     pub positions_y: *mut f32,
-    /// Tiles written (n+1), filled by the callee.
+    /// Tiles written (steps + 1), filled by the callee.
     pub count: *mut u32,
 }
 

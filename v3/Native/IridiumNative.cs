@@ -36,9 +36,39 @@ namespace Iridium.Native
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate float EvaluateFn(int ease, float time, float duration, float amplitude, float period);
 
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct FloorPathInput
+        {
+            public IntPtr Angles;
+            public IntPtr LengthMults;
+            public double StartAngle;
+            public float TileSize;
+            public uint Steps;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct FloorPathOutput
+        {
+            public IntPtr EntryAngles;
+            public IntPtr ExitAngles;
+            public IntPtr PositionsX;
+            public IntPtr PositionsY;
+            public IntPtr Count;
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int RemakePathFn(ref FloorPathInput input, ref FloorPathOutput output);
+
         private static AbiVersionFn _abiVersion;
         private static LibVersionFn _libVersion;
         private static EvaluateFn _evaluate;
+        private static RemakePathFn _remakePath;
+
+        /// <summary>
+        /// Batch path rebuild on the native side. Null unless
+        /// <see cref="Available"/> — callers must gate on that first.
+        /// </summary>
+        internal static RemakePathFn RemakePath => _remakePath;
 
         /// <summary>
         /// Single easing evaluation on the native side. Returns 0 when the
@@ -49,7 +79,7 @@ namespace Iridium.Native
         {
             var fn = _evaluate;
             if (fn == null) return time >= duration ? 1f : 0f;
-            return fn((int)ease, time, duration, amplitude, period);
+            return fn(ease, time, duration, amplitude, period);
         }
 
         /// <summary>True when the library is loaded and ABI-compatible.</summary>
@@ -135,7 +165,8 @@ namespace Iridium.Native
                 _abiVersion = GetExport<AbiVersionFn>("iridium_core_abi_version");
                 _libVersion = GetExport<LibVersionFn>("iridium_core_lib_version");
                 _evaluate = GetExport<EvaluateFn>("iridium_core_evaluate");
-                if (_abiVersion == null || _libVersion == null || _evaluate == null)
+                _remakePath = GetExport<RemakePathFn>("iridium_core_remake_path");
+                if (_abiVersion == null || _libVersion == null || _evaluate == null || _remakePath == null)
                 {
                     Main.Logger?.Log("[IridiumNative] exports missing — native-backed features DISABLED");
                     return;

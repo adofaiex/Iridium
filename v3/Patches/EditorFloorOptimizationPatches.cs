@@ -339,6 +339,12 @@ namespace Iridium.Patches
 			var angles = lm.floorAngles;
 			if (floors == null || floors.Count == 0 || angles == null) return;
 
+			// Native fast path: iridium_core computes all angles/positions in
+			// one call; C# only writes them back to Unity objects. Falls back
+			// to the original managed loop when the library is absent
+			// (hard binding: no duplicate managed implementation kept).
+			if (NativeRebuild(lm, Math.Max(0, fromSeqID))) return;
+
 			int start = Math.Max(0, fromSeqID);
 
 			// 旧实现在每次增量重建时都会对 [0, start) 的每块砖做
@@ -479,6 +485,100 @@ namespace Iridium.Patches
 			}
 
 			floor.Reset();
+		}
+
+		/// <summary>
+		/// Native rebuild via iridium_core (angles + positions, then Mono-side
+		/// writeback). Returns false when native is unavailable, letting the
+		/// caller use the managed path.
+		/// </summary>
+		private static bool NativeRebuild(scrLevelMaker lm, int start)
+		{
+			var fn = Iridium.Native.IridiumNative.RemakePath;
+			if (fn == null) return false;
+
+			var floors = lm.listFloors;
+			var angles = lm.floorAngles;
+			if (floors == null || angles == null || floors.Count == 0) return false;
+			// Incremental rebuilds reuse the anchor floor's current state;
+			// that path is managed-only for now.
+			if (start != 0) return false;
+
+			int n = Math.Min(angles.Length, floors.Count - 1);
+			if (n < 0) return false;
+
+			// Buffers: n+1 tiles (angles f64 x2, positions f32 x2) + count.
+			var entry = new double[n + 1];
+			var exit = new double[n + 1];
+			var px = new float[n + 1];
+			var py = new float[n + 1];
+			var mults = new float[n];
+			var count = new uint[1];
+
+			var input = new Iridium.Native.IridiumNative.FloorPathInput
+			{
+				Angles = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(angles, 0),
+				LengthMults = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(mults, 0),
+				StartAngle = Pi1_5,
+				TileSize = scrController.instance != null ? (float)scrController.instance.tileSize : 0.631f,
+				Steps = (uint)n,
+			};
+			var output = new Iridium.Native.IridiumNative.FloorPathOutput
+			{
+				EntryAngles = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(entry, 0),
+				ExitAngles = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(exit, 0),
+				PositionsX = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(px, 0),
+				PositionsY = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(py, 0),
+				Count = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(count, 0),
+			};
+
+			if (fn(ref input, ref output) != 0) return false;
+			if (count[0] != (uint)(n + 1)) return false;
+
+			// Mono-side writeback (Unity objects + per-floor flags).
+			var floor0 = floors[0];
+			ResetFloorState(floor0, Vector3.zero);
+			floor0.entryangle = entry[0];
+			floor0.seqID = 0;
+			floor0.hasLit = true;
+			floor0.prevfloor = null;
+
+			for (int i = 0; i < n; i++)
+			{
+				var floor = floors[i];
+				var nextFloor = floors[i + 1];
+				float ang = angles[i];
+
+				floor.entryangle = entry[i];
+				floor.exitangle = exit[i];
+				floor.midSpin = ang == 999f;
+				floor.seqID = i;
+				floor.prevfloor = i > 0 ? floors[i - 1] : null;
+				floor.nextfloor = nextFloor;
+				floor.speed = 1f;
+				floor.isCCW = false;
+
+				ResetFloorState(nextFloor, new Vector3(px[i + 1], py[i + 1], 0f));
+				nextFloor.entryangle = entry[i + 1];
+				nextFloor.seqID = i + 1;
+				nextFloor.transform.position = new Vector3(px[i + 1], py[i + 1], 0f);
+				nextFloor.floatDirection = ang;
+				nextFloor.prevfloor = floor;
+			}
+
+			if (floors.Count > 1)
+			{
+				var lastFloor = floors[floors.Count - 1];
+				lastFloor.exitangle = exit[n] = lastFloor.entryangle + Math.PI;
+				lastFloor.nextfloor = null;
+
+				if (scrController.instance?.gameworld == true)
+				{
+					lastFloor.isportal = true;
+					lastFloor.levelnumber = Portal.EndOfLevel;
+				}
+			}
+			return true;
 		}
 
 		#endregion
