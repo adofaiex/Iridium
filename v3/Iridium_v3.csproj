@@ -323,6 +323,10 @@
 			<FilesToCopy Include="$(ProjectDir)..\bin\loaders\melon\$(TargetFramework)\Iridium.Loader.Melon.dll" Condition="Exists('$(ProjectDir)..\bin\loaders\melon\$(TargetFramework)\Iridium.Loader.Melon.dll')" />
 			<FilesToCopy Include="$(ProjectDir)..\bin\loaders\bepinex\$(TargetFramework)\Iridium.Loader.BepInEx.dll" Condition="Exists('$(ProjectDir)..\bin\loaders\bepinex\$(TargetFramework)\Iridium.Loader.BepInEx.dll')" />
 			<FilesToCopy Include="$(ProjectDir)..\out\Iris.Iml\Iris.Iml.dll" Condition="Exists('$(ProjectDir)..\out\Iris.Iml\Iris.Iml.dll')" />
+			<!-- Native hot-path library (optional; built by scripts/build-native.sh) -->
+			<FilesToCopy Include="$(ProjectDir)..\out\native\iridium_core.dll" Condition="'$(OS)' == 'Windows_NT' And Exists('$(ProjectDir)..\out\native\iridium_core.dll')" />
+			<FilesToCopy Include="$(ProjectDir)..\out\native\libiridium_core.so" Condition="Exists('$(ProjectDir)..\out\native\libiridium_core.so')" />
+			<FilesToCopy Include="$(ProjectDir)..\out\native\libiridium_core.dylib" Condition="Exists('$(ProjectDir)..\out\native\libiridium_core.dylib')" />
 			<FilesToCopy Include="$(ProjectDir)Info.json" />
 			<ResourceFiles Include="$(ProjectDir)Resources\**\*" Exclude="$(ProjectDir)Resources\**\*\" />
 		</ItemGroup>

@@ -55,6 +55,10 @@ namespace Iridium
             // 初始化自定义缓速引擎
             Iridium.Core.CustomEasingEngine.Initialize();
 
+            // Probe the optional native hot-path library (logs the outcome;
+            // absence or ABI mismatch silently falls back to the C# path).
+            Iridium.Native.IridiumNative.Probe();
+
             Logger?.Log(Localization.Get("ModLoaded", Settings.language));
             return true;
         }

@@ -15,6 +15,9 @@ bld/
 [Ll]ogs/
 out/
 
+# Rust native library
+native/iridium-core/target/
+
 # NuGet Packages
 *.nupkg
 *.snupkg
