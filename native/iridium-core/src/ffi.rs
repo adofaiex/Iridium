@@ -7,6 +7,8 @@ pub const ERR_OK: i32 = 0;
 pub const ERR_NULL_ARG: i32 = -1;
 pub const ERR_BAD_LEN: i32 = -2;
 pub const ERR_PANIC: i32 = -3;
+/// Input could not be parsed; the host should fall back to the managed path.
+pub const ERR_PARSE: i32 = -4;
 
 /// Path-rebuild input (SoA). Field order is padding-free on all ABIs:
 /// two pointers, one f64, then two 4-byte scalars.
@@ -38,6 +40,25 @@ pub struct FloorPathOutput {
     pub positions_y: *mut f32,
     /// Tiles written (steps + 1), filled by the callee.
     pub count: *mut u32,
+}
+
+/// JSON DOM view; all pointers reference thread-local parser buffers and stay
+/// valid until the next `json_parse`/`json_release` on the same thread.
+#[repr(C)]
+pub struct JsonView {
+    pub kinds: *const u8,
+    pub a: *const u32,
+    pub b: *const u32,
+    pub values: *const f32,
+    pub children: *const u32,
+    pub strings: *const u16,
+    pub str_off: *const u32,
+    pub str_len: *const u32,
+    pub node_count: u32,
+    pub child_count: u32,
+    pub string_count: u32,
+    pub string_pool_len: u32,
+    pub root: u32,
 }
 
 #[inline]

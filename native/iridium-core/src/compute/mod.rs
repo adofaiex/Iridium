@@ -2,4 +2,6 @@
 //! Callers: `crate::exports` wraps these behind `#[no_mangle]` boundaries.
 
 pub mod easing;
+pub mod json;
 pub mod remake_path;
+pub mod spatial;
