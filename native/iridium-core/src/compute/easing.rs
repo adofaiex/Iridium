@@ -315,7 +315,7 @@ fn flash_weighted(
     amplitude: f32,
     mut period: f32,
     mut step_index: i32,
-    step_duration: f32,
+    _step_duration: f32,
     dir: f32,
     mut res: f32,
 ) -> f32 {
@@ -359,7 +359,7 @@ fn flash_common(time: f32, duration: f32, amplitude: f32) -> (i32, f32, f32, f32
 }
 
 fn flash(time: f32, duration: f32, amplitude: f32, period: f32) -> f32 {
-    let (step, step_duration, mut t, dir) = flash_common(time, duration, amplitude);
+    let (step, step_duration, t, dir) = flash_common(time, duration, amplitude);
     let res = t * dir / step_duration;
     flash_weighted(amplitude, period, step, step_duration, dir, res)
 }
