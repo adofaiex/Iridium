@@ -4,8 +4,9 @@
 //! enhancement: on version mismatch or load failure the host falls back to
 //! the pure C# path.
 
+pub mod compute;
+pub mod exports;
 pub mod ffi;
-pub mod remake_path;
 
 use std::panic::AssertUnwindSafe;
 

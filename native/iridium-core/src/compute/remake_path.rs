@@ -10,15 +10,7 @@
 
 use crate::ffi::{self, FloorPathInput, FloorPathOutput};
 
-#[no_mangle]
-pub unsafe extern "C" fn iridium_core_remake_path(
-    input: *const FloorPathInput,
-    output: *mut FloorPathOutput,
-) -> i32 {
-    crate::guard(|| remake_path_impl(input, output))
-}
-
-fn remake_path_impl(input: *const FloorPathInput, output: *mut FloorPathOutput) -> i32 {
+pub(crate) fn remake_path_impl(input: *const FloorPathInput, output: *mut FloorPathOutput) -> i32 {
     if input.is_null() || output.is_null() {
         return ffi::ERR_NULL_ARG;
     }
