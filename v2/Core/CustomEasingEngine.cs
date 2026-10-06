@@ -21,6 +21,12 @@ namespace Iridium.Core
         /// </summary>
         public static float Evaluate(Ease ease, float time, float duration)
         {
+            // Native fast path (iridium_core). Falls back to the managed
+            // switch when the library is absent — v2 predates the hard
+            // binding split; see git history for the v3 treatment.
+            if (Iridium.Native.IridiumNative.Available)
+                return Iridium.Native.IridiumNative.Evaluate((int)ease, time, duration, 1.70158f, 0f);
+
             if (duration <= 0f) return time >= 0f ? 1f : 0f;
 
             switch (ease)
