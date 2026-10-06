@@ -135,6 +135,28 @@ namespace Iridium.Patches.Optimizer
 				int sourceW = source.width;
 				int sourceH = source.height;
 
+				if (sourceW < 2 || sourceH < 2 || targetW <= 0 || targetH <= 0)
+				{
+					// Note: the managed loop below indexes `y2 = (yFloor+1)*sourceW`
+					// and `xFloor+1` unconditionally, so a source narrower or
+					// shorter than 2 would read past the pixel array. Refusing
+					// here is both safer and cheaper than cloning a 1xN texture
+					// through a fallback path.
+					Main.Logger?.Log($"[Optimizer] ResizeTextureCPU: bad size {sourceW}x{sourceH} -> {targetW}x{targetH}");
+					return null;
+				}
+
+				// Native bilinear downscale. Bit-exact with the managed loop
+				// below (same int-then-float delta, same truncating u8 cast,
+				// same byte quantization between the two lerp stages), so both
+				// paths produce identical pixels.
+				if (Iridium.Native.IridiumNative.HasResizeBilinear &&
+					Iridium.Native.IridiumNative.ResizeBilinearPinned(
+						sourcePixels, sourceW, sourceH, targetPixels, targetW, targetH))
+				{
+					return FinishResize(source, targetPixels, targetW, targetH);
+				}
+
 				float xRatio = (float)(sourceW - 1) / targetW;
 				float yRatio = (float)(sourceH - 1) / targetH;
 
@@ -165,6 +187,28 @@ namespace Iridium.Patches.Optimizer
 					}
 				}
 
+				Texture2D result = new(targetW, targetH, source.format, source.mipmapCount > 1);
+				result.SetPixels32(targetPixels);
+				result.Apply(false, false);
+				result.name = source.name;
+				return result;
+			}
+			catch (Exception e)
+			{
+				Main.Logger?.Log($"[Optimizer] CPU Resize Error: {e.Message}");
+				return null;
+			}
+		}
+
+		/// <summary>
+		/// Wraps an already-resampled <see cref="Color32"/> buffer back into a
+		/// Texture2D. Shared by the native and managed resize paths so texture
+		/// creation stays identical regardless of which one ran.
+		/// </summary>
+		private static Texture2D? FinishResize(Texture2D source, Color32[] targetPixels, int targetW, int targetH)
+		{
+			try
+			{
 				Texture2D result = new(targetW, targetH, source.format, source.mipmapCount > 1);
 				result.SetPixels32(targetPixels);
 				result.Apply(false, false);

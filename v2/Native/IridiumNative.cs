@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using UnityEngine;
 
 namespace Iridium.Native
 {
@@ -105,6 +106,11 @@ namespace Iridium.Native
         internal delegate int SpatialQueryFn(
             float minX, float minY, float maxX, float maxY, IntPtr outIds, uint cap);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int ResizeBilinearFn(
+            uint srcW, uint srcH, uint dstW, uint dstH,
+            IntPtr src, IntPtr dst);
+
         private static AbiVersionFn _abiVersion;
         private static LibVersionFn _libVersion;
         private static EvaluateFn _evaluate;
@@ -116,6 +122,7 @@ namespace Iridium.Native
         private static JsonReleaseFn _jsonRelease;
         private static SpatialRebuildFn _spatialRebuild;
         private static SpatialQueryFn _spatialQuery;
+        private static ResizeBilinearFn _resizeBilinear;
 
         /// <summary>
         /// Batch path rebuild on the native side. Null unless
@@ -214,6 +221,47 @@ namespace Iridium.Native
         internal static bool HasSpatial
         {
             get { EnsureProbed(); return _available && _spatialRebuild != null && _spatialQuery != null; }
+        }
+
+        /// <summary>True when the bilinear-resize export is present.</summary>
+        internal static bool HasResizeBilinear
+        {
+            get { EnsureProbed(); return _available && _resizeBilinear != null; }
+        }
+
+        /// <summary>
+        /// Bilinear downscale over raw RGBA8 pixels. Bit-exact with Unity's
+        /// <c>Color32.Lerp</c> pair, so results match the managed
+        /// <c>ResizeTextureCPU</c> pixel for pixel. <paramref name="src"/> /
+        /// <paramref name="dst"/> are <c>Color32[]</c> arrays read/written in
+        /// place -- Color32 is <c>LayoutKind.Explicit</c> r@0/g@1/b@2/a@3.
+        /// Returns false when the export is missing or the call failed.
+        /// </summary>
+        internal static bool ResizeBilinearPinned(
+            Color32[] src, int srcW, int srcH,
+            Color32[] dst, int dstW, int dstH)
+        {
+            var fn = _resizeBilinear;
+            if (fn == null || srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0) return false;
+            GCHandle hs = default, hd = default;
+            try
+            {
+                hs = GCHandle.Alloc(src, GCHandleType.Pinned);
+                hd = GCHandle.Alloc(dst, GCHandleType.Pinned);
+                int rc = fn(
+                    (uint)srcW, (uint)srcH, (uint)dstW, (uint)dstH,
+                    hs.AddrOfPinnedObject(), hd.AddrOfPinnedObject());
+                return rc == 0;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (hs.IsAllocated) hs.Free();
+                if (hd.IsAllocated) hd.Free();
+            }
         }
 
         /// <summary>
@@ -499,6 +547,7 @@ namespace Iridium.Native
                 _jsonRelease = GetExport<JsonReleaseFn>("iridium_core_json_release");
                 _spatialRebuild = GetExport<SpatialRebuildFn>("iridium_core_spatial_rebuild");
                 _spatialQuery = GetExport<SpatialQueryFn>("iridium_core_spatial_query");
+                _resizeBilinear = GetExport<ResizeBilinearFn>("iridium_core_resize_bilinear");
 
                 uint abi = _abiVersion();
                 if (abi != RequiredAbiVersion)
