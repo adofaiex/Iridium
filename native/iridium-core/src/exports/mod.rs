@@ -2,4 +2,6 @@
 //! Actual computation lives in `crate::compute`; data shapes in `crate::ffi`.
 
 pub mod easing;
+pub mod json;
 pub mod remake_path;
+pub mod spatial;

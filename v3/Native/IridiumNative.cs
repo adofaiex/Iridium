@@ -34,7 +34,12 @@ namespace Iridium.Native
         private delegate IntPtr LibVersionFn();
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate float EvaluateFn(int ease, float time, float duration, float amplitude, float period);
+        internal delegate float EvaluateFn(int ease, float time, float duration, float amplitude, float period);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int EvaluateBatchFn(
+            IntPtr easeIds, IntPtr times, IntPtr durations,
+            IntPtr amplitudes, IntPtr periods, uint len, IntPtr outProgress);
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct FloorPathInput
@@ -59,16 +64,69 @@ namespace Iridium.Native
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int RemakePathFn(ref FloorPathInput input, ref FloorPathOutput output);
 
+        /// <summary>
+        /// Flat JSON DOM mirrored from Rust `ffi::JsonView`: 8 pointers,
+        /// then 5 scalars. Field order/type must match exactly.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct JsonView
+        {
+            public IntPtr Kinds;
+            public IntPtr A;
+            public IntPtr B;
+            public IntPtr Values;
+            public IntPtr Children;
+            public IntPtr Strings;
+            public IntPtr StrOff;
+            public IntPtr StrLen;
+            public uint NodeCount;
+            public uint ChildCount;
+            public uint StringCount;
+            public uint StringPoolLen;
+            public uint Root;
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int JsonParseFn(IntPtr text, uint len, IntPtr section, uint sectionLen);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int JsonViewFn(out JsonView view);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int JsonReleaseFn();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int SpatialRebuildFn(uint count, IntPtr rects);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int SpatialQueryFn(
+            float minX, float minY, float maxX, float maxY, IntPtr outIds, uint cap);
+
         private static AbiVersionFn _abiVersion;
         private static LibVersionFn _libVersion;
         private static EvaluateFn _evaluate;
+        private static EvaluateBatchFn _evaluateBatch;
         private static RemakePathFn _remakePath;
+        private static JsonParseFn _jsonParse;
+        private static JsonViewFn _jsonView;
+        private static JsonReleaseFn _jsonRelease;
+        private static SpatialRebuildFn _spatialRebuild;
+        private static SpatialQueryFn _spatialQuery;
 
         /// <summary>
         /// Batch path rebuild on the native side. Null unless
         /// <see cref="Available"/> — callers must gate on that first.
         /// </summary>
         internal static RemakePathFn RemakePath => _remakePath;
+
+        /// <summary>True when the batch easing export is present.</summary>
+        internal static bool HasEvaluateBatch => _evaluateBatch != null;
+
+        /// <summary>True when the JSON parse/view/release exports are present.</summary>
+        internal static bool HasJson => _jsonParse != null && _jsonView != null && _jsonRelease != null;
+
+        /// <summary>True when the spatial index exports are present.</summary>
+        internal static bool HasSpatial => _spatialRebuild != null && _spatialQuery != null;
 
         /// <summary>
         /// Single easing evaluation on the native side. Returns 0 when the
@@ -80,6 +138,155 @@ namespace Iridium.Native
             var fn = _evaluate;
             if (fn == null) return time >= duration ? 1f : 0f;
             return fn(ease, time, duration, amplitude, period);
+        }
+
+        /// <summary>
+        /// Batch easing evaluation (SoA). Returns false when the export is
+        /// unavailable or the call failed; the caller falls back to
+        /// per-tween <see cref="Evaluate"/>.
+        /// </summary>
+        internal static bool EvaluateBatch(
+            int[] easeIds, float[] times, float[] durations,
+            float[] amplitudes, float[] periods, float[] outProgress, int count)
+        {
+            var fn = _evaluateBatch;
+            if (fn == null || count <= 0) return false;
+            if (count > easeIds.Length || count > times.Length || count > durations.Length ||
+                count > amplitudes.Length || count > periods.Length || count > outProgress.Length)
+                return false;
+
+            GCHandle hEase = default, hTime = default, hDur = default,
+                hAmp = default, hPer = default, hOut = default;
+            try
+            {
+                hEase = GCHandle.Alloc(easeIds, GCHandleType.Pinned);
+                hTime = GCHandle.Alloc(times, GCHandleType.Pinned);
+                hDur = GCHandle.Alloc(durations, GCHandleType.Pinned);
+                hAmp = GCHandle.Alloc(amplitudes, GCHandleType.Pinned);
+                hPer = GCHandle.Alloc(periods, GCHandleType.Pinned);
+                hOut = GCHandle.Alloc(outProgress, GCHandleType.Pinned);
+                int rc = fn(
+                    hEase.AddrOfPinnedObject(), hTime.AddrOfPinnedObject(), hDur.AddrOfPinnedObject(),
+                    hAmp.AddrOfPinnedObject(), hPer.AddrOfPinnedObject(), (uint)count,
+                    hOut.AddrOfPinnedObject());
+                return rc == 0;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (hEase.IsAllocated) hEase.Free();
+                if (hTime.IsAllocated) hTime.Free();
+                if (hDur.IsAllocated) hDur.Free();
+                if (hAmp.IsAllocated) hAmp.Free();
+                if (hPer.IsAllocated) hPer.Free();
+                if (hOut.IsAllocated) hOut.Free();
+            }
+        }
+
+        /// <summary>
+        /// Parses JSON with the native parser into the thread-local DOM.
+        /// `section` non-null mirrors GDMiniJSON DeserializePartially.
+        /// Returns false when the library/export is absent or input malformed
+        /// (caller must then use the managed parser).
+        /// </summary>
+        internal static bool JsonParse(string text, string? section)
+        {
+            var fn = _jsonParse;
+            if (fn == null) return false;
+
+            GCHandle hText = default, hSection = default;
+            try
+            {
+                hText = GCHandle.Alloc(text, GCHandleType.Pinned);
+                IntPtr sectionPtr = IntPtr.Zero;
+                uint sectionLen = 0;
+                if (section != null)
+                {
+                    hSection = GCHandle.Alloc(section, GCHandleType.Pinned);
+                    sectionPtr = hSection.AddrOfPinnedObject();
+                    sectionLen = (uint)section.Length;
+                }
+                int rc = fn(hText.AddrOfPinnedObject(), (uint)text.Length, sectionPtr, sectionLen);
+                return rc == 0;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (hText.IsAllocated) hText.Free();
+                if (hSection.IsAllocated) hSection.Free();
+            }
+        }
+
+        /// <summary>Fetches the DOM view after a successful <see cref="JsonParse"/>.</summary>
+        internal static bool JsonGetView(out JsonView view)
+        {
+            view = default;
+            var fn = _jsonView;
+            if (fn == null) return false;
+            try
+            {
+                return fn(out view) == 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Releases the thread-local JSON DOM buffers.</summary>
+        internal static void JsonRelease()
+        {
+            try { _jsonRelease?.Invoke(); }
+            catch { /* release is best-effort */ }
+        }
+
+        /// <summary>Rebuilds the spatial index from packed AABBs (4 f32 each).</summary>
+        internal static void SpatialRebuild(float[] packed, int count)
+        {
+            var fn = _spatialRebuild;
+            if (fn == null) return;
+            GCHandle h = default;
+            try
+            {
+                h = GCHandle.Alloc(packed, GCHandleType.Pinned);
+                fn((uint)count, h.AddrOfPinnedObject());
+            }
+            catch { /* feature gates on HasSpatial; failure leaves a stale/empty index */ }
+            finally
+            {
+                if (h.IsAllocated) h.Free();
+            }
+        }
+
+        /// <summary>
+        /// Queries the spatial index. Returns candidate count (may exceed
+        /// <paramref name="ids"/>.Length; only that many are written). -1 on error.
+        /// </summary>
+        internal static int SpatialQuery(
+            float minX, float minY, float maxX, float maxY, int[] ids, int count)
+        {
+            var fn = _spatialQuery;
+            if (fn == null) return -1;
+            GCHandle h = default;
+            try
+            {
+                h = GCHandle.Alloc(ids, GCHandleType.Pinned);
+                return fn(minX, minY, maxX, maxY, h.AddrOfPinnedObject(), (uint)count);
+            }
+            catch
+            {
+                return -1;
+            }
+            finally
+            {
+                if (h.IsAllocated) h.Free();
+            }
         }
 
         /// <summary>True when the library is loaded and ABI-compatible.</summary>
@@ -171,6 +378,15 @@ namespace Iridium.Native
                     Main.Logger?.Log("[IridiumNative] exports missing — native-backed features DISABLED");
                     return;
                 }
+
+                // Optional exports: loaded best-effort so a core-compatible
+                // older library still enables the base features.
+                _evaluateBatch = GetExport<EvaluateBatchFn>("iridium_core_evaluate_batch");
+                _jsonParse = GetExport<JsonParseFn>("iridium_core_json_parse");
+                _jsonView = GetExport<JsonViewFn>("iridium_core_json_view");
+                _jsonRelease = GetExport<JsonReleaseFn>("iridium_core_json_release");
+                _spatialRebuild = GetExport<SpatialRebuildFn>("iridium_core_spatial_rebuild");
+                _spatialQuery = GetExport<SpatialQueryFn>("iridium_core_spatial_query");
 
                 uint abi = _abiVersion();
                 if (abi != RequiredAbiVersion)
