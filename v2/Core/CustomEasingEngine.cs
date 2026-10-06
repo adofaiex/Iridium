@@ -161,6 +161,34 @@ namespace Iridium.Core
                 ApplyInterpolated(t);
             }
 
+            /// <summary>
+            /// 批处理第一阶段：推进时间但不应用。返回 false 表示该 tween
+            /// 已死亡/已完成（应被压缩掉）；completing 表示本次越界需收尾。
+            /// </summary>
+            public bool Advance(float dt, out bool completing)
+            {
+                completing = false;
+                if (IsKilled || State == TweenState.Completed) return false;
+                ElapsedTime += dt;
+                if (ElapsedTime >= Duration)
+                {
+                    ElapsedTime = Duration;
+                    completing = true;
+                }
+                return true;
+            }
+
+            /// <summary>批处理第二阶段：用已算好的进度应用插值。</summary>
+            public void ApplyInterpolatedProgress(float t) => ApplyInterpolated(t);
+
+            /// <summary>批处理收尾：应用终态并触发完成回调。</summary>
+            public void FinalizeComplete()
+            {
+                ApplyFinal();
+                State = TweenState.Completed;
+                OnComplete?.Invoke();
+            }
+
             public void Kill(bool complete = true)
             {
                 if (IsKilled) return;
@@ -229,10 +257,42 @@ namespace Iridium.Core
             _initialized = true;
         }
 
+        /// <summary>批处理缓冲（SoA）；按需扩容。</summary>
+        private static int[] _batchEase = new int[64];
+        private static float[] _batchTime = new float[64];
+        private static float[] _batchDur = new float[64];
+        private static float[] _batchAmp = new float[64];
+        private static float[] _batchPer = new float[64];
+        private static float[] _batchOut = new float[64];
+        private static int[] _batchIndex = new int[64];
+
+        /// <summary>低于该数量时逐条求值（FFI 开销大于收益）。</summary>
+        private const int BatchThreshold = 8;
+
+        static CustomEasingEngine()
+        {
+            for (int i = 0; i < _batchAmp.Length; i++) _batchAmp[i] = 1.70158f;
+        }
+
+        private static void EnsureBatchCapacity(int n)
+        {
+            if (_batchEase.Length >= n) return;
+            int cap = _batchEase.Length;
+            while (cap < n) cap *= 2;
+            _batchEase = new int[cap];
+            _batchTime = new float[cap];
+            _batchDur = new float[cap];
+            _batchAmp = new float[cap];
+            _batchPer = new float[cap];
+            _batchOut = new float[cap];
+            _batchIndex = new int[cap];
+            for (int i = 0; i < cap; i++) _batchAmp[i] = 1.70158f;
+        }
+
         /// <summary>
         /// 每帧调用 — 驱动所有活跃 Tweens。
         /// 使用双指针原地压缩算法：活跃 tween 前移，死亡 tween 末尾一次性清除。
-        /// 避免每元素 RemoveAt（O(n) 移位）和额外的 _pendingRemove 列表开销。
+        /// 数量足够时缓动求值走 native 批处理（一次 FFI），否则逐条。
         /// 必须在 Main.Update 中调用。
         /// </summary>
         public static void Update(float deltaTime)
@@ -249,6 +309,12 @@ namespace Iridium.Core
             int count = _activeTweens.Count;
             if (count == 0) return;
 
+            if (Iridium.Native.IridiumNative.HasEvaluateBatch && count >= BatchThreshold)
+            {
+                UpdateBatched(deltaTime, count);
+                return;
+            }
+
             // 双指针原地压缩：write 跟踪下一个存活位置，read 遍历所有元素
             int write = 0;
             for (int read = 0; read < count; read++)
@@ -264,6 +330,71 @@ namespace Iridium.Core
             }
 
             // 一次性截断尾部所有死亡 tween（内部只是 Size--，无数组移位）
+            if (write < count)
+                _activeTweens.RemoveRange(write, count - write);
+        }
+
+        private static void UpdateBatched(float deltaTime, int count)
+        {
+            EnsureBatchCapacity(count);
+
+            // 第一阶段：推进时间，收集非完成项的求值输入（不应用）。
+            int n = 0;
+            for (int read = 0; read < count; read++)
+            {
+                var tween = _activeTweens[read];
+                if (!tween.Advance(deltaTime, out bool completing))
+                    continue; // Killed / Completed：直接压缩掉
+
+                _activeTweens[read] = tween; // Advance 修改了 ElapsedTime
+
+                if (completing)
+                {
+                    _batchIndex[read] = -1; // 标记：稍后 FinalizeComplete
+                    continue;
+                }
+                _batchEase[n] = (int)tween.EaseType;
+                _batchTime[n] = tween.ElapsedTime;
+                _batchDur[n] = tween.Duration;
+                _batchIndex[read] = n;
+                n++;
+            }
+
+            bool evaluated = n > 0 && Iridium.Native.IridiumNative.EvaluateBatch(
+                _batchEase, _batchTime, _batchDur, _batchAmp, _batchPer, _batchOut, n);
+
+            // 第二阶段：按原顺序应用插值 / 收尾，同时压缩。
+            int write = 0;
+            for (int read = 0; read < count; read++)
+            {
+                var tween = _activeTweens[read];
+                if (!tween.IsActive) continue;
+
+                int slot = read < _batchIndex.Length ? _batchIndex[read] : -2;
+                if (slot == -1)
+                {
+                    tween.FinalizeComplete();
+                }
+                else if (slot >= 0 && slot < n)
+                {
+                    float t = evaluated
+                        ? _batchOut[slot]
+                        : Evaluate(tween.EaseType, tween.ElapsedTime, tween.Duration);
+                    tween.ApplyInterpolatedProgress(t);
+                }
+                else
+                {
+                    // 无槽位（不应发生）：退回逐条。
+                    tween.Update(0f);
+                }
+
+                if (tween.IsActive)
+                {
+                    _activeTweens[write] = tween;
+                    write++;
+                }
+            }
+
             if (write < count)
                 _activeTweens.RemoveRange(write, count - write);
         }
