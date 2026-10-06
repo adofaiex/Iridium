@@ -3,6 +3,7 @@ using HarmonyLib;
 using Iridium.Config;
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
@@ -109,6 +110,23 @@ namespace Iridium.Patches.Optimizer
 		[HarmonyPatch(typeof(scrDecorationManager), "Update")]
 		public static class ManagerUpdateHitboxFilterPatch
 		{
+			/// <summary>
+			/// 低于该检查者数量时直接走逐条 Overlap（索引重建对少量检查者不划算）。
+			/// </summary>
+			private const int MinIndexedCheckers = 2;
+
+			/// <summary>
+			/// 目标数超过 检查者数×该比例 时放弃索引（重建需读取每个目标的
+			/// collider.bounds，目标远多于检查者时不划算）。
+			/// </summary>
+			private const int TargetToCheckerRatio = 8;
+
+			private static readonly List<scrDecoration> _spatialTargets = new List<scrDecoration>(256);
+			private static float[] _spatialRects = new float[256 * 4];
+			private static int[] _spatialHits = new int[256];
+			private static IntPtr _hitBuffer;
+			private static int _hitCapacity;
+
 			[HarmonyPrefix]
 			public static bool Prefix(scrDecorationManager __instance)
 			{
@@ -117,13 +135,16 @@ namespace Iridium.Patches.Optimizer
 				{
 					if (!ADOBase.isEditingLevel)
 					{
-						List<scrDecoration> all = __instance.allDecorations;
-						int count = all.Count;
-						for (int i = 0; i < count; i++)
+						if (!TrySpatialFilteredChecks(__instance))
 						{
-							scrDecoration dec = all[i];
-							if (dec != null && dec.useHitbox && dec.hitboxDetectTarget == HitboxDetectTarget.Decoration)
-								dec.CheckHitboxHit();
+							List<scrDecoration> all = __instance.allDecorations;
+							int count = all.Count;
+							for (int i = 0; i < count; i++)
+							{
+								scrDecoration dec = all[i];
+								if (dec != null && dec.useHitbox && dec.hitboxDetectTarget == HitboxDetectTarget.Decoration)
+									dec.CheckHitboxHit();
+							}
 						}
 					}
 
@@ -136,6 +157,124 @@ namespace Iridium.Patches.Optimizer
 					Main.Logger?.Error($"[HitboxOptimization] Manager.Update failed, falling back to vanilla: {ex}");
 					return true;
 				}
+			}
+
+			/// <summary>
+			/// 空间索引粗筛：语义上等价于对每个检查者执行原版 Overlap——
+			/// AABB 相交是物理相交的必要条件，标签相交是触发的必要条件，因此
+			/// “无候选”时跳过 Overlap 不会漏判；有候选时仍走原版精确物理判定。
+			/// 返回 false 表示本次未处理（调用方走逐条回退路径）。
+			/// </summary>
+			private static bool TrySpatialFilteredChecks(scrDecorationManager manager)
+			{
+				if (!Iridium.Native.IridiumNative.HasSpatial) return false;
+
+				List<scrDecoration> all = manager.allDecorations;
+				if (all == null || all.Count == 0) return true;
+
+				// 第一遍（廉价）：统计检查者与目标数量，决定是否值得建索引。
+				int checkerCount = 0;
+				int targetCount = 0;
+				int listCount = all.Count;
+				for (int i = 0; i < listCount; i++)
+				{
+					scrDecoration dec = all[i];
+					if (dec == null) continue;
+					if (IsChecker(dec)) checkerCount++;
+					if (IsIndexTarget(dec)) targetCount++;
+				}
+
+				if (checkerCount == 0) return true; // 没有可触发者
+				if (targetCount == 0) return true;  // 没有带标签的可命中目标
+				if (checkerCount < MinIndexedCheckers) return false;
+				if ((long)targetCount > (long)checkerCount * TargetToCheckerRatio) return false;
+
+				// 第二遍：收集目标 AABB（世界包围盒），重建索引。
+				_spatialTargets.Clear();
+				if (_spatialRects.Length < targetCount * 4)
+					_spatialRects = new float[targetCount * 4];
+				int n = 0;
+				for (int i = 0; i < listCount; i++)
+				{
+					scrDecoration dec = all[i];
+					if (dec == null || !IsIndexTarget(dec)) continue;
+					Bounds b = dec.activeCollider.bounds;
+					int o = n * 4;
+					_spatialRects[o] = b.min.x;
+					_spatialRects[o + 1] = b.min.y;
+					_spatialRects[o + 2] = b.max.x;
+					_spatialRects[o + 3] = b.max.y;
+					_spatialTargets.Add(dec);
+					n++;
+				}
+
+				if (!Iridium.Native.IridiumNative.SpatialRebuild(_spatialRects, n))
+					return false;
+
+				EnsureHitBuffer(n);
+				if (_spatialHits.Length < n) _spatialHits = new int[n];
+
+				// 第三遍：逐个检查者查询候选，标签相交才调用精确物理判定。
+				for (int i = 0; i < listCount; i++)
+				{
+					scrDecoration dec = all[i];
+					if (dec == null || !IsChecker(dec)) continue;
+
+					Bounds b = dec.activeCollider.bounds;
+					int hits = Iridium.Native.IridiumNative.SpatialQueryRaw(
+						b.min.x, b.min.y, b.max.x, b.max.y, _hitBuffer, n);
+					if (hits <= 0) continue;
+					if (hits > n) hits = n;
+
+					Marshal.Copy(_hitBuffer, _spatialHits, 0, hits);
+
+					HashSet<string> tags = dec.hitboxDecoTags;
+					bool possible = false;
+					for (int k = 0; k < hits; k++)
+					{
+						scrDecoration other = _spatialTargets[_spatialHits[k]];
+						if (other == null || ReferenceEquals(other, dec)) continue;
+						HashSet<string> otherTags = other.tags;
+						if (otherTags == null) continue;
+						foreach (string t in tags)
+						{
+							if (t != null && otherTags.Contains(t))
+							{
+								possible = true;
+								break;
+							}
+						}
+						if (possible) break;
+					}
+
+					if (possible)
+						dec.CheckHitboxHit();
+				}
+				return true;
+			}
+
+			private static bool IsChecker(scrDecoration dec)
+			{
+				if (!dec.useHitbox || dec.hitboxDetectTarget != HitboxDetectTarget.Decoration) return false;
+				HashSet<string> tags = dec.hitboxDecoTags;
+				if (tags == null || tags.Count == 0) return false;
+				if (dec.hitOnce && dec.hitboxTriggerType == HitboxTriggerType.Once) return false;
+				return dec.activeCollider != null;
+			}
+
+			private static bool IsIndexTarget(scrDecoration dec)
+			{
+				if (dec.activeCollider == null) return false;
+				HashSet<string> tags = dec.tags;
+				return tags != null && tags.Count > 0;
+			}
+
+			private static void EnsureHitBuffer(int count)
+			{
+				if (_hitCapacity >= count && _hitBuffer != IntPtr.Zero) return;
+				if (_hitBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_hitBuffer);
+				_hitBuffer = Marshal.AllocHGlobal(count * sizeof(int));
+				_hitCapacity = count;
 			}
 		}
 
