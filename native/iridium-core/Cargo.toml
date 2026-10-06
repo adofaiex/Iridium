@@ -1,0 +1,23 @@
+[package]
+name = "iridium-core"
+version = "0.1.0"
+edition = "2021"
+license = "LGPL-3.0"
+description = "Iridium native hot-path library (C ABI, loaded by the Mono side via dlopen)"
+
+[lib]
+# Artifacts: iridium_core.dll / libiridium_core.so / libiridium_core.dylib
+name = "iridium_core"
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+# Keep unwinding: lib.rs's catch_unwind guard converts panics into error
+# codes so a native bug degrades to the C# path instead of killing the
+# game (abort would defeat that). The unwinder costs ~60KB, worth it.
+strip = "symbols"
+
+[profile.release.package."*"]
+opt-level = 3
