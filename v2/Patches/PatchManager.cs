@@ -199,6 +199,10 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.JsonParseProfiler), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.FloatFloorsProfiler), largeLoadCond));
 
+            // --- JSON 原生解析（Rust 批量解析，大谱面加载优化） ---
+            _definitions.Add(new PatchDef(typeof(JsonNativeParsePatch.DeserializePatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(JsonNativeParsePatch.DeserializePartiallyPatch), largeLoadCond));
+
             // --- 2.1.0 新增热路径优化（自 v3 移植） ---
             var editorInteractionsCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeEditorInteractions;
             _definitions.Add(new PatchDef(typeof(EditorSaveStateCopyPatch.SaveStateSuppressPatch), editorInteractionsCond));
