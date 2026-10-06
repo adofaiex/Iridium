@@ -6,15 +6,10 @@
 
 ## CHANGES
 
-1. Restart after fail: floors that are already at their start state are skipped, and hold objects are reused instead of destroyed and rebuilt (v2 / v3).
-2. Lower per-frame overhead: holds skip material writes while their geometry is unchanged, each floor runs OnBeat once per beat instead of twice, and the audio spectrum is computed once per frame and shared with the conductor, volume trackers and background bars.
-3. Faster editor interaction: selecting floors or decorations and opening panels no longer deep-copies the whole level, and decoration / event lookups are indexed instead of scanning every event (noticeable on charts with hundreds of thousands of events).
-4. Hit texts are created on demand instead of pre-building about 1400 of them when a level loads (v3).
-5. Search across all settings: type in the search box to filter every option, then click a result to jump straight to it.
-6. The optimizer is split into four categories (basics / gameplay / effects / advanced), with clearer sections and parent-child option grouping.
-7. Option descriptions are rewritten for players, and the info icon is now placed consistently next to the option text.
-8. v2 (ADOFAI 2.9.8) receives the restart and editor optimizations from items 1 and 3.
-9. Fixed a freeze when switching settings categories, and fixed broken UI files being rendered silently.
+1. The hot paths now run natively: easing evaluation, floor-path rebuilds, level JSON parsing, hitbox checks, parallax scrolling and texture downscaling were moved from C# into a compiled Rust library. Level loading and per-frame CPU usage both drop, with every result verified byte-for-byte identical to the old managed code.
+2. One package for every platform: release zips now bundle the native library for Windows, Linux and macOS (both Intel and Apple Silicon) side by side — no separate download per platform. The mod detects and loads the right one at startup.
+3. Graceful fallback kept: if the native library is missing or fails to load for any reason, the mod silently continues on its built-in managed code — you lose the speedup, never functionality.
+4. Releases are gated by tests: CI builds all three native libraries and runs the native test suite (including the bit-exactness checks against the managed reference) before packaging; a failing kernel blocks the release instead of shipping.
 
 > [!CAUTION]
 > Disclaimer: Optimization mods are not a silver bullet — do not chase FPS blindly. If issues occur, disable the specific feature and report the bug instead of labeling the entire mod broken.
