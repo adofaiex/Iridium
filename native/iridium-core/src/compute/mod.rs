@@ -3,5 +3,6 @@
 
 pub mod easing;
 pub mod json;
+pub mod parallax;
 pub mod remake_path;
 pub mod spatial;

@@ -105,6 +105,12 @@ namespace Iridium.Native
         internal delegate int SpatialQueryFn(
             float minX, float minY, float maxX, float maxY, IntPtr outIds, uint cap);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int ParallaxComputeFn(
+            uint count, float camX, float camY,
+            IntPtr baseXy, IntPtr multXy, IntPtr offsetXy, IntPtr corners,
+            IntPtr outVerts, IntPtr outDirty);
+
         private static AbiVersionFn _abiVersion;
         private static LibVersionFn _libVersion;
         private static EvaluateFn _evaluate;
@@ -116,6 +122,7 @@ namespace Iridium.Native
         private static JsonReleaseFn _jsonRelease;
         private static SpatialRebuildFn _spatialRebuild;
         private static SpatialQueryFn _spatialQuery;
+        private static ParallaxComputeFn _parallaxCompute;
 
         /// <summary>
         /// Batch path rebuild on the native side. Null unless
@@ -214,6 +221,59 @@ namespace Iridium.Native
         internal static bool HasSpatial
         {
             get { EnsureProbed(); return _available && _spatialRebuild != null && _spatialQuery != null; }
+        }
+
+        /// <summary>True when the static-batcher vertex kernel export is present.</summary>
+        internal static bool HasParallaxCompute
+        {
+            get { EnsureProbed(); return _available && _parallaxCompute != null; }
+        }
+
+        /// <summary>
+        /// Per-frame world-position pass for the static decoration batcher.
+        /// SoA in, SoA out; every array must already hold at least
+        /// <paramref name="count"/> items of the documented width.
+        /// <c>verts</c> is in/out — the kernel compares against the previous
+        /// frame's values and writes <c>dirty[i] = 1</c> where corners moved,
+        /// so the host uploads only the slots that actually changed.
+        /// Returns false when the export is missing or the call failed.
+        /// </summary>
+        internal static bool ParallaxCompute(
+            int count, float camX, float camY,
+            float[] baseXy, float[] multXy, float[] offsetXy, float[] corners,
+            float[] verts, uint[] dirty)
+        {
+            var fn = _parallaxCompute;
+            if (fn == null || count <= 0) return false;
+            GCHandle hB = default, hM = default, hO = default, hC = default, hV = default, hD = default;
+            try
+            {
+                hB = GCHandle.Alloc(baseXy, GCHandleType.Pinned);
+                hM = GCHandle.Alloc(multXy, GCHandleType.Pinned);
+                hO = GCHandle.Alloc(offsetXy, GCHandleType.Pinned);
+                hC = GCHandle.Alloc(corners, GCHandleType.Pinned);
+                hV = GCHandle.Alloc(verts, GCHandleType.Pinned);
+                hD = GCHandle.Alloc(dirty, GCHandleType.Pinned);
+
+                int rc = fn((uint)count, camX, camY,
+                    hB.AddrOfPinnedObject(), hM.AddrOfPinnedObject(),
+                    hO.AddrOfPinnedObject(), hC.AddrOfPinnedObject(),
+                    hV.AddrOfPinnedObject(), hD.AddrOfPinnedObject());
+                return rc == 0;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (hB.IsAllocated) hB.Free();
+                if (hM.IsAllocated) hM.Free();
+                if (hO.IsAllocated) hO.Free();
+                if (hC.IsAllocated) hC.Free();
+                if (hV.IsAllocated) hV.Free();
+                if (hD.IsAllocated) hD.Free();
+            }
         }
 
         /// <summary>
@@ -499,6 +559,7 @@ namespace Iridium.Native
                 _jsonRelease = GetExport<JsonReleaseFn>("iridium_core_json_release");
                 _spatialRebuild = GetExport<SpatialRebuildFn>("iridium_core_spatial_rebuild");
                 _spatialQuery = GetExport<SpatialQueryFn>("iridium_core_spatial_query");
+                _parallaxCompute = GetExport<ParallaxComputeFn>("iridium_core_parallax_compute");
 
                 uint abi = _abiVersion();
                 if (abi != RequiredAbiVersion)

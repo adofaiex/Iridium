@@ -48,6 +48,16 @@ namespace Iridium.Patches.Optimizer
             public int VertexIndex = -1;
             public int IdleFrames;                          // 在 slot.Items 中的位置
             public Vector3[] CornerOffsets = new Vector3[4];  // 世界顶点 - 视差根位置（含 z）
+            /// <summary>
+            /// 四角捕获版本号：每次 <see cref="RefreshCapture"/> 自增。SoA 收集时用它
+            /// 判断角偏移是否需要重拷（多数帧完全不用碰 Corners）。
+            /// </summary>
+            public int CaptureVersion;
+            /// <summary>
+            /// 已摊平进 SoA 角缓冲的版本号。由收集循环维护 —— 与索引无关，
+            /// 装饰物增删导致顺序变化也不会把旧角偏移错配给别的装饰物。
+            /// </summary>
+            public int StagedVersion = -1;
             public Color32 VColor;
         }
 
@@ -147,6 +157,8 @@ namespace Iridium.Patches.Optimizer
         {
             if (value == _enabled) return;
             _enabled = value;
+            // 重置原生降级标记：开关切换可能发生在原生库刚被替换之后。
+            _nativeKnownBad = false;
             if (value)
             {
                 if (!_hooked)
@@ -219,6 +231,8 @@ namespace Iridium.Patches.Optimizer
             var p0 = vis.parallax.transform.position;
             for (int i = 0; i < 4; i++)
                 item.CornerOffsets[i] = l2w.MultiplyPoint3x4(verts[i]) - p0;
+            // 自增即可（回绕比较无关紧要：只需要「变了」这一信号）
+            item.CaptureVersion++;
         }
 
         // ---------------- 增量进出批次 ----------------
@@ -461,37 +475,10 @@ namespace Iridium.Patches.Optimizer
             if (_items.Count == 0) return;
             var cam = controller.camy.transform.position;
 
-            foreach (var item in _items.Values)
-            {
-                if (!item.Managed || item.Slot == null) continue;
-
-                var dec = item.Deco;
-                if (!dec.GetVisible())
-                {
-                    Unmanage(item, restoreVanilla: true);
-                    continue;
-                }
-
-                var b0 = dec.pivotPosVec;                                    // 实时读取
-                var mult = dec.parallax!.multiplier;
-                var offK = dec.parallaxOffset * dec.scaleMultiplier;
-
-                var slot = item.Slot;
-                int vi = item.VertexIndex;
-                for (int c = 0; c < 4; c++)
-                {
-                    var corner = item.CornerOffsets[c];
-                    var nv = new Vector3(
-                        b0.x + (cam.x - b0.x) * mult.x + offK.x + corner.x,
-                        b0.y + (cam.y - b0.y) * mult.y + offK.y + corner.y,
-                        corner.z);
-                    if (slot.Verts[vi + c] != nv)
-                    {
-                        slot.Verts[vi + c] = nv;
-                        slot.PositionDirty = true;
-                    }
-                }
-            }
+            // 逐个装饰物读取 Unity 侧输入（字段直读，无虚调用），然后交给原生
+            // 内核算 4 个角。原生不可用时走等价的托管回退。
+            if (!ComputePositionsNative(cam))
+                ComputePositionsManaged(cam);
 
             // 脏页上传：结构变化 → 全量；仅位置变化 → 只传顶点
             foreach (var slot in _slots.Values)
@@ -513,6 +500,205 @@ namespace Iridium.Patches.Optimizer
                     slot.Mesh.SetVertices(slot.Verts);
                     slot.PositionDirty = false;
                 }
+            }
+        }
+
+        // ---------------- 每帧位置计算：SoA 收集缓冲 ----------------
+
+        /// <summary>
+        /// 摊平的 SoA 缓冲。全部是进程内常驻数组，容量只增不减，每帧不清零、
+        /// 不重新分配；托管回退与原生路径共用同一份布局。
+        /// <para>
+        /// 关键：<see cref="Corners"/> 跨帧保留，四角偏移只在 <see cref="RefreshCapture"/>
+        /// 变化时更新（由 <see cref="GatherPositions"/> 里的版本号判定），不每帧重拷。
+        /// </para>
+        /// </summary>
+        private sealed class ParallelScratch
+        {
+            /// <summary>当帧有效的装饰物（已剔除不可见/未受管）。</summary>
+            public readonly List<Item> Items = new();
+
+            /// <summary>结果顶点，12 浮点/项（4 角 × xyz），摊平存放。</summary>
+            public float[] Verts = Array.Empty<float>();
+            /// <summary>逐项脏标记：内核置 1 表示该项四角发生变化。</summary>
+            public uint[] Dirty = Array.Empty<uint>();
+            public float[] BaseXy = Array.Empty<float>();
+            public float[] MultXy = Array.Empty<float>();
+            public float[] OffsetXy = Array.Empty<float>();
+            /// <summary>四角偏移，12 浮点/项，内核只读；跨帧持久。</summary>
+            public float[] Corners = Array.Empty<float>();
+            /// <summary>每项在 Verts 中的起始下标（= i * 12）。</summary>
+            public int[] VertexStart = Array.Empty<int>();
+
+            public void Ensure(int n)
+            {
+                if (n <= 0) return;
+                if (Verts.Length < n * 12) Verts = new float[n * 12];
+                if (Corners.Length < n * 12) Corners = new float[n * 12];
+                if (Dirty.Length < n) Dirty = new uint[n];
+                if (BaseXy.Length < n * 2) BaseXy = new float[n * 2];
+                if (MultXy.Length < n * 2) MultXy = new float[n * 2];
+                if (OffsetXy.Length < n * 2) OffsetXy = new float[n * 2];
+                if (VertexStart.Length < n) VertexStart = new int[n];
+                if (Items.Capacity < n) Items.Capacity = n;
+            }
+        }
+
+        private static readonly ParallelScratch _scratch = new();
+        /// <summary>原生导出缺失或调用失败后不再重试（每次重试都是白付费的 FFI 开销）。</summary>
+        private static bool _nativeKnownBad;
+
+        /// <summary>
+        /// 第一遍（托管）：摘除失效装饰物，把仍受管装饰物的输入摊平到 SoA 数组，
+        /// 并把结果顶点区对齐到各 Slot 的当前顶点（这样内核能只回填变化项）。
+        /// </summary>
+        private static int GatherPositions(Vector3 cam)
+        {
+            var pos = _scratch;
+            pos.Items.Clear();
+            pos.Ensure(_items.Count);
+
+            int n = 0;
+            foreach (var item in _items.Values)
+            {
+                if (!item.Managed || item.Slot == null) continue;
+
+                var dec = item.Deco;
+                if (!dec.GetVisible())
+                {
+                    Unmanage(item, restoreVanilla: true);
+                    continue;
+                }
+
+                var slot = item.Slot;
+                int vi = item.VertexIndex;
+                // 结构脏时顶点区可能还没填（首次入批 / 换位后），跳过本帧由托管兜底。
+                if (vi < 0 || vi + 4 > slot.Verts.Count)
+                    continue;
+
+                var b0 = dec.pivotPosVec;                                    // 实时读取
+                var mult = dec.parallax!.multiplier;
+                var offK = dec.parallaxOffset * dec.scaleMultiplier;
+
+                int vo = n * 12;
+                pos.BaseXy[n * 2] = b0.x;
+                pos.BaseXy[n * 2 + 1] = b0.y;
+                pos.MultXy[n * 2] = mult.x;
+                pos.MultXy[n * 2 + 1] = mult.y;
+                pos.OffsetXy[n * 2] = offK.x;
+                pos.OffsetXy[n * 2 + 1] = offK.y;
+
+                // 四角偏移只在捕获版本变化时重拷（旋转/缩放/pivot 才是罕见事件）。
+                if (item.StagedVersion != item.CaptureVersion)
+                {
+                    for (int c = 0; c < 4; c++)
+                    {
+                        var corner = item.CornerOffsets[c];
+                        pos.Corners[vo + c * 3] = corner.x;
+                        pos.Corners[vo + c * 3 + 1] = corner.y;
+                        pos.Corners[vo + c * 3 + 2] = corner.z;
+                    }
+                    item.StagedVersion = item.CaptureVersion;
+                }
+
+                // 顶点镜像：让内核能只回填真正变化的项。
+                for (int c = 0; c < 4; c++)
+                {
+                    var v = slot.Verts[vi + c];
+                    pos.Verts[vo + c * 3] = v.x;
+                    pos.Verts[vo + c * 3 + 1] = v.y;
+                    pos.Verts[vo + c * 3 + 2] = v.z;
+                }
+                pos.Dirty[n] = 0;
+                pos.VertexStart[n] = vo;
+                pos.Items.Add(item);
+                n++;
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// 原生路径：收集后一次 FFI 调用算完所有角，再把脏项按 slot 顶点下标回填。
+        /// 原生缺导出或调用失败时返回 false，由调用方走托管回退。
+        /// </summary>
+        private static bool ComputePositionsNative(Vector3 cam)
+        {
+            if (_nativeKnownBad || !Iridium.Native.IridiumNative.HasParallaxCompute) return false;
+
+            int n = GatherPositions(cam);
+            if (n == 0) return true;
+            var pos = _scratch;
+
+            if (!Iridium.Native.IridiumNative.ParallaxCompute(
+                    n, cam.x, cam.y,
+                    pos.BaseXy, pos.MultXy, pos.OffsetXy, pos.Corners,
+                    pos.Verts, pos.Dirty))
+            {
+                _nativeKnownBad = true;
+                return false;
+            }
+
+            // 逐项回填：仅回填原生标记为脏的装饰物，未变的不动 slot.Verts。
+            var items = pos.Items;
+            for (int i = 0; i < n; i++)
+            {
+                if (pos.Dirty[i] == 0) continue;
+                var item = items[i];
+                var slot = item.Slot!;
+                int vi = item.VertexIndex;
+                int vo = pos.VertexStart[i];
+                for (int c = 0; c < 4; c++)
+                {
+                    slot.Verts[vi + c] = new Vector3(pos.Verts[vo + c * 3], pos.Verts[vo + c * 3 + 1], pos.Verts[vo + c * 3 + 2]);
+                }
+                slot.PositionDirty = true;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 托管回退：与原生内核逐位等价的内联循环（原生不可用时）。
+        /// 同样先摊平进 SoA，再在摊平的顶点镜像上做脏检查 —— 与原生路径
+        /// 保持完全相同的「哪些 slot 需要上传」判定，避免两条路径抖动不同。
+        /// </summary>
+        private static void ComputePositionsManaged(Vector3 cam)
+        {
+            int n = GatherPositions(cam);
+            var pos = _scratch;
+            var items = pos.Items;
+
+            for (int i = 0; i < n; i++)
+            {
+                int vo = pos.VertexStart[i];
+                float b0x = pos.BaseXy[i * 2], b0y = pos.BaseXy[i * 2 + 1];
+                float mx = pos.MultXy[i * 2], my = pos.MultXy[i * 2 + 1];
+                float kx = pos.OffsetXy[i * 2], ky = pos.OffsetXy[i * 2 + 1];
+                float dxc = cam.x - b0x, dyc = cam.y - b0y;
+                bool moved = false;
+                for (int c = 0; c < 4; c++)
+                {
+                    int co = vo + c * 3;
+                    float x = b0x + dxc * mx + kx + pos.Corners[co];
+                    float y = b0y + dyc * my + ky + pos.Corners[co + 1];
+                    float z = pos.Corners[co + 2];
+                    if (pos.Verts[co] != x || pos.Verts[co + 1] != y || pos.Verts[co + 2] != z)
+                    {
+                        pos.Verts[co] = x;
+                        pos.Verts[co + 1] = y;
+                        pos.Verts[co + 2] = z;
+                        moved = true;
+                    }
+                }
+                if (!moved) continue;
+
+                var slot = items[i].Slot!;
+                int vi = items[i].VertexIndex;
+                for (int c = 0; c < 4; c++)
+                {
+                    int co = vo + c * 3;
+                    slot.Verts[vi + c] = new Vector3(pos.Verts[co], pos.Verts[co + 1], pos.Verts[co + 2]);
+                }
+                slot.PositionDirty = true;
             }
         }
 
