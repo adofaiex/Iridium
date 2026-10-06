@@ -49,6 +49,31 @@ jobs:
       with:
         node-version: '24'
 
+    # Native hot-path library (iridium-core). Without this step the zip would
+    # ship no native lib at all (out/ is gitignored) and every kernel would
+    # silently fall back to managed code on users' machines.
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-gnu
+
+    - name: Cache Rust build
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: native/iridium-core
+
+    - name: Install Windows cross linker (mingw-w64)
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mingw-w64
+
+    # Linux .so + cross-compiled Windows dll, staged into out/native/ where
+    # the csproj CopyToOut target picks them up for the zip.
+    - name: Build native library (.so + .dll)
+      run: ./scripts/build-native.sh --cross
+
+    # Bit-exactness kernels: fail the release if a port drifts from C#.
+    - name: Test native library
+      run: cargo test --release --manifest-path native/iridium-core/Cargo.toml
+
     - name: Build loader projects
       run: |
         dotnet build loaders/ummloader/Iridium.Loader.UMM.csproj --configuration Release
