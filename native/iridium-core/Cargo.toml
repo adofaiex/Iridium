@@ -21,3 +21,8 @@ strip = "symbols"
 
 [profile.release.package."*"]
 opt-level = 3
+
+# Standalone timing binaries (custom main; no libtest harness).
+[[bench]]
+name = "path_bench"
+harness = false
