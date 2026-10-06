@@ -18,6 +18,9 @@ namespace Iridium.Patches
         private static int _incrementalSeqID;
         private static int _rebuildTick;
 
+        private const double Pi1_5 = 4.71238899230957; // MathF.PI * 1.5
+        private const float SentinelNoAngle = 999f;
+
         internal static bool IncrementalActive => _incrementalMode;
 
         #endregion
@@ -395,75 +398,98 @@ namespace Iridium.Patches
 
         /// <summary>
         /// Native rebuild via iridium_core (angles + positions, then Mono-side
-        /// writeback). Returns false when native is unavailable.
+        /// writeback). Handles both full rebuilds and incremental ones from an
+        /// anchor tile, with the same anchor/periodic-recompute policy as the
+        /// managed loop. Returns false when native is unavailable, letting the
+        /// caller use the managed path.
         /// </summary>
         private static bool NativeRebuild(scrLevelMaker lm, int start)
         {
-            var fn = Iridium.Native.IridiumNative.RemakePath;
-            if (fn == null) return false;
+            if (Iridium.Native.IridiumNative.RemakePath == null) return false;
 
             var floors = lm.listFloors;
             var angles = lm.floorAngles;
             if (floors == null || angles == null || floors.Count == 0) return false;
-            // Incremental rebuilds reuse the anchor floor's state; managed-only.
-            if (start != 0) return false;
 
-            int n = Math.Min(angles.Length, floors.Count - 1);
-            if (n < 0) return false;
+            int total = Math.Min(angles.Length, floors.Count - 1);
+            if (total < 0) return false;
+            if (start > total) start = total;
 
+            float tileSize = scrController.instance != null ? (float)scrController.instance.tileSize : 0.631f;
+
+            // Anchor: incremental rebuilds reuse the stored state of floors[start];
+            // every 64th rebuild (or invalid anchor) recomputes from floor 0 to
+            // stop float drift — identical policy to the managed path.
+            bool fromAnchor = false;
+            float originX = 0f, originY = 0f;
+            double startAngle = Pi1_5;
+            if (start > 0)
+            {
+                if (Iridium.Native.IridiumNative.RemakePathFrom == null) return false;
+                bool fullRecompute = (++_rebuildTick & 63) == 0;
+                Vector3 anchorPos = floors[start].transform.position;
+                double anchorEntry = floors[start].entryangle;
+                if (fullRecompute || float.IsNaN(anchorPos.x) || float.IsNaN(anchorPos.y) || double.IsNaN(anchorEntry))
+                {
+                    // Prefix pass: compute the anchor from floor 0 natively.
+                    var pe = new double[start + 1];
+                    var pxs = new double[start + 1];
+                    var ppx = new float[start + 1];
+                    var ppy = new float[start + 1];
+                    if (!Iridium.Native.IridiumNative.RemakePathPinned(
+                        angles, 0, Ones(start), start, Pi1_5, tileSize, false, 0f, 0f, pe, pxs, ppx, ppy))
+                        return false;
+                    anchorPos = new Vector3(ppx[start], ppy[start], 0f);
+                    anchorEntry = pe[start];
+                }
+                fromAnchor = true;
+                originX = anchorPos.x;
+                originY = anchorPos.y;
+                startAngle = anchorEntry;
+            }
+
+            int n = total - start;
             var entry = new double[n + 1];
             var exit = new double[n + 1];
             var px = new float[n + 1];
             var py = new float[n + 1];
-            var mults = new float[n];
-            var count = new uint[1];
+            if (!Iridium.Native.IridiumNative.RemakePathPinned(
+                angles, start, Ones(n), n, startAngle, tileSize, fromAnchor, originX, originY,
+                entry, exit, px, py))
+                return false;
 
-            var input = new Iridium.Native.IridiumNative.FloorPathInput
+            // Mono-side writeback (Unity objects + per-floor flags).
+            var anchor = floors[start];
+            ResetFloorState(anchor, new Vector3(px[0], py[0], 0f));
+            anchor.entryangle = entry[0];
+            if (start == 0)
             {
-                Angles = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(angles, 0),
-                LengthMults = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(mults, 0),
-                StartAngle = 4.71238898038469, // MathF.PI * 1.5
-                TileSize = scrController.instance != null ? (float)scrController.instance.tileSize : 0.631f,
-                Steps = (uint)n,
-            };
-            var output = new Iridium.Native.IridiumNative.FloorPathOutput
+                anchor.seqID = 0;
+                anchor.hasLit = true;
+                anchor.prevfloor = null;
+            }
+
+            for (int k = 0; k < n; k++)
             {
-                EntryAngles = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(entry, 0),
-                ExitAngles = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(exit, 0),
-                PositionsX = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(px, 0),
-                PositionsY = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(py, 0),
-                Count = System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(count, 0),
-            };
-
-            if (fn(ref input, ref output) != 0) return false;
-            if (count[0] != (uint)(n + 1)) return false;
-
-            var floor0 = floors[0];
-            ResetFloorState(floor0, Vector3.zero);
-            floor0.entryangle = entry[0];
-            floor0.seqID = 0;
-            floor0.hasLit = true;
-            floor0.prevfloor = null;
-
-            for (int i = 0; i < n; i++)
-            {
+                int i = start + k;
                 var floor = floors[i];
                 var nextFloor = floors[i + 1];
                 float ang = angles[i];
 
-                floor.entryangle = entry[i];
-                floor.exitangle = exit[i];
-                floor.midSpin = ang == 999f;
+                floor.entryangle = entry[k];
+                floor.exitangle = exit[k];
+                floor.midSpin = ang == SentinelNoAngle;
                 floor.seqID = i;
                 floor.prevfloor = i > 0 ? floors[i - 1] : null;
                 floor.nextfloor = nextFloor;
                 floor.speed = 1f;
                 floor.isCCW = false;
 
-                ResetFloorState(nextFloor, new Vector3(px[i + 1], py[i + 1], 0f));
-                nextFloor.entryangle = entry[i + 1];
+                var pos = new Vector3(px[k + 1], py[k + 1], 0f);
+                ResetFloorState(nextFloor, pos);
+                nextFloor.entryangle = entry[k + 1];
                 nextFloor.seqID = i + 1;
-                nextFloor.transform.position = new Vector3(px[i + 1], py[i + 1], 0f);
+                nextFloor.transform.position = pos;
                 nextFloor.floatDirection = ang;
                 nextFloor.prevfloor = floor;
             }
@@ -481,6 +507,19 @@ namespace Iridium.Patches
                 }
             }
             return true;
+        }
+
+        private static float[] _ones = new float[0];
+
+        /// <summary>Shared all-ones length-multiplier buffer (no tile scaling).</summary>
+        private static float[] Ones(int n)
+        {
+            if (_ones.Length < n)
+            {
+                _ones = new float[Math.Max(n, _ones.Length * 2)];
+                for (int i = 0; i < _ones.Length; i++) _ones[i] = 1f;
+            }
+            return _ones;
         }
 
         #endregion

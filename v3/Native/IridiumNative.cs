@@ -64,6 +64,9 @@ namespace Iridium.Native
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int RemakePathFn(ref FloorPathInput input, ref FloorPathOutput output);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int RemakePathFromFn(ref FloorPathInput input, float originX, float originY, ref FloorPathOutput output);
+
         /// <summary>
         /// Flat JSON DOM mirrored from Rust `ffi::JsonView`: 8 pointers,
         /// then 5 scalars. Field order/type must match exactly.
@@ -107,6 +110,7 @@ namespace Iridium.Native
         private static EvaluateFn _evaluate;
         private static EvaluateBatchFn _evaluateBatch;
         private static RemakePathFn _remakePath;
+        private static RemakePathFromFn _remakePathFrom;
         private static JsonParseFn _jsonParse;
         private static JsonViewFn _jsonView;
         private static JsonReleaseFn _jsonRelease;
@@ -118,6 +122,81 @@ namespace Iridium.Native
         /// <see cref="Available"/> — callers must gate on that first.
         /// </summary>
         internal static RemakePathFn RemakePath => _remakePath;
+
+        /// <summary>
+        /// Incremental path rebuild from an anchor tile (optional export;
+        /// null on older libraries or when not <see cref="Available"/>).
+        /// </summary>
+        internal static RemakePathFromFn RemakePathFrom => _available ? _remakePathFrom : null;
+
+        /// <summary>
+        /// Pinned RemakePath call. <paramref name="angleOffset"/> &gt; 0 with
+        /// <paramref name="fromAnchor"/> rebuilds from an anchor tile (slot 0 of
+        /// every output = the anchor). Output arrays need <c>steps + 1</c> slots.
+        /// Returns false when the export is missing or the call failed.
+        /// </summary>
+        internal static bool RemakePathPinned(
+            float[] angles, int angleOffset, float[] lengthMults, int steps,
+            double startAngle, float tileSize, bool fromAnchor, float originX, float originY,
+            double[] entry, double[] exit, float[] px, float[] py)
+        {
+            if (!_available || steps < 0) return false;
+            var full = _remakePath;
+            var from = _remakePathFrom;
+            if (fromAnchor ? from == null : full == null) return false;
+            if (angleOffset < 0 || angleOffset + steps > angles.Length || steps > lengthMults.Length ||
+                entry.Length < steps + 1 || exit.Length < steps + 1 || px.Length < steps + 1 || py.Length < steps + 1)
+                return false;
+
+            var count = new uint[1];
+            GCHandle hA = default, hM = default, hE = default, hX = default, hPx = default, hPy = default, hC = default;
+            try
+            {
+                hA = GCHandle.Alloc(angles, GCHandleType.Pinned);
+                hM = GCHandle.Alloc(lengthMults, GCHandleType.Pinned);
+                hE = GCHandle.Alloc(entry, GCHandleType.Pinned);
+                hX = GCHandle.Alloc(exit, GCHandleType.Pinned);
+                hPx = GCHandle.Alloc(px, GCHandleType.Pinned);
+                hPy = GCHandle.Alloc(py, GCHandleType.Pinned);
+                hC = GCHandle.Alloc(count, GCHandleType.Pinned);
+
+                var input = new FloorPathInput
+                {
+                    Angles = hA.AddrOfPinnedObject() + angleOffset * sizeof(float),
+                    LengthMults = hM.AddrOfPinnedObject(),
+                    StartAngle = startAngle,
+                    TileSize = tileSize,
+                    Steps = (uint)steps,
+                };
+                var output = new FloorPathOutput
+                {
+                    EntryAngles = hE.AddrOfPinnedObject(),
+                    ExitAngles = hX.AddrOfPinnedObject(),
+                    PositionsX = hPx.AddrOfPinnedObject(),
+                    PositionsY = hPy.AddrOfPinnedObject(),
+                    Count = hC.AddrOfPinnedObject(),
+                };
+
+                int rc = fromAnchor
+                    ? from(ref input, originX, originY, ref output)
+                    : full(ref input, ref output);
+                return rc == 0 && count[0] == (uint)(steps + 1);
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (hA.IsAllocated) hA.Free();
+                if (hM.IsAllocated) hM.Free();
+                if (hE.IsAllocated) hE.Free();
+                if (hX.IsAllocated) hX.Free();
+                if (hPx.IsAllocated) hPx.Free();
+                if (hPy.IsAllocated) hPy.Free();
+                if (hC.IsAllocated) hC.Free();
+            }
+        }
 
         /// <summary>True when the batch easing export is present.</summary>
         internal static bool HasEvaluateBatch
@@ -414,6 +493,7 @@ namespace Iridium.Native
                 // Optional exports: loaded best-effort so a core-compatible
                 // older library still enables the base features.
                 _evaluateBatch = GetExport<EvaluateBatchFn>("iridium_core_evaluate_batch");
+                _remakePathFrom = GetExport<RemakePathFromFn>("iridium_core_remake_path_from");
                 _jsonParse = GetExport<JsonParseFn>("iridium_core_json_parse");
                 _jsonView = GetExport<JsonViewFn>("iridium_core_json_view");
                 _jsonRelease = GetExport<JsonReleaseFn>("iridium_core_json_release");
