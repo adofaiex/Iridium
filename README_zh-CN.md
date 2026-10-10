@@ -30,6 +30,21 @@ https://discord.gg/ddndY4xXeK
 
 让游戏运行更加流畅，减少卡顿和掉帧。主要体现在画面的渲染效率提升、特效性能改善以及场景加载速度加快。包括装饰纹理压缩、装饰物分帧加载（带进度显示）、移动轨道/移动装饰物优化（支持 freeroam 区域）、粒子优化（对象池/剔除/LOD）、DOTween 调优、自定义缓速引擎，以及高精度计时的异步输入优化。
 
+### 原生核心（Rust）
+
+最热的几段循环现在交给一个小型 Rust 库（`native/iridium-core`，C ABI）执行，不再跑在 Mono 上。目前覆盖六条热路径：
+
+| 位置 | 原生入口 | 实测提升 |
+| --- | --- | --- |
+| 谱面 JSON 解析 | `iridium_core_json_*` | 3 万事件谱面 477ms → 82ms |
+| 缓动求值 | `iridium_core_evaluate_batch` | 15 万砖基准 3.7x |
+| 编辑器砖块路径重建 | `iridium_core_remake_path_from` | 支持全量重建与从锚点增量续算 |
+| 装饰物合批顶点 | `iridium_core_parallax_compute` | 脏标记让未变化的槽位跳过 `Mesh.SetVertices` |
+| 装饰物命中查询 | `iridium_core_spatial_*` | AABB 粗筛跳过无候选的物理查询 |
+| 纹理降采样 | `iridium_core_resize_bilinear` | 双线性降采样 1.7x–2.1x |
+
+这个库完全是可选的。它通过 `dlopen`/`LoadLibraryEx` 加载，并经过 ABI 版本探测；库缺失或版本过旧时，每个调用点都会自动回退到原来的托管实现。FFI 边界会捕获 panic 并转成错误码，所以原生代码出问题时只是掉性能，不会让游戏崩溃。逐位一致性由 Rust 测试套件保证，CI 每次发布前都会跑一遍。
+
 ### 界面自定义
 
 提供多种界面调整选项，包括移除首页新闻、隐藏测试版水印、调整自动播放文字的位置、在编辑器中也显示倒计时等。v3 的设置界面分为 通用 / 优化 / 编辑器 / 兼容性 / 音频 选项卡，Switch 与 Checkbox 按语义区分，并支持中文/日文/韩文输入与显示（CJK 字体回退）。
@@ -79,7 +94,7 @@ https://discord.gg/ddndY4xXeK
 
 ## 自行构建
 
-1. 确保已安装 .NET SDK。
+1. 确保已安装 .NET SDK。Rust 工具链是可选的，只有想自己编译原生核心时才需要，不装也能正常构建。
 2. 带子module克隆本仓库：
    ```bash
    git clone --resursive https://github.com/Xbodwf/Iridium.git
@@ -90,6 +105,30 @@ https://discord.gg/ddndY4xXeK
    ```bash
    dotnet build
    ```
+
+### 构建原生核心
+
+`scripts/build-native.sh` 会编译 `iridium-core` 并把产物暂存到 `out/native/`，csproj 会自动取用并打进发布包。正式发布的版本已经包含三平台的 `.dll`、`.so` 和 `.dylib`，本地做迭代时才需要这一步。
+
+```bash
+# 构建当前平台的原生库
+bash scripts/build-native.sh
+
+# 跑测试，以及 CI 在发布前会跑的逐位一致性套件
+cd native/iridium-core && cargo test --release
+```
+
+macOS 上加 `--universal` 会顺带编译另一种 CPU 架构，再用 lipo 合并成单个双架构 dylib，arm64 和 Intel（Rosetta）都能用：
+
+```bash
+bash scripts/build-native.sh --universal
+```
+
+想跑性能基准的话需要 `cargo bench`：
+
+```bash
+cd native/iridium-core && cargo bench
+```
 
 ---
 
