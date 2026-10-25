@@ -21,6 +21,30 @@ namespace Iridium.Patches
         public static ConcurrentDictionary<string, Vector3> decorRatios = new();
         // 纹理 -> 原始文件路径映射，解决 CustomSprite.GetSprite 创建新纹理时 name 丢失的问题
         public static ConditionalWeakTable<Texture2D, string> textureNameMap = new();
+
+        private sealed class RatioBox
+        {
+            public Vector3 Value;
+        }
+
+        /// <summary>
+        /// Record the scale per texture instance: decorRatios is cleared on every LoadLevel,
+        /// but the game keeps the already-resized textures cached, so the second play of a
+        /// level found no ratio and drew decorations at the smaller native size.
+        /// Entries die with the texture (weak table).
+        /// </summary>
+        private static readonly ConditionalWeakTable<Texture2D, RatioBox> _ratioByTexture = new();
+
+        public static void RecordDecorRatio(Texture2D? texture, string? name, Vector3 ratio)
+        {
+            if (texture != null)
+            {
+                _ratioByTexture.Remove(texture);
+                try { _ratioByTexture.Add(texture, new RatioBox { Value = ratio }); } catch { }
+            }
+            if (!string.IsNullOrEmpty(name)) decorRatios[name] = ratio;
+        }
+
         private static ConcurrentDictionary<int, byte> _prefixCompletedTextures = new();
         public static float savedVRAM_MB = 0f;
         private static int processedTextureCount = 0;
@@ -73,6 +97,13 @@ namespace Iridium.Patches
             {
                 scale = Vector3.one;
                 return false;
+            }
+
+            // Instance first: survives renames and the per-level reset of the name table.
+            if (_ratioByTexture.TryGetValue(tex, out var box))
+            {
+                scale = box.Value;
+                return true;
             }
 
             // 首先尝试 texture.name
@@ -518,7 +549,7 @@ namespace Iridium.Patches
                     if (origW != newW || origH != newH)
                     {
                         // 使用统一的 scaleFactor 作为缩放比，避免 AlignTo4 分别对宽高取整导致的不等比缩放
-                        decorRatios[filePath] = new Vector3((float)scaleFactor, (float)scaleFactor, 1f);
+                        RecordDecorRatio(tex, filePath, new Vector3((float)scaleFactor, (float)scaleFactor, 1f));
                     }
 
                     // 将纹理添加到 nameMap，解决 CustomSprite.GetSprite 创建新纹理时 name 丢失的问题
@@ -623,7 +654,7 @@ namespace Iridium.Patches
                                 // 基于实际像素尺寸计算缩放比，取两轴平均值确保等比
                                 // 避免 AlignTo4 分别对宽高取整导致的不等比缩放变形
                                 float avgRatio = ((float)__result.width / newW + (float)__result.height / newH) * 0.5f;
-                                decorRatios[texName] = new Vector3(avgRatio, avgRatio, 1f);
+                                RecordDecorRatio(optimized, texName, new Vector3(avgRatio, avgRatio, 1f));
                                 if (!Main.Settings.optimizer.dontCompress)
                                 {
                                     try
@@ -662,7 +693,7 @@ namespace Iridium.Patches
                     skipResize:
                     if (!resized)
                     {
-                        decorRatios[texName] = Vector3.one;
+                        RecordDecorRatio(__result, texName, Vector3.one);
                         // 将纹理添加到 nameMap
                         try { textureNameMap.Add(__result, texName); } catch { /* 已存在则忽略 */ }
                         if (!Main.Settings.optimizer.dontCompress)
@@ -789,9 +820,9 @@ namespace Iridium.Patches
             if (prop != null)
             {
                 if (prop.GetMethod != null)
-                    _getSpriteUnscaledSize = AccessTools.MethodDelegate<Func<scrVisualDecoration, Vector2>>(prop.GetMethod);
+                    _getSpriteUnscaledSize = FastDelegate.Open<Func<scrVisualDecoration, Vector2>>(prop.GetMethod);
                 if (prop.SetMethod != null)
-                    _setSpriteUnscaledSize = AccessTools.MethodDelegate<Action<scrVisualDecoration, Vector2>>(prop.SetMethod);
+                    _setSpriteUnscaledSize = FastDelegate.Open<Action<scrVisualDecoration, Vector2>>(prop.SetMethod);
             }
             _decorScaleInit = true;
         }

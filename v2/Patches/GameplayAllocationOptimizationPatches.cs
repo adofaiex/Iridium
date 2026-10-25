@@ -100,7 +100,7 @@ namespace Iridium.Patches
             {
                 try
                 {
-                    dlg = AccessTools.MethodDelegate<Action<object, RenderTexture, RenderTexture>>(mi);
+                    dlg = FastDelegate.Open<Action<object, RenderTexture, RenderTexture>>(mi);
                 }
                 catch (Exception)
                 {

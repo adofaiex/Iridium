@@ -42,7 +42,7 @@
 
             <!-- Content area -->
             <View class="background">
-                <ScrollView scrollPosition="contentScroll" height="500">
+                <ScrollView scrollPosition="contentScroll" height="740">
                     {settings.currentTab == 'general' && <Reference path="@General.iml" />}
                     {settings.currentTab == 'optimizer' && <Reference path="@Optimizer.iml" />}
                     {settings.currentTab == 'editor' && <Reference path="@Editor.iml" />}

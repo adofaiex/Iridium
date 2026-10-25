@@ -6,15 +6,16 @@
 
 ## CHANGES
 
-1. Restart after fail: floors that are already at their start state are skipped, and hold objects are reused instead of destroyed and rebuilt (v2 / v3).
-2. Lower per-frame overhead: holds skip material writes while their geometry is unchanged, each floor runs OnBeat once per beat instead of twice, and the audio spectrum is computed once per frame and shared with the conductor, volume trackers and background bars.
-3. Faster editor interaction: selecting floors or decorations and opening panels no longer deep-copies the whole level, and decoration / event lookups are indexed instead of scanning every event (noticeable on charts with hundreds of thousands of events).
-4. Hit texts are created on demand instead of pre-building about 1400 of them when a level loads (v3).
-5. Search across all settings: type in the search box to filter every option, then click a result to jump straight to it.
-6. The optimizer is split into four categories (basics / gameplay / effects / advanced), with clearer sections and parent-child option grouping.
-7. Option descriptions are rewritten for players, and the info icon is now placed consistently next to the option text.
-8. v2 (ADOFAI 2.9.8) receives the restart and editor optimizations from items 1 and 3.
-9. Fixed a freeze when switching settings categories, and fixed broken UI files being rendered silently.
+1. The settings window is now a real UGUI panel instead of IMGUI: it opens without a hitch, scrolls smoothly, can be dragged and resized from any edge or corner, and remembers its position and size between sessions.
+2. The panel is available on every loader now (MelonLoader / BepInEx / UnityModManager / MiniModLoader), and its hotkey is a normal setting under General → Panel hotkey (default **Ctrl+F9**). Under UMM the old settings page only shows a reminder of the current hotkey.
+3. Shortcut recording is now click-to-start and click-to-save: press the button, type the combination (shown live on the button), then click anywhere or press the button again to save. Esc keeps the old value. Function keys and modifier combinations are recorded correctly.
+4. Reopening a chart from the editor no longer shrinks image decorations: the texture scale is remembered per texture instead of being reset on every level load (v2 / v3).
+5. Fixed the settings panel not opening with the hotkey under MelonLoader and BepInEx.
+6. MelonLoader now enables the mod at startup, so the optimizer patches are actually applied there — previously nothing was patched under MelonLoader.
+7. Fixed patch errors on MelonLoader caused by a Harmony API version mismatch.
+8. UI fixes: buttons no longer render as plain white rectangles, nested (indented) rows line up with their parent, long descriptions wrap instead of being cut off, and sliders, switches, checkboxes, info icons and section arrows all use the same theme values as before.
+9. Added a vertical scrollbar in the panel's colours, and the option list keeps its scroll position across rebuilds.
+10. v2 (ADOFAI 2.9.8) keeps the existing IMGUI settings window; the UGUI panel, resizing and position memory are v3 only.
 
 > [!CAUTION]
 > Disclaimer: Optimization mods are not a silver bullet — do not chase FPS blindly. If issues occur, disable the specific feature and report the bug instead of labeling the entire mod broken.

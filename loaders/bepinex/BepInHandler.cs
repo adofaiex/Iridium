@@ -3,8 +3,6 @@ using System.IO;
 using System.Reflection;
 using System.Xml.Serialization;
 using BepInEx.Logging;
-using UnityEngine;
-using static Iridium.UI.IridiumLayout;
 
 namespace Iridium
 {
@@ -12,12 +10,6 @@ namespace Iridium
     {
         private readonly ManualLogSource _logger;
         private readonly string _modPath;
-        private bool _uiVisible;
-        private Rect _rect;
-        private Vector2 _scrollPos;
-        private bool _isDragging;
-        private Vector2 _dragOffset;
-        private float _titleBarHeight = 40f;
 
         public BepInHandler(ManualLogSource logger)
         {
@@ -74,116 +66,17 @@ namespace Iridium
         public event Action? OnGUI;
         public event Action? OnSaveGUI;
 
-        private static bool CheckHotkey(string hotkey)
-        {
-            if (string.IsNullOrEmpty(hotkey)) return false;
-
-            var parts = hotkey.Split('+');
-            if (parts.Length == 0) return false;
-
-            KeyCode? targetKey = null;
-            bool needCtrl = false, needAlt = false, needShift = false;
-
-            foreach (var part in parts)
-            {
-                var p = part.Trim();
-                if (string.IsNullOrEmpty(p)) continue;
-
-                var lower = p.ToLowerInvariant();
-                if (lower == "ctrl")
-                    needCtrl = true;
-                else if (lower == "alt")
-                    needAlt = true;
-                else if (lower == "shift")
-                    needShift = true;
-                else
-                {
-                    if (Enum.TryParse<KeyCode>(p, ignoreCase: true, out var kc))
-                        targetKey = kc;
-                }
-            }
-
-            if (targetKey == null) return false;
-
-            if (needCtrl && !(Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)))
-                return false;
-            if (needAlt && !(Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)))
-                return false;
-            if (needShift && !(Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)))
-                return false;
-
-            return Input.GetKeyDown(targetKey.Value);
-        }
-
-        public void TriggerToggle(bool value) => OnToggle?.Invoke(value);
-
         public void TriggerUpdate(float dt)
         {
-            if (Main.Settings != null && CheckHotkey(Main.Settings.panelToggleHotkey))
-            {
-                _uiVisible = !_uiVisible;
-                float w = Mathf.Max(Screen.width * 0.8f, 960);
-                float h = Mathf.Max(Screen.height * 0.8f, 720);
-                _rect = new Rect((Screen.width - w) / 2, (Screen.height - h) / 2, w, h);
-            }
             OnUpdate?.Invoke(dt);
         }
 
         public void TriggerGUI()
         {
-            if (!_uiVisible) return;
-
-            HandleWindowDrag();
-
-            Render(
-                Area(_rect,
-                    VBox(
-                        ContainerStyle.Background,
-                        null,
-                        WidthMax,
-                        HBox(
-                            ContainerStyle.None,
-                            null,
-                            WidthMax,
-                            Text("Iridium", TextStyle.Title),
-                            Fill(),
-                            Button("\u00d7", ButtonStyle.Element, () => _uiVisible = false, GUILayout.Width(28), GUILayout.Height(28))
-                        ),
-                        Space(8),
-                        ScrollView(_scrollPos, p => _scrollPos = p, WidthMax, () => OnGUI?.Invoke())
-                    )
-                )
-            );
-
-            _rect.x = (int)_rect.x;
-            _rect.y = (int)_rect.y;
+            Iridium.UI.PanelShell.RenderGui(() => OnGUI?.Invoke());
         }
 
-        private void HandleWindowDrag()
-        {
-            var e = Event.current;
-            switch (e.type)
-            {
-                case EventType.MouseDown:
-                    if (e.mousePosition.y >= _rect.y && e.mousePosition.y <= _rect.y + _titleBarHeight
-                        && e.mousePosition.x < _rect.xMax - 36)
-                    {
-                        _isDragging = true;
-                        _dragOffset = e.mousePosition - _rect.position;
-                        e.Use();
-                    }
-                    break;
-                case EventType.MouseUp:
-                    _isDragging = false;
-                    break;
-                case EventType.MouseDrag:
-                    if (_isDragging)
-                    {
-                        _rect.position = e.mousePosition - _dragOffset;
-                        e.Use();
-                    }
-                    break;
-            }
-        }
+        public void TriggerToggle(bool value) => OnToggle?.Invoke(value);
+
     }
 }

@@ -56,25 +56,25 @@ namespace Iridium.Patches
 
 		private static void DrawFloorNums(scnEditor editor)
 		{
-			(_drawFloorNumsAction ??= AccessTools.MethodDelegate<Action<scnEditor>>(
+			(_drawFloorNumsAction ??= FastDelegate.Open<Action<scnEditor>>(
 				AccessTools.Method(typeof(scnEditor), "DrawFloorNums"), null))?.Invoke(editor);
 		}
 
 		private static void DrawFloorOffsetLines(scnEditor editor)
 		{
-			(_drawFloorOffsetLinesAction ??= AccessTools.MethodDelegate<Action<scnEditor>>(
+			(_drawFloorOffsetLinesAction ??= FastDelegate.Open<Action<scnEditor>>(
 				AccessTools.Method(typeof(scnEditor), "DrawFloorOffsetLines"), null))?.Invoke(editor);
 		}
 
 		private static void DrawHolds(scnEditor editor, bool unfillHolds)
 		{
-			(_drawHoldsAction ??= AccessTools.MethodDelegate<Action<scnEditor, bool>>(
+			(_drawHoldsAction ??= FastDelegate.Open<Action<scnEditor, bool>>(
 				AccessTools.Method(typeof(scnEditor), "DrawHolds", new[] { typeof(bool) }), null))?.Invoke(editor, unfillHolds);
 		}
 
 		private static void DrawMultiPlanet(scnEditor editor)
 		{
-			(_drawMultiPlanetAction ??= AccessTools.MethodDelegate<Action<scnEditor>>(
+			(_drawMultiPlanetAction ??= FastDelegate.Open<Action<scnEditor>>(
 				AccessTools.Method(typeof(scnEditor), "DrawMultiPlanet"), null))?.Invoke(editor);
 		}
 

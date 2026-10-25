@@ -68,11 +68,11 @@ namespace Iridium.Patches.Optimizer
 
 		// ShowTabsForFloor 复刻需要的私有成员：缓存反射访问器
 		private static readonly Func<InspectorPanel, string, bool, bool> _modifyMessageText =
-			AccessTools.MethodDelegate<Func<InspectorPanel, string, bool, bool>>(
+			FastDelegate.Open<Func<InspectorPanel, string, bool, bool>>(
 				AccessTools.Method(typeof(InspectorPanel), "ModifyMessageText",
 					new[] { typeof(string), typeof(bool) }));
 		private static readonly Func<InspectorPanel, string, float, bool, bool> _modifyMessageTextY =
-			AccessTools.MethodDelegate<Func<InspectorPanel, string, float, bool, bool>>(
+			FastDelegate.Open<Func<InspectorPanel, string, float, bool, bool>>(
 				AccessTools.Method(typeof(InspectorPanel), "ModifyMessageText",
 					new[] { typeof(string), typeof(float), typeof(bool) }));
 

@@ -41,7 +41,7 @@ namespace Iridium.Patches
             if (_delegates.TryGetValue(key, out var cached)) return (Action<scrPlayer, T?>)cached;
 
             var method = AccessTools.Method(typeof(scrPlayer), methodName);
-            var compiled = AccessTools.MethodDelegate<Action<scrPlayer, T?>>(method, null);
+            var compiled = FastDelegate.Open<Action<scrPlayer, T?>>(method, null);
             _delegates[key] = compiled;
             return compiled;
         }
@@ -83,11 +83,11 @@ namespace Iridium.Patches
 
                 if (method.GetParameters().Length >= 3)
                 {
-                    var del = AccessTools.MethodDelegate<Func<scrPlayer, bool, InputEventState, bool, bool>>(method, null);
+                    var del = FastDelegate.Open<Func<scrPlayer, bool, InputEventState, bool, bool>>(method, null);
                     return _hitInputEventUp = p => del(p, false, InputEventState.Up, true);
                 }
 
-                var old = AccessTools.MethodDelegate<Func<scrPlayer, bool, InputEventState, bool>>(method, null);
+                var old = FastDelegate.Open<Func<scrPlayer, bool, InputEventState, bool>>(method, null);
                 return _hitInputEventUp = p => old(p, false, InputEventState.Up);
             }
 

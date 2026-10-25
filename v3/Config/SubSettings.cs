@@ -103,6 +103,13 @@ namespace Iridium.Config
     public class UISettings
     {
         public bool removeNews = false;
+        // Settings window geometry (canvas units, CanvasScaler reference 1920x1080).
+        // windowRectSaved stays false until the user drags/resizes the panel.
+        public bool windowRectSaved = false;
+        public float windowX = 0f;
+        public float windowY = 0f;
+        public float windowWidth = 0f;
+        public float windowHeight = 0f;
         public bool hideBetaWatermark = false;
         public bool moveAutoplayText = false;
         public float autoplayTextX = 0f;

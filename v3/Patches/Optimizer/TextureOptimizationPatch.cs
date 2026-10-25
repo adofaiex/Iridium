@@ -353,7 +353,9 @@ namespace Iridium.Patches.Optimizer
 				if (origW != newW || origH != newH)
 				{
 					float avgRatio = ((float)origW / newW + (float)origH / newH) * 0.5f;
-					OptimizerShared.decorRatios[filePath] = new Vector3(avgRatio, avgRatio, 1f);
+					// Record against the texture instance too: the name table is reset on
+					// every LoadLevel while the game keeps this texture cached.
+					OptimizerShared.RecordDecorRatio(tex, filePath, new Vector3(avgRatio, avgRatio, 1f));
 				}
 
 				try { OptimizerShared.textureNameMap.Add(tex, filePath); } catch { }
@@ -447,7 +449,7 @@ namespace Iridium.Patches.Optimizer
 					if (optimized != null)
 					{
 						float avgRatio = ((float)__result.width / newW + (float)__result.height / newH) * 0.5f;
-						OptimizerShared.decorRatios[texName] = new Vector3(avgRatio, avgRatio, 1f);
+						OptimizerShared.RecordDecorRatio(optimized, texName, new Vector3(avgRatio, avgRatio, 1f));
 						if (!Main.Settings.optimizer.dontCompress)
 						{
 							try
@@ -479,7 +481,7 @@ namespace Iridium.Patches.Optimizer
 
 				if (!resized)
 				{
-					OptimizerShared.decorRatios[texName] = Vector3.one;
+					OptimizerShared.RecordDecorRatio(__result, texName, Vector3.one);
 					try { OptimizerShared.textureNameMap.Add(__result, texName); } catch { }
 					if (!Main.Settings.optimizer.dontCompress)
 					{

@@ -1,6 +1,9 @@
 {
   "displayName": "한국어",
   "Language": "언어",
+  "PanelToggleHotkey": "패널 단축키",
+  "PanelToggleHotkeyInfo": "Iridium 설정 패널을 여닫는 단축키입니다(모든 로더 공통). 버튼을 누른 뒤 새 조합을 입력하세요.",
+  "PanelHotkeyHint": "{0} 키로 Iridium 설정을 엽니다. 이 페이지는 단축키만 안내합니다. 설정 UI는 UGUI 창으로 표시됩니다.",
   "SearchHint": "모든 설정 검색...",
   "SearchResults": "검색 결과",
   "SearchNoResults": "일치하는 설정이 없습니다.",

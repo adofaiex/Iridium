@@ -1,6 +1,9 @@
 {
   "displayName": "English",
   "Language": "Language",
+  "PanelToggleHotkey": "Panel hotkey",
+  "PanelToggleHotkeyInfo": "Hotkey that opens/closes the Iridium panel (works on every loader). Click the button and press the new combination.",
+  "PanelHotkeyHint": "Press {0} to open Iridium settings. This page only shows the hotkey: the settings UI itself is drawn as a UGUI window.",
   "SearchHint": "Search all settings...",
   "SearchResults": "Search Results",
   "SearchNoResults": "No matching settings found.",

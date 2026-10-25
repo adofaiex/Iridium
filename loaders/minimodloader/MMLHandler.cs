@@ -36,7 +36,9 @@ namespace Iridium.Loader
 
         internal void EventOnGUIInvoke()
         {
-            OnGUI?.Invoke();
+            // The panel chrome (window frame, content slot) is version-specific and lives
+            // in Iridium.UI.PanelShell, which is mirrored across v2/v3.
+            Iridium.UI.PanelShell.RenderGui(() => OnGUI?.Invoke());
         }
 
         internal void EventOnSaveGUIInvoke()

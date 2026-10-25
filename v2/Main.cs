@@ -66,6 +66,10 @@ namespace Iridium
 
         private static void OnUpdate(float dt)
         {
+            // IMGUI panel window: hotkey toggle + window state. Driven from here (not
+            // from the loader) so it ticks exactly once per frame on every loader.
+            UI.PanelShell.Tick(dt);
+
             while (_destroyImmObj.TryDequeue(out var obj))
             {
                 Object.DestroyImmediate(obj);

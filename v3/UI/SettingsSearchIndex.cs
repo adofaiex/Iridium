@@ -60,7 +60,7 @@ namespace Iridium
 
 			// ── General（UI / 判定文本 / 自动播放提示） ──
 			string[] general = {
-				"Language", "RemoveNews", "HideBetaWatermark", "MoveAutoplayText",
+				"Language", "PanelToggleHotkey", "RemoveNews", "HideBetaWatermark", "MoveAutoplayText",
 				"ForceDifficultyUI", "EnableCircleArc", "AlwaysCountdown",
 				"EnablePausePlanetTrail", "ShowAutoplayHintUI", "CustomAutoplayHint",
 				"UIBehavior",

@@ -78,7 +78,7 @@ namespace Iridium.Patches.Optimizer
 					var m = AccessTools.Method(typeof(Collider2D), name,
 						new[] { typeof(ContactFilter2D), typeof(List<Collider2D>) });
 					if (m == null || m.ReturnType != typeof(int)) return null;
-					return AccessTools.MethodDelegate<Func<Collider2D, ContactFilter2D, List<Collider2D>, int>>(m);
+					return FastDelegate.Open<Func<Collider2D, ContactFilter2D, List<Collider2D>, int>>(m);
 				}
 				catch (Exception e)
 				{
@@ -94,7 +94,7 @@ namespace Iridium.Patches.Optimizer
 					var m = AccessTools.Method(typeof(Physics2D), "OverlapCollider",
 						new[] { typeof(Collider2D), typeof(ContactFilter2D), typeof(List<Collider2D>) });
 					if (m == null || m.ReturnType != typeof(int)) return null;
-					var d = AccessTools.MethodDelegate<Func<Collider2D, ContactFilter2D, List<Collider2D>, int>>(m);
+					var d = FastDelegate.Open<Func<Collider2D, ContactFilter2D, List<Collider2D>, int>>(m);
 					return (c, f, l) => d(c, f, l);
 				}
 				catch (Exception e)

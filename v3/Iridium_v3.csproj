@@ -322,11 +322,18 @@
 			<FilesToCopy Include="$(ProjectDir)..\bin\loaders\umm\$(TargetFramework)\Iridium.Loader.UMM.dll" Condition="Exists('$(ProjectDir)..\bin\loaders\umm\$(TargetFramework)\Iridium.Loader.UMM.dll')" />
 			<FilesToCopy Include="$(ProjectDir)..\bin\loaders\melon\$(TargetFramework)\Iridium.Loader.Melon.dll" Condition="Exists('$(ProjectDir)..\bin\loaders\melon\$(TargetFramework)\Iridium.Loader.Melon.dll')" />
 			<FilesToCopy Include="$(ProjectDir)..\bin\loaders\bepinex\$(TargetFramework)\Iridium.Loader.BepInEx.dll" Condition="Exists('$(ProjectDir)..\bin\loaders\bepinex\$(TargetFramework)\Iridium.Loader.BepInEx.dll')" />
-			<FilesToCopy Include="$(ProjectDir)..\out\Iris.Iml\Iris.Iml.dll" Condition="Exists('$(ProjectDir)..\out\Iris.Iml\Iris.Iml.dll')" />
+			<!-- Copy the ProjectReference output next to our own assembly rather than the
+			     shared out/Iris.Iml folder: that is the exact dll this build compiled
+			     against, so a stale Iris.Iml.dll can never end up next to a fresh
+			     Iridium.dll (which would surface as a runtime MissingMethodException). -->
+			<FilesToCopy Include="$(OutputPath)Iris.Iml.dll" Condition="Exists('$(OutputPath)Iris.Iml.dll')" />
 			<FilesToCopy Include="$(ProjectDir)Info.json" />
 			<ResourceFiles Include="$(ProjectDir)Resources\**\*" Exclude="$(ProjectDir)Resources\**\*\" />
 		</ItemGroup>
-		<Copy SourceFiles="@(FilesToCopy)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" ContinueOnError="true" />
+		<!-- Managed dlls are always copied: SkipUnchangedFiles compares timestamps, so a
+		     same-second build could ship the previous version's Iris.Iml.dll / loader
+		     next to a freshly compiled Iridium.dll. Resources stay skipped when equal. -->
+		<Copy SourceFiles="@(FilesToCopy)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" ContinueOnError="true" />
 		<Copy SourceFiles="@(ResourceFiles)" DestinationFolder="$(OutDir)Resources\%(RecursiveDir)" SkipUnchangedFiles="true" />
 		<Message Text="Files copied to: $(OutDir)" Importance="high" />
 	</Target>

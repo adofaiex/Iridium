@@ -395,7 +395,7 @@ namespace Iridium.Patches
                 editor.showFloorNums = !editor.showFloorNums;
 
                 // Skip RemakePath() — just refresh floor number labels
-                _drawFloorNums ??= AccessTools.MethodDelegate<Action<scnEditor>>(
+                _drawFloorNums ??= FastDelegate.Open<Action<scnEditor>>(
                     AccessTools.Method(typeof(scnEditor), "DrawFloorNums"), null);
                 _drawFloorNums?.Invoke(editor);
 

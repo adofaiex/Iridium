@@ -15,7 +15,9 @@ namespace Iridium
             _entry = (UnityModManager.ModEntry)entry;
             _entry.OnUpdate = (_, dt) => OnUpdate?.Invoke(dt);
             _entry.OnToggle = (_, v) => { OnToggle?.Invoke(v); return true; };
-            _entry.OnGUI = _ => OnGUI?.Invoke();
+            // The panel chrome (window frame, content slot) is version-specific and lives
+            // in Iridium.UI.PanelShell, which is mirrored across v2/v3.
+            _entry.OnGUI = _ => Iridium.UI.PanelShell.RenderGui(() => OnGUI?.Invoke());
             _entry.OnSaveGUI = _ => OnSaveGUI?.Invoke();
         }
 

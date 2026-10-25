@@ -1,6 +1,9 @@
 {
   "displayName": "简体中文",
   "Language": "语言",
+  "PanelToggleHotkey": "面板唤出热键",
+  "PanelToggleHotkeyInfo": "打开 / 关闭 Iridium 设置面板的热键（所有加载器通用）。点击按钮后按下新的组合键。",
+  "PanelHotkeyHint": "按 {0} 打开 Iridium 设置。此页面仅提示热键：设置界面本身是以 UGUI 窗口绘制的。",
   "SearchHint": "搜索全部设置…",
   "SearchResults": "搜索结果",
   "SearchNoResults": "没有匹配的设置项。",

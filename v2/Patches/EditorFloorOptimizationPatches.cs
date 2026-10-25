@@ -35,7 +35,7 @@ namespace Iridium.Patches
 
         private static void DrawFloorNums(scnEditor editor)
         {
-            (_drawFloorNumsAction ??= AccessTools.MethodDelegate<Action<scnEditor>>(
+            (_drawFloorNumsAction ??= FastDelegate.Open<Action<scnEditor>>(
                 AccessTools.Method(typeof(scnEditor), "DrawFloorNums"), null))?.Invoke(editor);
         }
 

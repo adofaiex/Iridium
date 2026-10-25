@@ -26,7 +26,7 @@ namespace Iridium.Patches
             if (_delegates.TryGetValue(methodName, out var cached)) return cached;
 
             var method = AccessTools.Method(typeof(scrController), methodName);
-            var compiled = AccessTools.MethodDelegate<Action<scrController, ulong?>>(method, null);
+            var compiled = FastDelegate.Open<Action<scrController, ulong?>>(method, null);
             _delegates[methodName] = compiled;
             return compiled;
         }

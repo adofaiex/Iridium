@@ -15,6 +15,14 @@
             <Link text="learn.modrift.org/mods/iridium" url="https://learn.modrift.org/mods/iridium" />
         </HBox>
 
+        <HBox align="center">
+            <Text text={localize('PanelToggleHotkey')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('PanelToggleHotkey')" />
+            <Fill />
+            <Button text={getPanelHotkey()} on-click="OnBindPanelHotkey" />
+        </HBox>
+        {isInfoExpanded('PanelToggleHotkey') && <Text text={localize('PanelToggleHotkeyInfo')} style="hint" />}
+
         <Separator />
         <Text text={localize('UIBehavior')} style="subtitle" />
         <Separator />

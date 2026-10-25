@@ -15,6 +15,29 @@ namespace Iridium.Patches.Optimizer
 	{
 		public static ConcurrentDictionary<string, Vector3> decorRatios = new();
 		public static ConditionalWeakTable<Texture2D, string> textureNameMap = new();
+
+		/// <summary>
+		/// Ratio per texture instance. The name-keyed table is wiped on every LoadLevel, but
+		/// the game keeps its resized textures cached — without this the second play of the
+		/// same level finds no ratio and draws decorations at the reduced texture's native
+		/// (smaller) size. Entries disappear with the texture (weak table).
+		/// </summary>
+		private sealed class RatioBox
+		{
+			public Vector3 Value;
+		}
+
+		private static readonly ConditionalWeakTable<Texture2D, RatioBox> _ratioByTexture = new();
+
+		public static void RecordDecorRatio(Texture2D? texture, string? name, Vector3 ratio)
+		{
+			if (texture != null)
+			{
+				_ratioByTexture.Remove(texture);
+				try { _ratioByTexture.Add(texture, new RatioBox { Value = ratio }); } catch { }
+			}
+			if (!string.IsNullOrEmpty(name)) decorRatios[name] = ratio;
+		}
 		private static ConcurrentDictionary<int, byte> _prefixCompletedTextures = new();
 		public static float savedVRAM_MB = 0f;
 		private static int processedTextureCount = 0;
@@ -65,6 +88,13 @@ namespace Iridium.Patches.Optimizer
 			{
 				scale = Vector3.one;
 				return false;
+			}
+
+			// Instance first: survives renames and the per-level reset of the name table.
+			if (_ratioByTexture.TryGetValue(tex, out var box))
+			{
+				scale = box.Value;
+				return true;
 			}
 
 			if (!string.IsNullOrEmpty(tex.name) && decorRatios.TryGetValue(tex.name, out scale))
@@ -202,9 +232,9 @@ namespace Iridium.Patches.Optimizer
 			if (prop != null)
 			{
 				if (prop.GetMethod != null)
-					_getSpriteUnscaledSize = AccessTools.MethodDelegate<Func<scrVisualDecoration, Vector2>>(prop.GetMethod);
+					_getSpriteUnscaledSize = FastDelegate.Open<Func<scrVisualDecoration, Vector2>>(prop.GetMethod);
 				if (prop.SetMethod != null)
-					_setSpriteUnscaledSize = AccessTools.MethodDelegate<Action<scrVisualDecoration, Vector2>>(prop.SetMethod);
+					_setSpriteUnscaledSize = FastDelegate.Open<Action<scrVisualDecoration, Vector2>>(prop.SetMethod);
 			}
 			_decorScaleInit = true;
 		}

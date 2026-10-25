@@ -19,6 +19,10 @@ namespace Iridium
             _handler = new MelonHandler(this);
             // The desktop MelonLoader target is Mono.
             Iridium.Main.Initialize(_handler, new Iridium.Runtime.MonoRuntimeHost());
+            // Fire the "mod enabled" event like every other loader does. Without it
+            // AsyncPatchManager never starts and *no* patch is applied — MelonLoader was
+            // the only loader that silently skipped this.
+            _handler.TriggerToggle(true);
         }
 
         public override void OnUpdate()

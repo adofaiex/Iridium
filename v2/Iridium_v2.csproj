@@ -320,7 +320,10 @@
 			<FilesToCopy Include="$(ProjectDir)Info.json" />
 			<ResourceFiles Include="$(ProjectDir)Resources\**\*" Exclude="$(ProjectDir)Resources\**\*\" />
 		</ItemGroup>
-		<Copy SourceFiles="@(FilesToCopy)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+		<!-- Managed dlls are always copied: SkipUnchangedFiles compares timestamps, so a
+		     same-second build could ship the previous build's loader next to a freshly
+		     compiled Iridium.dll. Resources stay skipped when equal. -->
+		<Copy SourceFiles="@(FilesToCopy)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" ContinueOnError="true" />
 		<Copy SourceFiles="@(ResourceFiles)" DestinationFolder="$(OutDir)Resources\%(RecursiveDir)" SkipUnchangedFiles="true" />
 		<Message Text="Files copied to: $(OutDir)" Importance="high" />
 	</Target>

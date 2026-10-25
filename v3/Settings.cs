@@ -34,6 +34,9 @@ namespace Iridium
         public EditorShortcutSettings editorShortcuts = new();
         public AsyncInputSettings asyncInput = new();
 
+        // 无内置管理器界面的加载器（MelonLoader / BepInEx）用它打开或关闭设置面板。
+        public string panelToggleHotkey = "Ctrl+F9";
+
         private string? _defaultLobbyMusicPathCache;
         private string? _fastLobbyMusicPathCache;
 
@@ -244,12 +247,14 @@ namespace Iridium
         private bool _isBindingPauseKey = false;
         private int _bindKeyStartFrame = -1;
         private string _bindingTarget = null;
+        /// <summary>Display-only text while recording (never written to Settings.xml).</summary>
+        private string _bindingPreview = null;
         private int _bindingOldKey, _bindingOldMods;
 
         private string[] _cachedTabDisplayNames = System.Array.Empty<string>();
         private string _cachedLanguage = "";
 
-        private IrisGuiRenderer _renderer;
+        private IrisGoRenderer _renderer;
         private bool _rendererInitialized = false;
 
         private string[] GetTabDisplayNames()
@@ -263,11 +268,54 @@ namespace Iridium
             return _cachedTabDisplayNames;
         }
 
+        /// <summary>UGUI renderer backing the settings panel (see <see cref="Iridium.UI.PanelShell"/>).</summary>
+        public IrisGoRenderer UI
+        {
+            get
+            {
+                InitializeRenderer();
+                return _renderer;
+            }
+        }
+
+        /// <summary>
+        /// Hands the settings tree a parent transform (the panel's scroll content) and
+        /// renders it. Called once by the panel shell.
+        /// </summary>
+        public bool AttachUi(Transform parent)
+        {
+            InitializeRenderer();
+            if (parent == null) return false;
+            _renderer.ParentTransform = parent;
+            // The panel is sized in canvas units; scale the theme metrics with it so text
+            // and controls don't look lost inside a large window.
+            _renderer.UiScale = 1.25f;
+            // The panel already provides the window: fill its width, hug the height.
+            _renderer.Fit = IrisGoRenderer.WrapperFit.StretchWidth;
+            // UGUI has no per-frame redraw: rebuild only when something changed, and
+            // never while the user is typing (it would drop focus mid-word).
+            _renderer.AutoRebuildOnChange = true;
+            _renderer.OnHandlerInvoked = () => _renderer.MarkDirty();
+            _renderer.Visible = true;
+
+            string imlPath = System.IO.Path.Combine(
+                Main.Handler?.ModPath ?? "",
+                "Resources", "ui", "Settings.iml");
+            if (!System.IO.File.Exists(imlPath))
+            {
+                Main.Logger?.Error($"[Settings] IML file not found: {imlPath}");
+                return false;
+            }
+            _renderer.LoadFile(imlPath);
+            _renderer.Rebuild();
+            return true;
+        }
+
         private void InitializeRenderer()
         {
             if (_rendererInitialized) return;
 
-            _renderer = new IrisGuiRenderer();
+            _renderer = new IrisGoRenderer();
             if (Main.Logger != null)
                 _renderer.LogDelegate = msg => Main.Logger.Log(msg);  // 适配签名
             _renderer.SetHotReload(false);
@@ -298,7 +346,13 @@ namespace Iridium
             _renderer.RegisterFunction("getShortcutDisplay", args =>
             {
                 if (args.Length >= 2 && args[0] is int key && args[1] is int mods)
+                {
+                    // While this row is being recorded, show the pending combination.
+                    // The IML passes the committed key/mods, so matching them against the
+                    // armed target is how we know which row is recording.
+                    if (IsRecordingRow(key, mods)) return _bindingPreview;
                     return ShortcutDisplay(key, mods);
+                }
                 return "";
             });
 
@@ -338,7 +392,19 @@ namespace Iridium
                 return list;
             });
             _renderer.RegisterHandler<string>("OnSectionToggle", key => ToggleSection(key));
-            _renderer.RegisterHandler<string>("OnLanguageClick", lang => { language = lang; Save(); });
+            // The panel used to be a loader-specific IMGUI window; now that it is UGUI it
+            // exists on every loader, so its hotkey is a first-class setting.
+            _renderer.RegisterFunction("getPanelHotkey", args =>
+                _isBindingPauseKey && !string.IsNullOrEmpty(_bindingPreview) ? _bindingPreview : panelToggleHotkey);
+            _renderer.RegisterHandler("OnBindPanelHotkey", () => ToggleBinding("panelToggle"));
+            _renderer.RegisterHandler<string>("OnLanguageClick", lang =>
+            {
+                // Guard the cast: a missing ForEach scope used to deliver null here and
+                // silently write a null language (no translation, no highlight).
+                if (string.IsNullOrEmpty(lang) || lang == language) return;
+                language = lang;
+                Save();
+            });
             _renderer.RegisterHandler<string>("OnInfoToggle", key => ToggleInfo(key));
             _renderer.RegisterFunction("isInfoExpanded", args =>
                 args.Length > 0 && args[0] is string key && IsInfoExpanded(key));
@@ -356,8 +422,6 @@ namespace Iridium
             });
 
             RegisterShortcutHandlers();
-
-            _renderer.SetLayout(new IridiumLayoutAdapter());
 
             RegisterOptimizerHandlers();
             RegisterUIHandlers();
@@ -1384,21 +1448,34 @@ namespace Iridium
         private void RegisterShortcutHandlers()
         {
             var keys = new[] {
-                ("selectAll",       (Action)(() => StartBinding("selectAll"))),
-                ("deselectAll",     () => StartBinding("deselectAll")),
-                ("toggleVisibility",() => StartBinding("toggleVisibility")),
-                ("focusDecoration", () => StartBinding("focusDecoration")),
-                ("goToFloor",       () => StartBinding("goToFloor")),
-                ("selectAllFloors", () => StartBinding("selectAllFloors")),
-                ("popupSave",       () => StartBinding("popupSave")),
-                ("popupDiscard",    () => StartBinding("popupDiscard")),
+                ("selectAll",       (Action)(() => ToggleBinding("selectAll"))),
+                ("deselectAll",     () => ToggleBinding("deselectAll")),
+                ("toggleVisibility",() => ToggleBinding("toggleVisibility")),
+                ("focusDecoration", () => ToggleBinding("focusDecoration")),
+                ("goToFloor",       () => ToggleBinding("goToFloor")),
+                ("selectAllFloors", () => ToggleBinding("selectAllFloors")),
+                ("popupSave",       () => ToggleBinding("popupSave")),
+                ("popupDiscard",    () => ToggleBinding("popupDiscard")),
             };
             foreach (var (name, handler) in keys)
             {
                 var cap = char.ToUpper(name[0]) + name.Substring(1);
                 _renderer.RegisterHandler($"OnBind{cap}Key", (obj) => handler());
             }
-            _renderer.RegisterHandler("OnBindEditorPauseKey", (obj) => StartBinding("editorPause"));
+            _renderer.RegisterHandler("OnBindEditorPauseKey", (obj) => ToggleBinding("editorPause"));
+        }
+
+        /// <summary>
+        /// True when the (key, mods) passed by a shortcut row belong to the row currently
+        /// being recorded, so it can display the pending combination.
+        /// </summary>
+        private bool IsRecordingRow(int key, int mods)
+        {
+            if (!_isBindingPauseKey || string.IsNullOrEmpty(_bindingTarget)) return false;
+            if (string.IsNullOrEmpty(_bindingPreview)) return false;
+
+            GetBinding(_bindingTarget, out int currentKey, out int currentMods);
+            return currentKey == key && currentMods == mods;
         }
 
         private void StartBinding(string target)
@@ -1406,8 +1483,16 @@ namespace Iridium
             // Save old values for cancel
             GetBinding(target, out _bindingOldKey, out _bindingOldMods);
             _bindingTarget = target;
+            _bindingPreview = null;
+            _pendingKey = 0;
+            _pendingMods = 0;
             _isBindingPauseKey = true;
             _bindKeyStartFrame = Time.frameCount;
+
+            // Drop text-field focus, otherwise keys typed during recording go into the
+            // field instead of being captured as a shortcut.
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            if (eventSystem != null) eventSystem.SetSelectedGameObject(null);
         }
 
         private void GetBinding(string target, out int key, out int mods)
@@ -1424,7 +1509,51 @@ namespace Iridium
                 case "popupSave":          key = editorShortcuts.popupSaveKey; mods = editorShortcuts.popupSaveModifiers; break;
                 case "popupDiscard":       key = editorShortcuts.popupDiscardKey; mods = editorShortcuts.popupDiscardModifiers; break;
                 case "editorPause":        key = compatibility.editorPauseKey; mods = compatibility.editorPauseModifiers; break;
+                case "panelToggle":        ParseHotkey(panelToggleHotkey, out key, out mods); break;
             }
+        }
+
+        /// <summary>
+        /// Parses "Ctrl+F9" style strings into the same key/modifier encoding the editor
+        /// shortcuts use (1=Ctrl, 2=Alt, 4=Shift, 8=Win).
+        /// </summary>
+        private static void ParseHotkey(string hotkey, out int key, out int mods)
+        {
+            key = 0;
+            mods = 0;
+            if (string.IsNullOrEmpty(hotkey)) return;
+
+            foreach (var raw in hotkey.Split('+'))
+            {
+                var part = raw.Trim();
+                if (part.Length == 0) continue;
+
+                switch (part.ToLowerInvariant())
+                {
+                    case "ctrl": mods |= 1; break;
+                    case "alt": mods |= 2; break;
+                    case "shift": mods |= 4; break;
+                    case "win": mods |= 8; break;
+                    default:
+                        if (Enum.TryParse<KeyCode>(part, ignoreCase: true, out var code)) key = (int)code;
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Formats a binding for Settings.panelToggleHotkey. Uses KeyCode names (so digits
+        /// become "Alpha1"), which is what PanelShell.CheckHotkey parses back.
+        /// </summary>
+        private static string FormatHotkey(int key, int mods)
+        {
+            var text = "";
+            if ((mods & 1) != 0) text += "Ctrl+";
+            if ((mods & 2) != 0) text += "Alt+";
+            if ((mods & 4) != 0) text += "Shift+";
+            if ((mods & 8) != 0) text += "Win+";
+            if (key == 0) return text.TrimEnd('+');
+            return text + ((KeyCode)key).ToString();
         }
 
         private void ApplyBinding(string target, int key, int mods)
@@ -1440,6 +1569,7 @@ namespace Iridium
                 case "popupSave":          editorShortcuts.popupSaveKey = key; editorShortcuts.popupSaveModifiers = mods; break;
                 case "popupDiscard":       editorShortcuts.popupDiscardKey = key; editorShortcuts.popupDiscardModifiers = mods; break;
                 case "editorPause":        compatibility.editorPauseKey = key; compatibility.editorPauseModifiers = mods; break;
+                case "panelToggle":        panelToggleHotkey = FormatHotkey(key, mods); break;
             }
             Save();
         }
@@ -1460,104 +1590,321 @@ namespace Iridium
             return modStr + keyName;
         }
 
+        /// <summary>
+        /// IMGUI hook, kept for loaders whose settings page is IMGUI (UMM, MiniModLoader).
+        /// The settings tree itself is UGUI and cannot be embedded here, so this only
+        /// shows which hotkey opens the panel.
+        /// </summary>
         public void OnGUI()
         {
-            int initialStackDepth = IridiumLayout.Engine.ContainerStack.Count;
+            var hotkey = string.IsNullOrEmpty(panelToggleHotkey) ? "Ctrl+F9" : panelToggleHotkey;
+            var hint = string.Format(Localization.Get("PanelHotkeyHint", language), hotkey);
 
+            IridiumLayout.Render(
+                IridiumLayout.VBox(
+                    IridiumLayout.ContainerStyle.Padding,
+                    null,
+                    IridiumLayout.Text(hint, IridiumLayout.TextStyle.Secondary)
+                )
+            );
+        }
+
+        /// <summary>True while the user is recording a new shortcut in the settings UI.</summary>
+        public bool IsCapturingHotkey => _isBindingPauseKey;
+
+        /// <summary>
+        /// Per-frame UI tick: key-binding capture plus the UGUI renderer's dirty rebuild.
+        /// </summary>
+        public void TickUI()
+        {
             try
             {
-                EnsureTexturesAlive();
+            ApplyPendingCaret();
+            _defaultLobbyMusicPathCache ??= lobbyMusic.defaultMusicPath;
+            _fastLobbyMusicPathCache ??= lobbyMusic.fastMusicPath;
 
-                _defaultLobbyMusicPathCache ??= lobbyMusic.defaultMusicPath;
-                _fastLobbyMusicPathCache ??= lobbyMusic.fastMusicPath;
+            // While recording a shortcut the tree must stay untouched: a rebuild would
+            // destroy the very button the user just clicked and drop keyboard focus, so the
+            // key press was never captured. Refresh once recording ends instead.
+            if (_isBindingPauseKey)
+            {
+                PollBindingCapture();
+                // Text-only refresh: the recorder button shows the pending combination,
+                // but the tree must not be rebuilt while recording.
+                _renderer?.RefreshTexts();
+                return;
+            }
 
-                InitializeRenderer();
+            if (!_rendererInitialized || _renderer == null) return;
 
-                string imlPath = System.IO.Path.Combine(
-                    Main.Handler?.ModPath ?? "",
-                    "Resources", "ui", "Settings.iml");
-
-                if (System.IO.File.Exists(imlPath))
+            // A rebuild throws the tree away, so remember which field had focus (and where
+            // the caret was) and put it back afterwards — otherwise typing one character
+            // in the search box would drop focus and the results would never update.
+            string focusName = null;
+            string focusId = null;
+            int caret = 0;
+            // Unity's fake-null means `?.` is not enough: a destroyed EventSystem or
+            // GameObject still compares unequal to null.
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            if (eventSystem != null)
+            {
+                var selected = eventSystem.currentSelectedGameObject;
+                if (selected != null)
                 {
-                    _renderer.Render(imlPath);
+                    var field = selected.GetComponent<UnityEngine.UI.InputField>();
+                    if (field != null)
+                    {
+                        focusName = field.gameObject.name;
+                        focusId = selected.GetComponent<Iris.Iml.IrisGoRenderer.SuppressOnDestroy>()?.FieldId;
+                        caret = field.caretPosition;
+                    }
+                }
+            }
+
+            _renderer.Tick();
+
+            if (focusName == null) return;
+            foreach (var candidate in Resources.FindObjectsOfTypeAll<UnityEngine.UI.InputField>())
+            {
+                if (candidate == null) continue;           // destroyed entries are reported
+                if (candidate.gameObject == null) continue;
+
+                // Prefer the stable field id: every slider value box is called
+                // "ValueField", so matching by name focused an arbitrary one.
+                bool match;
+                if (!string.IsNullOrEmpty(focusId))
+                {
+                    var marker = candidate.GetComponent<Iris.Iml.IrisGoRenderer.SuppressOnDestroy>();
+                    match = marker != null && marker.FieldId == focusId;
                 }
                 else
                 {
-                    // fallback: hardcoded minimal UI if IML file missing
-                    IridiumLayout.Render(
-                        IridiumLayout.VBox(
-                            IridiumLayout.ContainerStyle.Padding,
-                            null,
-                            IridiumLayout.Text("IML file not found: Settings.iml", IridiumLayout.TextStyle.Secondary)
-                        )
-                    );
+                    match = candidate.gameObject.name == focusName;
                 }
+                if (!match) continue;
+                if (!candidate.gameObject.activeInHierarchy) continue;
+                candidate.ActivateInputField();
 
-                // Key binding capture — real-time display
-                if (_isBindingPauseKey)
-                {
-                    var ev = Event.current;
-                    if (ev != null && ev.type == EventType.KeyDown)
-                    {
-                        var kc = ev.keyCode;
-                        bool isMod = kc == KeyCode.LeftControl || kc == KeyCode.RightControl ||
-                            kc == KeyCode.LeftShift || kc == KeyCode.RightShift ||
-                            kc == KeyCode.LeftAlt || kc == KeyCode.RightAlt ||
-                            kc == KeyCode.LeftCommand || kc == KeyCode.RightCommand;
+                int length = candidate.text != null ? candidate.text.Length : 0;
+                int clamped = Mathf.Clamp(caret, 0, length);
+                candidate.caretPosition = clamped;
+                candidate.selectionAnchorPosition = clamped;
+                candidate.selectionFocusPosition = clamped;
 
-                        int mods = 0;
-                        if (ev.control) mods |= 1;
-                        // Bit layout must match EditorShortcutPatches.MOD_*:
-                        // 2=Alt, 4=Shift (NOT Unity's Event field order).
-                        if (ev.shift) mods |= 4;
-                        if (ev.alt) mods |= 2;
-                        if (ev.command) mods |= 8;
-
-                        if (isMod)
-                        {
-                            // Real-time modifier display: show "Ctrl+..." etc.
-                            ApplyBinding(_bindingTarget, 0, mods);
-                            ev.Use();
-                        }
-                        else if (kc != KeyCode.None && kc != KeyCode.Escape)
-                        {
-                            // Final key pressed — save binding
-                            ApplyBinding(_bindingTarget, (int)kc, mods);
-                            _isBindingPauseKey = false;
-                            _bindingTarget = null;
-                            ev.Use();
-                        }
-                        else if (kc == KeyCode.Escape)
-                        {
-                            // Cancel — restore old binding
-                            ApplyBinding(_bindingTarget, _bindingOldKey, _bindingOldMods);
-                            _isBindingPauseKey = false;
-                            _bindingTarget = null;
-                            ev.Use();
-                        }
-                    }
-                }
-
-                if (GUI.changed) Save();
+                // Activation happens in the next LateUpdate and resets the caret, so keep
+                // re-applying it for a couple of frames (see ApplyPendingCaret).
+                _caretField = candidate;
+                _caretIndex = clamped;
+                _caretFramesLeft = 3;
+                break;
+            }
             }
             catch (Exception ex)
             {
-                Main.Logger?.Error($"[OnGUI] Settings.OnGUI failed: {ex}");
-                throw;
-            }
-            finally
-            {
-                while (IridiumLayout.Engine.ContainerStack.Count > initialStackDepth)
+                // Never let the settings UI take down the whole frame: Main.OnUpdate does
+                // patch maintenance after this call.
+                if (!_tickUiErrorLogged)
                 {
-                    try { IridiumLayout.Engine.End(); }
-                    catch { break; }
+                    _tickUiErrorLogged = true;
+                    Main.Logger?.Error($"[Settings] TickUI failed (further errors suppressed): {ex}");
                 }
             }
         }
 
+        private bool _tickUiErrorLogged;
+
+        // Caret restoration across a rebuild. InputField activation is deferred to the
+        // next LateUpdate and resets the caret, so a single assignment right after
+        // ActivateInputField() is lost — which made every new character insert at
+        // position 0 ("1234" arrived as "4321"). Re-apply for a couple of frames.
+        private UnityEngine.UI.InputField? _caretField;
+        private int _caretIndex;
+        private int _caretFramesLeft;
+
+        private void ApplyPendingCaret()
+        {
+            if (_caretField == null || _caretFramesLeft <= 0) return;
+
+            // The user is placing the caret by hand (or selecting text) — their click wins.
+            // Without this, the frames of caret re-application that follow a rebuild would
+            // snap the caret back to the pre-rebuild position (often 0).
+            if (Input.GetMouseButtonDown(0) || Input.GetMouseButton(0))
+            {
+                _caretField = null;
+                return;
+            }
+
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            if (eventSystem == null || eventSystem.currentSelectedGameObject != _caretField.gameObject)
+            {
+                _caretField = null;
+                return;
+            }
+
+            int length = _caretField.text != null ? _caretField.text.Length : 0;
+            int caret = Mathf.Clamp(_caretIndex, 0, length);
+            _caretField.caretPosition = caret;
+            _caretField.selectionAnchorPosition = caret;
+            _caretField.selectionFocusPosition = caret;
+
+            if (--_caretFramesLeft <= 0) _caretField = null;
+        }
+
+        /// <summary>
+        /// Key binding capture. The IMGUI version read <c>Event.current</c>; UGUI has no
+        /// equivalent, so poll the keyboard directly while capture is armed.
+        /// </summary>
+        private void PollBindingCapture()
+        {
+            // Ignore the frame the capture started on: that click's own key press would
+            // immediately be recorded as the new binding.
+            if (Time.frameCount <= _bindKeyStartFrame) return;
+
+            // Any click ends recording and commits the pending combination (clicking the
+            // recorder button again does the same, see ToggleBinding).
+            if (Input.GetMouseButtonDown(0))
+            {
+                FinishBinding();
+                return;
+            }
+
+            int mods = 0;
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) mods |= 1;
+            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) mods |= 4;
+            if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) mods |= 2;
+            // Use the Windows keys on Windows; Command/Apple only exists on macOS
+            // (KeyCode.LeftCommand aliases a different virtual key there and was producing
+            // a spurious "Win" modifier).
+            bool win = Input.GetKey(KeyCode.LeftWindows) || Input.GetKey(KeyCode.RightWindows);
+            if (Application.platform == RuntimePlatform.OSXPlayer)
+                win |= Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand);
+            if (win) mods |= 8;
+
+            // Scan every KeyCode, not 0..255: function keys (F1..F15 = 282..296) live above
+            // that range, so F9 could never be recorded.
+            foreach (var key in AllKeys)
+            {
+                if (key == KeyCode.None) continue;
+                if (IsModifierKey(key)) continue;
+                if (IsMouseKey(key)) continue;
+                if (!Input.GetKeyDown(key)) continue;
+
+                if (key == KeyCode.Escape)
+                {
+                    CancelBinding();
+                    return;
+                }
+
+                // Arm the combination; it is committed when focus is lost. Format it like the row
+                // that owns it so the button text doesn't change shape while recording.
+                _pendingKey = (int)key;
+                _pendingMods = mods;
+                _bindingPreview = _bindingTarget == "panelToggle"
+                    ? FormatHotkey(_pendingKey, _pendingMods)
+                    : ShortcutDisplay(_pendingKey, _pendingMods);
+                return;
+            }
+
+            // Nothing pressed yet: preview the held modifiers.
+            if (mods != 0)
+            {
+                _bindingPreview = _bindingTarget == "panelToggle"
+                    ? FormatHotkey(0, mods)
+                    : ShortcutDisplay(0, mods);
+            }
+        }
+
+        private int _pendingKey;
+        private int _pendingMods;
+
+        /// <summary>Click on a recorder button: arm, or commit if that row is already armed.</summary>
+        private void ToggleBinding(string target)
+        {
+            if (_isBindingPauseKey)
+            {
+                FinishBinding();
+                return;
+            }
+
+            // The click that ended the previous recording must not immediately re-arm it.
+            if (Time.unscaledTime - _bindingFinishedTime < 0.25f) return;
+
+            StartBinding(target);
+        }
+
+        /// <summary>Commit the pending combination and leave recording mode.</summary>
+        private void FinishBinding()
+        {
+            var target = _bindingTarget;
+            if (!string.IsNullOrEmpty(target) && _pendingKey != 0)
+                ApplyBinding(target, _pendingKey, _pendingMods);
+
+            ResetBindingState();
+            _bindingFinishedTime = Time.unscaledTime;
+            _renderer?.RequestRebuild();
+        }
+
+        /// <summary>Esc: drop the pending combination and restore the previous one.</summary>
+        private void CancelBinding()
+        {
+            if (!string.IsNullOrEmpty(_bindingTarget))
+                ApplyBinding(_bindingTarget, _bindingOldKey, _bindingOldMods);
+
+            ResetBindingState();
+            _bindingFinishedTime = Time.unscaledTime;
+            _renderer?.RequestRebuild();
+        }
+
+        private void ResetBindingState()
+        {
+            _isBindingPauseKey = false;
+            _bindingTarget = null;
+            _bindingPreview = null;
+            _pendingKey = 0;
+            _pendingMods = 0;
+        }
+
+        private float _bindingFinishedTime = -99f;
+
+        private static readonly KeyCode[] AllKeys = (KeyCode[])Enum.GetValues(typeof(KeyCode));
+
+        private static bool IsMouseKey(KeyCode key)
+            => key >= KeyCode.Mouse0 && key <= KeyCode.Mouse6;
+
+        private static bool IsModifierKey(KeyCode key) => key switch
+        {
+            KeyCode.LeftControl or KeyCode.RightControl => true,
+            KeyCode.LeftShift or KeyCode.RightShift => true,
+            KeyCode.LeftAlt or KeyCode.RightAlt => true,
+            KeyCode.LeftCommand or KeyCode.RightCommand => true,
+            KeyCode.LeftWindows or KeyCode.RightWindows => true,
+            _ => false,
+        };
+
         public void Save()
         {
             Main.Handler?.SaveSettings(this);
+        }
+
+        // ---- Window geometry persistence (used by Iridium.UI.PanelShell) ----
+
+        public bool HasWindowRect => ui.windowRectSaved && ui.windowWidth > 0f && ui.windowHeight > 0f;
+
+        public void GetWindowRect(out float x, out float y, out float width, out float height)
+        {
+            x = ui.windowX;
+            y = ui.windowY;
+            width = ui.windowWidth;
+            height = ui.windowHeight;
+        }
+
+        public void SetWindowRect(float x, float y, float width, float height)
+        {
+            ui.windowRectSaved = true;
+            ui.windowX = x;
+            ui.windowY = y;
+            ui.windowWidth = width;
+            ui.windowHeight = height;
         }
 
         /// <summary>
@@ -1575,6 +1922,18 @@ namespace Iridium
             if (jt.perfectMinus == "PerfectMinus") jt.perfectMinus = jt.perfect;
             if (jt.xPerfect == "XPerfect") jt.xPerfect = jt.perfect;
             if (jt.perfectPlus == "PerfectPlus") jt.perfectPlus = jt.perfect;
+        }
+
+        /// <summary>
+        /// A hotkey without a key part (e.g. "Win" or "") leaves the panel impossible to
+        /// open, so restore the default when the stored value cannot trigger anything.
+        /// </summary>
+        public static void ValidatePanelHotkey(Settings settings)
+        {
+            ParseHotkey(settings.panelToggleHotkey, out int key, out _);
+            if (key != 0) return;
+            settings.panelToggleHotkey = "Ctrl+F9";
+            Main.Handler?.SaveSettings(settings);
         }
 
         public static void ValidateCustomEasingConflict(Settings settings)
@@ -1603,41 +1962,6 @@ namespace Iridium
                 if (opt.optimizeMoveDecorations) { opt.optimizeMoveDecorations = false; changed = true; }
                 if (changed) AsyncPatchManager.UpdateOptimizerPatchesAsync();
             }
-        }
-    }
-
-    public class IridiumLayoutAdapter : Iris.Iml.IIrrLayout
-    {
-        public void BeginHorizontal(Iris.Iml.IrrContStyle style, GUILayoutOption[] options)
-            => IridiumLayout.Engine.Begin(ContainerDirection.Horizontal, (ContainerStyle)(int)style, null, options);
-
-        public void BeginVertical(Iris.Iml.IrrContStyle style, GUILayoutOption[] options)
-            => IridiumLayout.Engine.Begin(ContainerDirection.Vertical, (ContainerStyle)(int)style, null, options);
-
-        public void End() => IridiumLayout.Engine.End();
-
-        public bool Button(string text, Iris.Iml.IrrButStyle style)
-            => IridiumLayout.Engine.Button(text, (ButtonStyle)(int)style);
-
-        public void Text(string text, Iris.Iml.IrrTextStyle style)
-            => IridiumLayout.Engine.Text(text, (TextStyle)(int)style);
-
-        public bool? Switch(bool on) => IridiumLayout.Engine.Switch(on);
-        public bool? Checkbox(bool on) => IridiumLayout.Engine.Checkbox(on);
-        public void Separator() => IridiumLayout.Engine.Separator();
-        public void Space(double size) => IridiumLayout.Engine.Space(size);
-        public void Fill() => IridiumLayout.Engine.Fill();
-        public string? TextField(string content) => IridiumLayout.Engine.TextField(content);
-        public string? TextField(string content, string? hint, int? width)
-            => IridiumLayout.Engine.TextField(content, hint, width);
-
-        public bool Icon(Iris.Iml.IrrIconStyle style)
-            => IridiumLayout.Engine.Icon((IconStyle)(int)style);
-
-        public void Link(string text, string url)
-        {
-            if (IridiumLayout.Engine.Link(text))
-                Application.OpenURL(url);
         }
     }
 }

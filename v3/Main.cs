@@ -32,13 +32,17 @@ namespace Iridium
             }
             Settings.ValidateCustomEasingConflict(Settings);
             Settings.MigrateJudgeText(Settings);
+            Settings.ValidatePanelHotkey(Settings);
             // Heal shortcut keys saved by builds whose defaults used ASCII
             // letter codes instead of Unity KeyCode values (never triggerable).
             Settings.editorShortcuts.MigrateLegacyAsciiKeyCodes();
 
             handler.OnToggle += OnToggle;
+            // UMM/MiniModLoader still call IHandler.OnGUI to draw their own IMGUI settings
+            // page. UGUI cannot be embedded there, so v3 draws a one-line hotkey hint (see
+            // Settings.OnGUI). MelonLoader/BepInEx go through PanelShell.RenderGui, which is
+            // a no-op in v3, so the hint never appears there.
             handler.OnGUI += () => Settings.OnGUI();
-            handler.OnSaveGUI += () => handler.SaveSettings(Settings);
             handler.OnUpdate += OnUpdate;
 
             RuntimeHost = runtimeHost;
@@ -74,6 +78,19 @@ namespace Iridium
 
         private static void OnUpdate(float dt)
         {
+            // UGUI panel: hotkey + window chrome, then the settings tree. Guarded so a
+            // UI hiccup can never starve the patch/main-thread work below (that queue is
+            // how AsyncPatchManager applies pending patches).
+            try
+            {
+                Iridium.UI.PanelShell.Tick(dt);
+                Settings?.TickUI();
+            }
+            catch (System.Exception ex)
+            {
+                Logger?.Error($"[Main] UI tick failed: {ex.Message}");
+            }
+
             while (_destroyImmObj.TryDequeue(out var obj))
             {
                 Object.DestroyImmediate(obj);
@@ -155,6 +172,8 @@ namespace Iridium
             else
             {
                 Logger?.Log(Localization.Get("ModDisabled"));
+
+                Iridium.UI.PanelShell.SetVisible(false);
 
                 Modules.FerriteCore.FerriteCoreModule.Disable();
                 Modules.FerriteCore.VirtualMemoryOptimizer.SetEnabled(false);
