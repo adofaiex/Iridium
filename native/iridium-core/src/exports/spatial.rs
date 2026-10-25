@@ -1,8 +1,7 @@
 //! Decoration hitbox spatial index exports.
 //!
-//! Thread model: one grid per thread. The host rebuilds once per frame
-//! (`spatial_rebuild`) and then queries it any number of times
-//! (`spatial_query`) from the same thread.
+//! One grid per thread: rebuild via `spatial_rebuild`, then query via
+//! `spatial_query` any number of times from the same thread.
 
 use crate::compute::spatial::Grid;
 use crate::ffi;
@@ -35,10 +34,9 @@ pub unsafe extern "C" fn iridium_core_spatial_rebuild(count: u32, rects: *const 
     })
 }
 
-/// Writes indices of intersecting AABBs into `out_ids` (capacity `cap`).
-///
-/// Returns the number of candidates (which may exceed `cap`; only `cap`
-/// entries are written in that case). Negative on error.
+/// Writes intersecting AABB indices into `out_ids` (capacity `cap`). Returns
+/// the total candidate count, which may exceed `cap`; only `cap` are written.
+/// Negative on error.
 #[no_mangle]
 pub unsafe extern "C" fn iridium_core_spatial_query(
     min_x: f32,
@@ -65,7 +63,7 @@ pub unsafe extern "C" fn iridium_core_spatial_query(
     })
 }
 
-/// Returns the number of items currently indexed (0 before first rebuild).
+/// Number of items currently indexed (0 before first rebuild).
 #[no_mangle]
 pub extern "C" fn iridium_core_spatial_count() -> u32 {
     GRID.with(|cell| cell.borrow().len() as u32)

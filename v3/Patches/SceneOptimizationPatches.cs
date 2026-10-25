@@ -10,17 +10,13 @@ using ADOFAI;
 
 namespace Iridium.Patches
 {
-	/// <summary>
-	/// 专门针对 scnGame 和 scnEditor 的性能优化 Patch
-	/// </summary>
 	public static class SceneOptimizationPatches
 	{
 		#region Shared Caches
 
-		// 组件缓存
 		private static readonly ConditionalWeakTable<scrFloor, FloorMesh> _floorMeshCache = new();
 
-		// 对象池 - 重用 List 避免 GC
+		// Reused lists, to avoid per-frame GC
 		private static readonly List<Collider2D> _reusableColliderList = new(100);
 		private static readonly List<GameObject> _reusableGameObjectList = new(100);
 		private static readonly List<ffxPlusBase> _reusableEffectList = new(50);
@@ -29,9 +25,7 @@ namespace Iridium.Patches
 
 		#region scnGame Optimizations
 
-		/// <summary>
-		/// 优化 scnGame.Update - 只在相机参数变化时更新
-		/// </summary>
+		/// <summary>只在相机参数变化时更新。</summary>
 		[IriPatch(Path = "optimizer/scene", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer,optimizeScnGameUpdate")]
 		[HarmonyPatch(typeof(scnGame), "Update")]
 		public static class ScnGameUpdateOptimizationPatch
@@ -70,7 +64,7 @@ namespace Iridium.Patches
 
 				int startFrame = _startFrameAccessor(__instance);
 
-				// 特殊情况：第3帧必须执行
+				// 第3帧必须执行
 				if ((GCS.customLevelPaths != null || ADOBase.isInternalLevel) &&
 					!ADOBase.isLevelEditor &&
 					Time.frameCount - startFrame == 3)
@@ -89,7 +83,6 @@ namespace Iridium.Patches
 					return false;
 				}
 
-				// 更新缓存
 				_lastOrthoSize = orthoSize;
 				_lastAspect = aspect;
 
@@ -97,7 +90,6 @@ namespace Iridium.Patches
 				float width = height * aspect;
 				_cachedScreenSize = new Vector2(width, height);
 
-				// 手动执行更新逻辑，避免重复计算
 				var camInstance = scrCamera.instance;
 				if (camInstance != null)
 				{
@@ -119,9 +111,7 @@ namespace Iridium.Patches
 
 		#region scnEditor Optimizations
 
-		/// <summary>
-		/// 优化 scnEditor.ObjectsAtMouse - 重用 List 避免 GC
-		/// </summary>
+		/// <summary>重用 List 避免 GC。</summary>
 		[IriPatch(Path = "optimizer/scene", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer,optimizeEditorMouseDetection")]
 		[HarmonyPatch(typeof(scnEditor), "ObjectsAtMouse")]
 		public static class ObjectsAtMouseOptimizationPatch
@@ -145,15 +135,12 @@ namespace Iridium.Patches
 
 					_lastFrameUpdated = Time.frameCount;
 
-					// 重用 List
 					_reusableColliderList.Clear();
 					_reusableGameObjectList.Clear();
 
-					// 获取鼠标位置
 					Vector2 mousePos = __instance.camera.ScreenToWorldPoint(Input.mousePosition);
 					float magnitude = __instance.camera.orthographicSize * 2f;
 
-					// 遍历 floors
 					var floors = __instance.floors;
 					if (floors == null)
 					{
@@ -169,7 +156,6 @@ namespace Iridium.Patches
 						Vector2 floorPos = floor.transform.position;
 						if (Vector2.Distance(floorPos, mousePos) > magnitude) continue;
 
-						// 使用缓存的 FloorMesh
 						if (!_floorMeshCache.TryGetValue(floor, out var floorMesh))
 						{
 							floorMesh = floor.GetComponent<FloorMesh>();
@@ -188,7 +174,6 @@ namespace Iridium.Patches
 						}
 					}
 
-					// 执行物理检测
 					var hits = Physics2D.OverlapPointAll(mousePos);
 					var resultList = new List<GameObject>();
 
@@ -198,8 +183,7 @@ namespace Iridium.Patches
 							resultList.Add(hit.gameObject);
 					}
 
-					// Match original: return null when nothing hit so caller can
-					// DeselectFloors() + DeselectAllDecorations() on empty clicks
+					// Match original: null (not empty) on no hit so the caller can deselect
 					__result = resultList.Count > 0 ? resultList.ToArray() : null!;
 					_cachedResult = __result;
 
@@ -213,9 +197,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		/// <summary>
-		/// 优化 scnEditor.DestroyEventIndicators - 维护列表而不是每次 Find
-		/// </summary>
+		/// <summary>销毁事件指示器：只调一次 FindGameObjectsWithTag。</summary>
 		[IriPatch(Path = "optimizer/scene", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer,optimizeEditorEventIndicators")]
 		[HarmonyPatch(typeof(scnEditor), "DestroyEventIndicators")]
 		public static class DestroyEventIndicatorsPatch
@@ -231,7 +213,6 @@ namespace Iridium.Patches
 					if (__instance.EventCircle != null)
 						__instance.EventCircle.gameObject.SetActive(false);
 
-					// 使用 FindGameObjectsWithTag 但只调用一次
 					var indicators = GameObject.FindGameObjectsWithTag("EventIndicator");
 					foreach (var indicator in indicators)
 					{
@@ -249,10 +230,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		/// <summary>
-		/// ToggleFloorNumsEditorAction 不再调用 RemakePath()（重建整个路径很慢），
-		/// 改为只调 DrawFloorNums() 刷新编号标签的可见性。
-		/// </summary>
+		/// <summary>只调 DrawFloorNums() 刷新编号标签可见性，不重建整个路径。</summary>
 		[IriPatch(Path = "optimizer/scene", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer")]
 		[HarmonyPatch(typeof(ToggleFloorNumsEditorAction), nameof(ToggleFloorNumsEditorAction.Execute))]
 		public static class ToggleFloorNumsActionPatch
@@ -267,7 +245,7 @@ namespace Iridium.Patches
 				int num = editor.SelectionIsSingle() ? editor.selectedFloors[0].seqID : -1;
 				editor.showFloorNums = !editor.showFloorNums;
 
-				// Skip RemakePath() — just refresh floor number labels
+				// Skip RemakePath(), just refresh floor number labels
 				_drawFloorNums ??= AccessTools.MethodDelegate<Action<scnEditor>>(
 					AccessTools.Method(typeof(scnEditor), "DrawFloorNums"), null);
 				_drawFloorNums?.Invoke(editor);
@@ -283,9 +261,6 @@ namespace Iridium.Patches
 
 		#region Utility Methods
 
-		/// <summary>
-		/// 获取缓存的 FloorMesh 组件
-		/// </summary>
 		public static FloorMesh? GetCachedFloorMesh(scrFloor floor)
 		{
 			if (floor == null) return null;
@@ -300,9 +275,6 @@ namespace Iridium.Patches
 			return mesh;
 		}
 
-		/// <summary>
-		/// 清空所有缓存（用于测试或重置）
-		/// </summary>
 		public static void ClearAllCaches()
 		{
 			_reusableColliderList.Clear();

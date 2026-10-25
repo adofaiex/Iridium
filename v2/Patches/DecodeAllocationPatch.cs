@@ -8,17 +8,11 @@ using HarmonyLib;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// 大谱面加载优化：削减解码 / 事件分组里的重复扩容分配（v2 / 2.9.8）。
-    ///
-    ///  - LevelEvent.Decode 每个事件都会 new Dictionary&lt;string,object&gt;() 与
-    ///    Dictionary&lt;string,bool&gt;()，默认容量 0，插入属性时要多次扩容+数组复制。
-    ///    这里按「该事件在 JSON 里的真实键数」自适应预分配（Prefix 记录 dict.Count），
-    ///    既省掉扩容，又不对小事件浪费容量（固定 32 槽会让几十万事件白占几百 MB）。
-    ///  - scnGame.ApplyEventsToFloors 给每块砖 new List&lt;LevelEvent&gt;()，首次 Add 才分配数组；
-    ///    预分配 4 个位置，省掉每块砖一次小数组分配。
-    ///
-    /// 与「大谱面加载优化」开关挂钩，不依赖优化器总开关。
-    /// </summary>
+/// Cuts repeated grow-and-copy allocations in Decode / event grouping: LevelEvent.Decode
+/// starts both dictionaries at capacity 0, so we presize from the event's real JSON key
+/// count (a fixed 32 slots would waste hundreds of MB across hundreds of thousands of events),
+/// and ApplyEventsToFloors' per-floor lists get 4 slots up front.
+/// </summary>
     public static class DecodeAllocationPatch
     {
         private static readonly ConstructorInfo? DictObjCtor =

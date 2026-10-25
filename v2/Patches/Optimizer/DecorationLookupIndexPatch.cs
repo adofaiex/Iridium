@@ -8,14 +8,10 @@ using UnityEngine;
 namespace Iridium.Patches
 {
 	/// <summary>
-	/// 装饰物按 LevelEvent 查找的 O(D²) 消除（自 v3 移植，2.9.8 适配）。
-	///
-	/// GetDecoration(LevelEvent) / GetDecorationIndex(LevelEvent) 均为
-	/// O(D) 线性扫描，装饰列表搜索对每个装饰各调一次形成 O(D²)。
-	/// 实现：帧级缓存索引（CWT），重建 O(D) 一次，同帧后续 O(1)。
-	/// 语义对齐原版：首个匹配优先、Index 找不到返回 -1。
-	/// 2.9.8 的方法与 sourceLevelEvent 字段与 3.x 一致（已核对反编译源）。
-	/// </summary>
+/// Replaces the O(D) linear GetDecoration(LevelEvent) scan with a per-frame index,
+/// turning decoration list search from O(D²) into one O(D) rebuild. First match
+/// wins; the Index variant still returns -1 when nothing matches.
+/// </summary>
 	public static class DecorationLookupIndexPatch
 	{
 		private sealed class LookupState

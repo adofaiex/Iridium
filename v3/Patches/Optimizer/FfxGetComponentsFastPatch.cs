@@ -9,15 +9,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 大物量谱面加载 / 播放时，ApplyEventsToFloors 会对**每一块砖**做
-	/// GetComponents&lt;ffxPlusBase&gt;() 清理。60 万砖时这是几十万次原生组件查询
-	/// （每次还分配一个数组），是加载与开局卡顿的一大来源。
-	///
-	/// ffxPlusBase 组件在创建时都会登记到 scrFloor.plusEffects（游戏自身的活跃
-	/// 特效注册表），因此 plusEffects 为空的砖块必然没有 ffx 组件，可直接返回空数组。
-	/// 对确有特效的砖块走原版 GetComponents，行为完全不变。
-	/// </summary>
+	/// <summary>A floor with an empty plusEffects registry cannot own ffxPlusBase components, so the per-floor GetComponents scan is skipped.</summary>
 	public static class FfxGetComponentsFastPatch
 	{
 		internal static ffxPlusBase[] GetFast(Component component)

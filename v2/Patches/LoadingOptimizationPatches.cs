@@ -11,10 +11,6 @@ using Iridium.UI;
 
 namespace Iridium.Patches
 {
-    /// <summary>
-    /// 专门优化关卡加载和播放性能的 Patch
-    /// 解决：1GB+ 内存占用、加载卡顿、MoveTrack/MoveDecoration 性能问题
-    /// </summary>
     public static class LoadingOptimizationPatches
     {
         #region Shared State
@@ -33,9 +29,6 @@ namespace Iridium.Patches
 
         #region Event Processing Optimization
 
-        /// <summary>
-        /// 事件预处理 - 缓存每个地板的事件列表
-        /// </summary>
         [HarmonyPatch(typeof(scnGame), "ApplyEventsToFloors",
             typeof(List<scrFloor>), typeof(LevelData), typeof(scrLevelMaker), typeof(List<LevelEvent>))]
         public static class EventPreprocessingPatch
@@ -47,7 +40,6 @@ namespace Iridium.Patches
 
                 try
                 {
-                    // 预处理：构建地板事件缓存
                     _floorEventsCache = new Dictionary<int, List<LevelEvent>>(floors.Count);
 
                     foreach (var evt in events)
@@ -78,11 +70,9 @@ namespace Iridium.Patches
             {
                 if (!Main.Settings.optimizer.cacheFloorEvents) return;
 
-                // 清理缓存
                 _floorEventsCache = null;
             }
 
-            // 提供静态方法供其他代码使用
             public static List<LevelEvent>? GetCachedEvents(int floorIndex)
             {
                 return _floorEventsCache?.TryGetValue(floorIndex, out var list) == true ? list : null;
@@ -108,8 +98,7 @@ namespace Iridium.Patches
                     }
                 }
 
-                // 池中没有，返回 null，DOTween 会自动创建
-                return null;
+                return null; // 池空，DOTween 会自动创建
             }
 
             public static void ReturnTween(Tween tween)
@@ -147,9 +136,6 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// 优化 MoveTrack - 减少 Tween 创建
-        /// </summary>
         [HarmonyPatch(typeof(ffxMoveFloorPlus), "StartEffect")]
         public static class MoveTrackTweenOptimizationPatch
         {
@@ -157,15 +143,9 @@ namespace Iridium.Patches
             public static void Prefix(ffxMoveFloorPlus __instance)
             {
                 if (!Main.Settings.optimizer.optimizeMoveTrackTweens) return;
-
-                // 在 TrackOptimizationPatches 中已有优化
-                // 这里可以添加额外的 Tween 池化逻辑
             }
         }
 
-        /// <summary>
-        /// 优化 MoveDecoration - 批量处理装饰物动画
-        /// </summary>
         [HarmonyPatch(typeof(ffxMoveDecorationsPlus), "StartEffect")]
         public static class MoveDecorationBatchOptimizationPatch
         {
@@ -174,8 +154,6 @@ namespace Iridium.Patches
             {
                 if (!Main.Settings.optimizer.batchMoveDecorations) return;
 
-                // 已在 OptimizerPatches.MoveDecorationsOptimizationPatch 中优化
-                // 这里记录性能数据
                 Main.Logger?.Log($"[LoadingOptimization] MoveDecoration effect started");
             }
         }
@@ -185,14 +163,8 @@ namespace Iridium.Patches
         #region Frame-Spread Decoration Loading
 
         /// <summary>
-        /// 装饰物分帧加载 - 将 UpdateDecorationObjects 中的 CreateDecoration 分散到多帧执行
-        /// 防止几千个装饰物在同一帧 Instantiate 导致卡死
-        /// 
-        /// v2.10.0 专项优化：
-        /// - 去掉 reloadDecorations=false 死代码路径（此路径在游戏中从未被调用）
-        /// - 时间预算分帧：不固定每帧数量，改为双限制（最大数量 + 帧时间预算），
-        ///   简单装饰物加载更快，复杂装饰物也不会卡帧
-        /// - 简化 MoveDecoration 图片预加载，去掉冗余队列直接遍历 events
+        /// Spread CreateDecoration across frames using a per-frame count + time budget
+        /// rather than a fixed count, so a few thousand decorations in one frame cannot hang.
         /// </summary>
         [HarmonyPatch(typeof(scnGame), "UpdateDecorationObjects")]
         public static class FrameSpreadDecorationLoadingPatch
@@ -548,16 +520,12 @@ namespace Iridium.Patches
 
         #region Cleanup
 
-        /// <summary>
-        /// 清理缓存和对象池
-        /// </summary>
         [HarmonyPatch(typeof(scnGame), "OnDestroy")]
         public static class LoadingOptimizationCleanupPatch
         {
             [HarmonyPostfix]
             public static void Postfix()
             {
-                // 只在启用优化时才清理
                 if (!Main.Settings.optimizer.enableOptimizer) return;
 
                 _floorEventsCache?.Clear();
@@ -574,14 +542,10 @@ namespace Iridium.Patches
 
         #region Utility Methods
 
-        /// <summary>
-        /// 检查是否正在批处理创建装饰物
-        /// </summary>
+        /// <summary>检查是否正在批处理创建装饰物</summary>
         public static bool IsBatchCreating => _isBatchCreating;
 
-        /// <summary>
-        /// 获取缓存的地板事件
-        /// </summary>
+        /// <summary>获取缓存的地板事件</summary>
         public static List<LevelEvent>? GetFloorEvents(int floorIndex)
         {
             return EventPreprocessingPatch.GetCachedEvents(floorIndex);

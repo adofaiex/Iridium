@@ -1,15 +1,11 @@
 //! Decoration hitbox spatial index (uniform grid, SoA AABBs).
 //!
-//! Rebuild once per frame from collider world AABBs, then answer overlap
-//! queries. The host uses it as a conservative broad phase over decorations:
-//! a query that returns no candidate proves no physical overlap is possible,
-//! so the expensive per-decoration physics query can be skipped. Candidate
-//! list is exact for AABB overlap; the host still runs its exact narrow phase
-//! for any candidate (tag match / physics contact).
+//! Conservative broad phase: no candidates proves no overlap, so the host can
+//! skip the per-decoration physics query. Candidates are exact for AABB
+//! overlap; the host still runs its narrow phase.
 
-/// One AABB per item, built from packed `[min_x, min_y, max_x, max_y]`.
-/// Items covering more than `MAX_CELLS_PER_RECT` cells go to an overflow
-/// list checked by every query (avoids pathological insertions).
+/// One AABB per item, built from packed `[min_x, min_y, max_x, max_y]`. Items
+/// spanning more than `MAX_CELLS_PER_RECT` cells go to an overflow list.
 const MAX_CELLS_PER_RECT: u32 = 32;
 const MAX_DIM: u32 = 512;
 
@@ -116,7 +112,7 @@ impl Grid {
             self.cell_start[i + 1] += self.cell_start[i];
         }
 
-        // Fill pass (cell_start doubles as write cursor during fill).
+        // Fill pass: cell_start doubles as the write cursor.
         self.cursor.clear();
         self.cursor.extend_from_slice(&self.cell_start[..ncells]);
         let total = self.cell_start[ncells] as usize;
@@ -149,8 +145,7 @@ impl Grid {
         self.gen = 0;
     }
 
-    /// Returns the indices of all items whose AABB intersects `rect`
-    /// (inclusive bounds; conservative, never misses a real overlap).
+    /// Indices of all items whose AABB intersects `rect` (inclusive bounds).
     pub fn query(&mut self, rect: [f32; 4]) -> &[u32] {
         self.scratch.clear();
         if self.count == 0 || !(rect[0].is_finite() && rect[1].is_finite() && rect[2].is_finite() && rect[3].is_finite()) {

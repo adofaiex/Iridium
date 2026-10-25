@@ -6,20 +6,10 @@ using ADOFAI;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// Third-party required mods handling ("Ignore required third-party mods").
-    ///
-    /// Instead of patching the dependency check result, the chart's
-    /// settings.requiredMods is emptied to [] right before the game decodes the
-    /// level. Every piece of game logic that reads requiredMods (LevelDataCLS.Decode,
-    /// LevelData.Decode, and any UI that displays a "mods required" notice) then
-    /// sees an empty list, so the chart loads and plays like a normal level.
-    ///
-    /// The original list is kept per LevelData instance and restored when the
-    /// chart is encoded (saved/exported), so requiredMods survives a save.
-    ///
-    /// Patches here are registered with the ignoreRequiredMods condition so the
-    /// whole feature is applied/removed on demand.
-    /// </summary>
+/// Empties settings.requiredMods to [] before the game decodes the level, so every
+/// reader of that list sees a normal chart. The original is kept per LevelData and
+/// restored on Encode, so it survives a save.
+/// </summary>
     public static class RequiredModsClearPatches
     {
         private static readonly Dictionary<LevelData, object> OriginalRequiredMods = new();
@@ -45,10 +35,7 @@ namespace Iridium.Patches
             return raw;
         }
 
-        /// <summary>
-        /// Empty requiredMods in the editor/play decode path (LevelData.Decode)
-        /// and stash the original value for the encode restore.
-        /// </summary>
+        /// <summary>Editor/play decode path; stash the original for the encode restore.</summary>
         [HarmonyPatch(typeof(LevelData), nameof(LevelData.Decode))]
         public static class LevelDataClearPatch
         {
@@ -61,9 +48,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Empty requiredMods in the level select decode path (LevelDataCLS.Decode).
-        /// </summary>
+        /// <summary>Level select decode path.</summary>
         [HarmonyPatch(typeof(LevelDataCLS), nameof(LevelDataCLS.Decode))]
         public static class LevelDataCLSClearPatch
         {
@@ -76,10 +61,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Restore the original requiredMods before the chart is encoded so it is
-        /// preserved when the level is saved or exported.
-        /// </summary>
+        /// <summary>Restore the original requiredMods before Encode so saving keeps it.</summary>
         [HarmonyPatch(typeof(LevelData), nameof(LevelData.Encode))]
         public static class EncodeRestorePatch
         {
@@ -95,10 +77,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// After a chart has finished loading (editor open or play), notify the
-        /// player of the ignored missing mods.
-        /// </summary>
+        /// <summary>After load, notify the player of the ignored missing mods.</summary>
         [HarmonyPatch(typeof(scnGame), "LoadLevel")]
         public static class LevelLoadNotifyPatch
         {

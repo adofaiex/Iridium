@@ -9,23 +9,11 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-    /// <summary>
-    /// 装饰物热路径纯性能重写（行为语义与原版逐一对齐）：
-    ///
-    /// 1. GetTaggedDecorations：原版是延迟 LINQ 链（Where+SelectMany+Distinct），
-    ///    每次 StartEffect 重新求值并分配枚举器 —— MoveDecorations 密集的谱面
-    ///    （单谱可达 9 万+ 事件）每秒触发数百次。改为直接字典查找 + 物化 List。
-    /// 2. SetRotation：UpdatePosition 每帧无条件重写 pivotTrans.rotation。
-    ///    输入（angle/startRot）未变且不依赖外部状态（stickToFloor/lockRotation）
-    ///    时跳过 —— 消除每帧无效 transform 写入。
-    /// 3. SetScale：同上，另需 camScaleMultiplier 未变（相机缩放会改变结果）。
-    ///
-    /// 注意：每个嵌套补丁类各自带 [IriPatch]，由 PatchManager 逐个注册。
-    /// （只在外层类标注的话 Harmony 容器不会递归到这里，整组补丁会 NotFound。）
-    /// </summary>
+    /// <summary>Rewrites the decoration hot paths (tag lookup, SetRotation, SetScale) into allocation-light, dirty-checked equivalents.</summary>
     public static class DecorationHotPathPatches
     {
-        // ---- 1. GetTaggedDecorations ----
+        // Each nested patch class carries its own [IriPatch]: annotating only the outer class makes the
+        // Harmony container skip them and the whole group reports NotFound.
 
         private static readonly HashSet<scrDecoration> _seen = new HashSet<scrDecoration>();
 
@@ -33,8 +21,7 @@ namespace Iridium.Patches.Optimizer
         [HarmonyPatch]
         public static class GetTaggedDecorationsPatch
         {
-            // GetTaggedDecorations<T>(IEnumerable<string>) 与同参的非泛型重载会让
-            // AccessTools.Method 产生歧义，这里显式排除泛型版本。
+            // The generic overload makes AccessTools.Method ambiguous; pick the non-generic one.
             [HarmonyTargetMethod]
             public static MethodBase ResolveTarget()
             {
@@ -77,7 +64,7 @@ namespace Iridium.Patches.Optimizer
             }
         }
 
-        // ---- 2. SetRotation 脏检查 ----
+        // SetRotation 脏检查
 
         private sealed class RotationState
         {
@@ -110,7 +97,7 @@ namespace Iridium.Patches.Optimizer
             }
         }
 
-        // ---- 3. SetScale 脏检查 ----
+        // SetScale 脏检查
 
         private sealed class ScaleState
         {

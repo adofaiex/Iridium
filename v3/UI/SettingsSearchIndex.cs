@@ -46,7 +46,7 @@ namespace Iridium
 		{
 			var list = new List<Entry>();
 
-			// ── Optimizer：沿用 OptimizerLayout 的四组键，标注子 Tab ──
+			// Optimizer：沿用 OptimizerLayout 的四组键，标注子 Tab
 			list.Add(new Entry("EnableOptimizer", "optimizer", "basics"));
 			foreach (string key in OptimizerLayout.GetOptionKeys("basics"))
 				if (key != "EnableOptimizer")
@@ -58,7 +58,7 @@ namespace Iridium
 			foreach (string key in OptimizerLayout.GetOptionKeys("advanced"))
 				list.Add(new Entry(key, "optimizer", "advanced"));
 
-			// ── General（UI / 判定文本 / 自动播放提示） ──
+			// General（UI / 判定文本 / 自动播放提示）
 			string[] general = {
 				"Language", "RemoveNews", "HideBetaWatermark", "MoveAutoplayText",
 				"ForceDifficultyUI", "EnableCircleArc", "AlwaysCountdown",
@@ -72,7 +72,7 @@ namespace Iridium
 			foreach (string key in general)
 				list.Add(new Entry(key, "general"));
 
-			// ── Editor ──
+			// Editor
 			list.Add(new Entry("EnableEditorFloorOptimization", "editor", null, null, "EditorFloorOptimizations"));
 			string[] editor = {
 				"IncrementalFloorInsert", "RangeBasedRedraw", "SkipRedundantRemakePath",
@@ -85,7 +85,7 @@ namespace Iridium
 			foreach (string key in editor)
 				list.Add(new Entry(key, "editor"));
 
-			// ── Compatibility ──
+			// Compatibility
 			string[] compat = {
 				"EnableLegacyPauseFix", "EnableNoFailTooEarly", "PortalTravelFix",
 				"FixTurnaroundCondition", "FixEditorPlayResetMistakes", "FixCoopPauseLock",
@@ -95,7 +95,7 @@ namespace Iridium
 			foreach (string key in compat)
 				list.Add(new Entry(key, "compatibility"));
 
-			// ── Audio ──
+			// Audio
 			string[] audio = {
 				"EnableHitSoundPitch", "EnableLobbyMusicPatch", "EnableCustomBpm",
 				"EnableAsyncInput", "LobbyCustomMusic", "LobbyDefaultMusicPath",

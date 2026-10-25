@@ -9,24 +9,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 大谱面加载优化 B：分帧激活砖块（实验性）。
-	///
-	/// 目标：把「Instantiate 出来的砖块立即 Awake/OnEnable/Start」的成本从单帧挪到多帧，
-	/// 消除打开几十万砖谱面时的单帧长冻结与内存尖峰。做法：
-	///  1. 批量实例化时临时把 meshFloor prefab 置为非激活，克隆出来的砖块保持非激活
-	///     （Unity 不会立刻调用 Awake/OnEnable/Start）；
-	///  2. 立刻做一次 FastInit（复刻 scrFloor.Awake 的必要初始化 + FloorRenderer/FloorMeshRenderer.Awake），
-	///     保证随后 MakeLevel / ApplyEventsToFloors / DrawXxx 能正常读写砖块；
-	///  3. 砖块进入待激活队列，由主线程每帧按时间预算分批 SetActive(true)，
-	///     让真正的 Awake/Start 与随后的组件激活工作分散到多帧；
-	///  4. 进播放（scnEditor.Play / FinishCustomLevelLoading）时强制一次性全部激活，保证玩法正确。
-	///
-	/// 延迟 Awake 的补偿（已逐个核对 3.3.0 全库）：
-	///  - ffxCheckpoint / ffxSetHitsound 的 Decode 读取基类 floor → 缺失时补上；
-	///  - ffxPlusBase.Awake 会对 conditionalInfo 做归一化，若在激活时覆盖掉管线写入的值，
-	///    则在激活前后做快照/还原。
-	/// </summary>
+	/// <summary>Spawns huge levels with the meshFloor prefab deactivated, fast-initialises each clone, then activates them spread over frames under a time budget.</summary>
 	public static class ChunkedFloorSpawnPatch
 	{
 		private const int FloorThreshold = 20000;
@@ -81,8 +64,7 @@ namespace Iridium.Patches.Optimizer
 			[HarmonyPrefix]
 			public static bool Prefix(scrLevelMaker __instance)
 			{
-				// 任何一次新加载都先把上一批未激活砖块补激活，避免它们被复用/销毁后
-				// 留在未激活状态（FlushAll 后，下列所有非激活砖块一定是本次新建的克隆）。
+				// Always drain the previous batch first: after this, every inactive floor is a clone made by this call.
 				if (_pending.Count > 0) FlushAll();
 
 				if (!Enabled) return true;
@@ -114,8 +96,7 @@ namespace Iridium.Patches.Optimizer
 					var originalPrefab = _meshFloorRef(__instance);
 					if (originalPrefab == null) return true;
 
-					// B 统一接管模板：优先用 A2 的「剥掉 Num」模板，失败则退回原 prefab。
-					// 反激活模板 → 克隆出来的砖块保持未激活，Awake/OnEnable/Start 推迟。
+					// Prefer the number-stripped template; deactivating it keeps clones inactive so Awake/OnEnable/Start are deferred.
 					var template = LazyFloorNumberPatch.EnsureStrippedTemplate(__instance) ?? originalPrefab;
 
 					_savedPrefab = template;
@@ -219,7 +200,7 @@ namespace Iridium.Patches.Optimizer
 
 		#region Activation driver
 
-		/// <summary>由 Main.OnUpdate 每帧调用，按时间预算分批激活。</summary>
+		/// <summary>Called every frame from Main.OnUpdate; activates as many queued floors as the frame budget allows.</summary>
 		public static void Tick()
 		{
 			if (_pending.Count == 0)
@@ -254,7 +235,7 @@ namespace Iridium.Patches.Optimizer
 			FinishBulkIfDone();
 		}
 
-		/// <summary>整批激活完成后收尾：打印总量与内存（不做强制 GC，避免大堆上长时间停顿）。</summary>
+		/// <summary>Log totals once the batch drains; deliberately no forced GC (long pause on big heaps).</summary>
 		private static void FinishBulkIfDone()
 		{
 			if (!_bulkQueued || _pending.Count > 0) return;
@@ -270,7 +251,7 @@ namespace Iridium.Patches.Optimizer
 			}
 		}
 
-		/// <summary>立即激活全部剩余砖块（进入播放前调用，保证玩法不缺砖）。</summary>
+		/// <summary>Activate every queued floor now; called before gameplay so no floor stays inactive.</summary>
 		public static void FlushAll()
 		{
 			while (_pending.Count > 0)
@@ -310,8 +291,7 @@ namespace Iridium.Patches.Optimizer
 
 					floor.gameObject.SetActive(true);
 
-					// ffxPlusBase.Awake 会把 conditionalInfo 归一化/重置；
-					// 管线写入的值（快照非空）按原版语义应当保留。
+					// ffxPlusBase.Awake normalizes conditionalInfo; the pipeline-written value must win.
 					for (int i = 0; i < _effectBuffer.Count && i < _condBuffer.Count; i++)
 					{
 						var snapshot = _condBuffer[i];

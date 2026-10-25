@@ -10,19 +10,13 @@ using UnityEngine;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// v3 移植：消除游戏逻辑热路径中的每帧堆分配（适配 ADOFAI 2.9.8）。
-    ///
-    /// 1. scrPlanet.Update: 每帧每星球 Physics2D.OverlapCircleAll(pos, radius)
-    ///    分配新的 Collider2D[]。改为 NonAlloc 缓冲，常态（无命中）返回共享
-    ///    空数组，命中时才分配精确长度结果。
-    /// 2. scrVisualDecoration.UpdateShader: 滤镜 OnRenderImage 的 MethodInfo.Invoke
-    ///    反射调用（参数校验 + 装箱 + 数组分配）改为按 MethodInfo 缓存编译委托。
-    ///
-    /// （3.3.x 的 scrFloor.Update 空 DOTween.Sequence 问题在 2.9.8 不存在，未移植。）
-    /// </summary>
+/// Cuts per-frame allocations on the gameplay hot path: OverlapCircleAll in
+/// scrPlanet.Update becomes NonAlloc, and the filter's OnRenderImage reflection
+/// call becomes a cached compiled delegate.
+/// </summary>
     public static class GameplayAllocationOptimizationPatches
     {
-        // ── 1. scrPlanet.Update: non-alloc hitbox overlap ──────────────────
+        // scrPlanet.Update: non-alloc hitbox overlap
 
         private static readonly Collider2D[] _overlapBuffer = new Collider2D[64];
         private static readonly Collider2D[] _emptyColliders = new Collider2D[0];
@@ -81,7 +75,7 @@ namespace Iridium.Patches
             }
         }
 
-        // ── 2. scrVisualDecoration.UpdateShader: reflection-free invoke ────
+        // scrVisualDecoration.UpdateShader: reflection-free invoke
 
         private static readonly Dictionary<MethodInfo, Action<object, RenderTexture, RenderTexture>?> _invokeCache
             = new Dictionary<MethodInfo, Action<object, RenderTexture, RenderTexture>?>();

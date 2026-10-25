@@ -1,6 +1,5 @@
 //! FFI data shapes, mirrored by Mono-side `v3/Native/IridiumNative.cs`.
-//! Flat arrays only (SoA) — no strings, objects or GC handles across the
-//! boundary. Breaking layout changes must bump ABI_VERSION.
+//! Flat arrays only — breaking layout changes must bump ABI_VERSION.
 
 /// Error codes: 0 = success, negative = failure.
 pub const ERR_OK: i32 = 0;
@@ -42,7 +41,7 @@ pub struct FloorPathOutput {
     pub count: *mut u32,
 }
 
-/// JSON DOM view; all pointers reference thread-local parser buffers and stay
+/// JSON DOM view. Pointers reference thread-local parser buffers and stay
 /// valid until the next `json_parse`/`json_release` on the same thread.
 #[repr(C)]
 pub struct JsonView {

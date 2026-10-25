@@ -7,15 +7,10 @@ using UnityEngine;
 namespace Iridium.Patches
 {
 	/// <summary>
-	/// 死亡重开时的装饰物复位优化（自 v3 移植，2.9.8 适配）。
-	///
-	/// ResetDecorations 对全部装饰物重跑 Setup（JSON 解析、Split、
-	/// Enum.Parse、多次原生调用）。实现在播放场景下：
-	/// - 脏装饰物（eventTweens/hitboxEvents 有残留）交还原版完整 Setup；
-	/// - 干净装饰物只重置 hitOnce，并按 Setup 同款路径重建标签索引登记。
-	/// 2.9.8 差异：scrDecoration.tags 是 string[]（3.x 是 HashSet）。
-	/// 2.9.8 与 3.x 的 ResetDecorations/Setup 结构一致（已核对反编译源）。
-	/// </summary>
+/// On death-restart, dirty decorations still get the full original Setup; clean
+/// ones only reset hitOnce and re-register tag indices. Note scrDecoration.tags is
+/// string[] on 2.9.8 (HashSet on 3.x).
+/// </summary>
 	[HarmonyPatch(typeof(scrDecorationManager), nameof(scrDecorationManager.ResetDecorations))]
 	public static class DecorationResetPatch
 	{
@@ -57,7 +52,7 @@ namespace Iridium.Patches
 
 					if (tagged != null)
 					{
-						// 2.9.8：tags 为 string[]；空数组按 Setup 语义归入 NO TAG
+						// tags 为 string[]；空数组按 Setup 语义归入 NO TAG
 						string[] tags = dec.tags;
 						if (tags == null || tags.Length == 0)
 							tags = new[] { "NO TAG" };

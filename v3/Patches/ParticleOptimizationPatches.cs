@@ -21,7 +21,6 @@ namespace Iridium.Patches
 
 		private static readonly ConditionalWeakTable<scrParticleDecoration, ParticleUpdateState> _states = new();
 
-		// ===== 池化 =====
 		private const int MaxPoolSize = 256;
 		private static Transform _poolRoot = null!;
 		private static readonly Stack<GameObject> _objectPool = new();
@@ -60,9 +59,7 @@ namespace Iridium.Patches
 		private static bool PartLod =>
 			PartOpt && Main.Settings.optimizer.optimizeParticleLod;
 
-		/// <summary>
-		/// 1) ResetParticle Postfix: 设 cullingMode = Pause → 离屏自动暂停 CPU 模拟
-		/// </summary>
+		/// <summary>cullingMode = Pause → 离屏自动暂停 CPU 模拟。</summary>
 		[IriPatch(Path = "optimizer/particle", Pre = typeof(OptimizerSettings), Condition = "optimizeParticle,optimizeParticleCulling")]
 		[HarmonyPatch(typeof(scrParticleDecoration), nameof(scrParticleDecoration.ResetParticle))]
 		public static class ParticleCullingModePatch
@@ -76,12 +73,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		/// <summary>
-		/// 2) Update Prefix:
-		///    - 粒子已停止 + 非初始化 → 跳过整帧
-		///    - 不可见 → 跳过整帧
-		///    - Dirty-flag: scale/speed 没变 → 跳过 Unity API 调用
-		/// </summary>
+		/// <summary>粒子已停止/不可见 → 跳过整帧；scale/speed 没变（dirty-flag）→ 跳过 Unity API 调用。</summary>
 		[IriPatch(Path = "optimizer/particle", Pre = typeof(OptimizerSettings), Condition = "optimizeParticle")]
 		[HarmonyPatch(typeof(scrParticleDecoration), "Update")]
 		public static class ParticleUpdateSkipPatch
@@ -117,9 +109,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		/// <summary>
-		/// 3) ClearDecorations Prefix: 清场时把粒子 GO 回收进池，避免 DestroyImmediate
-		/// </summary>
+		/// <summary>清场时把粒子 GO 回收进池，避免 DestroyImmediate。</summary>
 		[IriPatch(Path = "optimizer/particle", Pre = typeof(OptimizerSettings), Condition = "optimizeParticle")]
 		[HarmonyPatch(typeof(scrDecorationManager), nameof(scrDecorationManager.ClearDecorations))]
 		public static class ParticlePoolOnClearPatch
@@ -146,9 +136,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		/// <summary>
-		/// 4) CreateDecoration Postfix: 创建粒子时优先从池取
-		/// </summary>
+		/// <summary>创建粒子时优先从池取。</summary>
 		[IriPatch(Path = "optimizer/particle", Pre = typeof(OptimizerSettings), Condition = "optimizeParticle")]
 		[HarmonyPatch(typeof(scrDecorationManager), nameof(scrDecorationManager.CreateDecoration))]
 		public static class ParticlePoolOnCreatePatch
@@ -177,7 +165,6 @@ namespace Iridium.Patches
 				var pooledDec = pooledGO.GetComponent<scrParticleDecoration>();
 				if (pooledDec == null) { _objectPool.Push(pooledGO); return; }
 
-				// 交换：池对象替换新创建的
 				var ev = freshDec.sourceLevelEvent;
 				__instance.allDecorations[pos] = pooledDec;
 
@@ -193,9 +180,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		/// <summary>
-		/// 5) LogicUpdate LOD: 由 FfxOptimizationPatches 的 LateUpdate 循环调用
-		/// </summary>
+		/// <summary>LogicUpdate LOD，由 FfxOptimizationPatches 的 LateUpdate 循环调用。</summary>
 		internal static bool ShouldSkipParticleLogic(scrDecoration dec)
 		{
 			if (!PartLod) return false;

@@ -9,29 +9,10 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 编辑器事件查找 / 搜索的全表扫描消除。
-	///
-	/// 原版三个高频路径都对全谱事件（可达 60 万）做线性扫描：
-	/// 1. InspectorPanel.ShowTabsForFloor：选砖时 foreach 全部事件收集
-	///    floor==floorID 的类型列表；
-	/// 2. InspectorPanel.ShowPanelOfEvent：打开事件面板时再扫一遍统计序号；
-	/// 3. scnEditor.SearchByComment：评论搜索对全部事件做
-	///    ToLowerInvariant()（每个事件分配一个小写串）+ Contains。
-	///
-	/// 实现：
-	/// - 1/2 用帧级 floor→events 索引（与现有 EditorEventIndexPatch 独立，
-	///   因为开关不同；帧级缓存对"每次选中才调用"的面板路径足够安全，
-	///   同帧内编辑事件属极端情况，下一帧自动纠正）；
-	/// - 3 重写为手写循环：只对 EditorComment 事件（通常极少）做小写化，
-	///   小写结果按事件缓存（CWT，评论字符串引用变化时重算），
-	///   Distinct + orderby 语义用 HashSet + Array.Sort 等价复刻。
-	///
-	/// 3.3.0 与 3.4.0 的三个方法结构一致（已核对两版反编译源）。
-	/// </summary>
+	/// <summary>Replaces the editor's full-table event scans with a per-frame floor→events index.</summary>
 	public static class EditorSearchOptimizationPatch
 	{
-		// ---- 帧级 floor→events 索引 ----
+		// 帧级 floor→events 索引
 
 		private static int _indexFrame = -1;
 		private static int _indexCount = -1;
@@ -64,8 +45,6 @@ namespace Iridium.Patches.Optimizer
 			return _byFloor;
 		}
 
-		// ---- 1. ShowTabsForFloor ----
-
 		// ShowTabsForFloor 复刻需要的私有成员：缓存反射访问器
 		private static readonly Func<InspectorPanel, string, bool, bool> _modifyMessageText =
 			AccessTools.MethodDelegate<Func<InspectorPanel, string, bool, bool>>(
@@ -78,7 +57,7 @@ namespace Iridium.Patches.Optimizer
 
 		private static LevelEventType GetCacheSelected()
 		{
-			// cacheSelectedEventType 是 private static 字段，直接反射读取（值低频变化，可接受）
+			// cacheSelectedEventType 是 private static 字段，直接反射读取
 			var f = _cacheSelectedField ??= AccessTools.Field(typeof(InspectorPanel), "cacheSelectedEventType");
 			return (LevelEventType)f.GetValue(null);
 		}
@@ -153,7 +132,7 @@ namespace Iridium.Patches.Optimizer
 						__instance.ShowInspector(show: true);
 					}
 
-					// ── tab 可见性与布局（原版尾部逻辑，成员均为 public） ──
+					// ── tab 可见性与布局（原版尾部逻辑） ──
 					var names = new List<string>();
 					foreach (var t in list)
 					{
@@ -190,8 +169,6 @@ namespace Iridium.Patches.Optimizer
 				}
 			}
 		}
-
-		// ---- 2. ShowPanelOfEvent ----
 
 		[IriPatch(Path = "optimizer/editorPerf", Pre = typeof(OptimizerSettings), Condition = "optimizeEditorInteractions")]
 		[HarmonyPatch(typeof(InspectorPanel), nameof(InspectorPanel.ShowPanelOfEvent))]
@@ -231,8 +208,6 @@ namespace Iridium.Patches.Optimizer
 				}
 			}
 		}
-
-		// ---- 3. SearchByComment ----
 
 		private sealed class CommentLowerState
 		{
@@ -287,8 +262,7 @@ namespace Iridium.Patches.Optimizer
 							floors.Add(e.floor);
 					}
 
-					// orderby i 升序
-					floors.Sort();
+					floors.Sort(); // orderby i 升序
 					__result = floors.ToArray();
 					return false;
 				}

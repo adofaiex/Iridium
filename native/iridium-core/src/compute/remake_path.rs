@@ -1,13 +1,10 @@
 //! RemakePath geometry kernel — a faithful port of Iridium's
 //! RebuildPositionsAndAngles (which matches vanilla scrLevelMaker).
 //!
-//! Semantics that must not drift (all verified against the C# source):
-//! - Angles are ABSOLUTE: exit = f64(f32(-deg + 90)) * pi/180; 999.0f marks
-//!   midspin (exit := entry, floor flagged).
-//! - entry[i+1] = (exit[i] + pi) % 2pi, f64 throughout.
-//! - Positions accumulate in f32 along getVectorFromAngle(exit, tileSize)
-//!   = (sin, cos); floor 0 sits at the origin.
-//! - The final tile's exit = entry + pi.
+//! Must not drift: angles are absolute, so `exit = f64(f32(-deg + 90)) * pi/180`
+//! and `999.0f` marks midspin (exit := entry); `entry[i+1] = (exit[i] + pi) % 2pi`
+//! in f64; positions accumulate in f32 along `(sin, cos) * tileSize` from the
+//! origin; the last tile's exit is `entry + pi`.
 
 /// Per-step geometry result, SoA over `steps + 1` tiles.
 ///
@@ -61,9 +58,8 @@ pub(crate) unsafe fn rebuild(
     const TWO_PI: f64 = 2.0 * PI;
     const NO_ANGLE: f32 = 999.0;
 
-    // Full rebuild: origin (0,0) and 3/2 pi. Incremental: the anchor tile's
-    // stored position/entry, so f32 accumulation order matches the host's
-    // `anchor + o1 + o2 + ...` exactly.
+    // Incremental rebuilds start from the anchor's stored position/entry so f32
+    // accumulation matches the host's `anchor + o1 + o2 + ...` exactly.
     let mut entry_angle = start_angle;
     let mut x = origin_x;
     let mut y = origin_y;
@@ -76,12 +72,10 @@ pub(crate) unsafe fn rebuild(
         let (exit_angle, midspin) = if deg == NO_ANGLE {
             (entry_angle, true)
         } else {
-            // C# evaluates `(-ang + 90f)` in f32 before widening; match it so
-            // native and managed rebuilds agree bit-for-bit.
+            // C# evaluates `(-ang + 90f)` in f32 before widening; match it bit-for-bit.
             (((-deg + 90.0f32) as f64) * (PI / 180.0), false)
         };
-        // midspin flag would be written back per-floor by the host; expose
-        // it implicitly: entry == exit marks a midspin floor.
+        // Midspin is exposed implicitly: entry == exit marks such a floor.
         let _ = midspin;
 
         exit[i] = exit_angle;

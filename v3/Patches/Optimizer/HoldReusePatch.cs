@@ -7,27 +7,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 死亡重开时 Hold 对象复用。
-	///
-	/// 每次死亡 scnGame.RemakePath(remakeLevel:false) 会调用
-	/// levelMaker.DrawHolds(true)（unfillHolds=true）：先 Destroy 全部 hold
-	/// GameObject，再逐 hold 新建 GameObject + scrHoldRenderer + MeshFilter +
-	/// MeshRenderer + new Material + CreateMesh + Unfill。数千 hold 的谱面
-	/// 每次重开产生数万 Unity 对象/材质分配，GC 与原生开销都极重。
-	///
-	/// 实现：Prefix 拦截 DrawHolds(bool)。仅在"播放中重开复用"场景生效：
-	/// - Application.isPlaying 且非编辑器（编辑器路径交给现有
-	///   EditorFloorOptimizationPatches 的 DrawHolds 优化）；
-	/// - unfillHolds == true（重开语义：只复位填充，不重建几何）；
-	/// - 现有 holdGOs 数量与 hold 砖（holdLength >= 0）数量一致
-	///   （几何未变；不一致说明砖块结构重建过，交还原版）。
-	/// 满足时对每个 hold 砖：复用现有 GameObject，重挂 floor.holdRenderer、
-	/// startFloor，CreateMesh() 重建网格，Unfill() 复位——与原版逐 hold 的
-	/// 最终状态等价，只是不销毁/不重建对象与材质。
-	///
-	/// 3.3.0 与 3.4.0 的 DrawHolds 结构一致（已核对两版反编译源）。
-	/// </summary>
+	/// <summary>On restart, DrawHolds(true) reuses the existing hold GameObjects, meshes and materials instead of destroying and recreating them, provided the hold count still matches.</summary>
 	[IriPatch(Path = "optimizer/deathReset", Pre = typeof(OptimizerSettings), Condition = "optimizeDeathReset")]
 	[HarmonyPatch(typeof(scrLevelMaker), "DrawHolds", new[] { typeof(bool) })]
 	public static class HoldReusePatch

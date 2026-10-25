@@ -1,9 +1,7 @@
 //! Easing curves, ported from C# CustomEasingEngine (DOTween semantics).
 //!
-//! Ease ids are DG.Tweening.Ease numeric values (stable across game versions).
-//! Precision mirrors the C# source: curves that C# computes via Math.*
-//! (f64) then cast to f32 stay f64 here; pure-f32 curves stay f32. This is
-//! the batch inner loop — the transcendental-heavy part of tween updates.
+//! Ease ids are `DG.Tweening.Ease` numeric values. Curves C# computes in
+//! f64 then casts to f32 stay f64 here; pure-f32 curves stay f32.
 
 // DG.Tweening.Ease numeric values
 pub const LINEAR: i32 = 1;
@@ -235,9 +233,8 @@ fn bounce_in_out(time: f32, duration: f32) -> f32 {
     bounce_out(time * 2.0 - duration, duration) * 0.5 + 0.5
 }
 
-// Elastic: C# computes Pow/Sin/Asin in f64, casts to f32 per term.
-// period == 0 defaults inside (C# passes it by value; the ref mutation
-// never escapes Evaluate).
+// Elastic: C# computes Pow/Sin/Asin in f64, casting per term. C# also takes
+// `period` by ref but the mutation never escapes `Evaluate`, so by value here.
 
 fn elastic_params(amplitude: f32, period: f32) -> (f32, f32) {
     if amplitude < 1.0 {
@@ -309,7 +306,7 @@ fn elastic_in_out(mut time: f32, duration: f32, amplitude: f32, period: f32) -> 
     amplitude * pow * sin * 0.5 + 1.0
 }
 
-// Flash: ported from DOTween Flash + WeightedEase via the C# source.
+// Flash: DOTween Flash + WeightedEase, ported from the C# source.
 
 fn flash_weighted(
     amplitude: f32,

@@ -10,15 +10,12 @@ using UnityEngine;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// 自定义缓速引擎 Patch — 独立于 OptimizerPatches。
-    /// 当 enableCustomEasingEngine 开启时，拦截 MoveTrack/RecolorTrack/MoveDecoration 的 StartEffect，
-    /// 用 CustomEasingEngine 替代 DOTween 调用。
-    /// 与 optimizeMoveTrack / optimizeRecolorTrack / optimizeMoveDecorations 互斥。
-    /// </summary>
+/// When enableCustomEasingEngine is on, MoveTrack/RecolorTrack/MoveDecoration StartEffect
+/// use CustomEasingEngine instead of DOTween. Mutually exclusive with the
+/// optimizeMoveTrack / optimizeRecolorTrack / optimizeMoveDecorations patches.
+/// </summary>
     public static class CustomEasingPatches
     {
-        // ==================== MoveTrack (ffxMoveFloorPlus) ====================
-
         [HarmonyPatch(typeof(ffxMoveFloorPlus), "StartEffect")]
         public static class MoveFloorPatch
         {
@@ -67,7 +64,6 @@ namespace Iridium.Patches
                     float dur = __instance.duration;
                     Ease ease = __instance.ease;
 
-                    // PositionX
                     if (__instance.positionUsed && !float.IsNaN(posTarget.x))
                     {
                         if (moveTweens.TryGetValue(TweenType.PositionX, out var old) && old != null) old.Kill(true);
@@ -80,7 +76,6 @@ namespace Iridium.Patches
                         }
                     }
 
-                    // PositionY
                     if (__instance.positionUsed && !float.IsNaN(posTarget.y))
                     {
                         if (moveTweens.TryGetValue(TweenType.PositionY, out var old) && old != null) old.Kill(true);
@@ -93,7 +88,7 @@ namespace Iridium.Patches
                         }
                     }
 
-                    // Rotation — 每帧同步 tweenRot → transform（同原始 DOTween OnUpdate）
+                    // 每帧同步 tweenRot → transform（同原始 DOTween OnUpdate）
                     if (__instance.rotationUsed)
                     {
                         if (moveTweens.TryGetValue(TweenType.Rotation, out var old) && old != null) old.Kill(true);
@@ -107,7 +102,7 @@ namespace Iridium.Patches
                         }
                     }
 
-                    // ScaleX — 只修改 X 轴，从 tform.localScale 实时读取 Y/Z（同原始 AxisConstraint.X）
+                    // 只改 X 轴，Y/Z 从 localScale 实时读取（同原始 AxisConstraint.X）
                     if (__instance.scaleUsed && !float.IsNaN(targetScaleVec.x))
                     {
                         if (moveTweens.TryGetValue(TweenType.ScaleX, out var oldSx) && oldSx != null) oldSx.Kill(true);
@@ -121,7 +116,7 @@ namespace Iridium.Patches
                         }
                     }
 
-                    // ScaleY — 只修改 Y 轴
+                    // 只改 Y 轴
                     if (__instance.scaleUsed && !float.IsNaN(targetScaleVec.y))
                     {
                         if (moveTweens.TryGetValue(TweenType.ScaleY, out var oldSy) && oldSy != null) oldSy.Kill(true);
@@ -135,7 +130,6 @@ namespace Iridium.Patches
                         }
                     }
 
-                    // Opacity
                     if (__instance.opacityUsed)
                     {
                         if (moveTweens.TryGetValue(TweenType.Opacity, out var old) && old != null) old.Kill(true);
@@ -150,7 +144,7 @@ namespace Iridium.Patches
             }
         }
 
-        // ==================== RecolorTrack (ffxRecolorFloorPlus) ====================
+        // RecolorTrack
 
         [HarmonyPatch(typeof(ffxRecolorFloorPlus), "StartEffect")]
         public static class RecolorFloorPatch
@@ -178,7 +172,6 @@ namespace Iridium.Patches
                     target.UpdateAngle(false);
                     target.SetTrackStyle(__instance.style);
 
-                    // Kill existing tweens for types this event manages
                     var managedTypes = new[] { TweenType.Glow };
                     foreach (var tt in managedTypes)
                     {
@@ -186,13 +179,13 @@ namespace Iridium.Patches
                             TweenExtensions.Kill(v, true);
                     }
 
-                    // ColorFloor 是游戏内部复杂逻辑（含脉冲动画等），保持原样
+                    // ColorFloor 含脉冲动画等复杂逻辑，保持原样
                     target.ColorFloor(__instance.colorType, __instance.color1, __instance.color2,
                         __instance.colorAnimDuration / __instance.cond.song.pitch,
                         __instance.pulseType, __instance.pulseLength, __instance.start,
                         __instance.duration, __instance.ease);
 
-                    // 仅替换 glowMultiplier 的 DOTween tween
+                    // 只替换 glowMultiplier 的 DOTween tween
                     float startGlow = target.glowMultiplier;
                     target.moveTweens[TweenType.Glow] = null;
                     CustomEasingEngine.ToFrom(startGlow, x => target.glowMultiplier = x,
@@ -203,7 +196,7 @@ namespace Iridium.Patches
             }
         }
 
-        // ==================== MoveDecoration (ffxMoveDecorationsPlus) ====================
+        // MoveDecoration
 
         [HarmonyPatch(typeof(ffxMoveDecorationsPlus), "StartEffect")]
         public static class MoveDecorationPatch
@@ -226,7 +219,7 @@ namespace Iridium.Patches
                 float dur = __instance.duration;
                 Ease ease = __instance.ease;
 
-                // 2.9.8 兼容：遍历 targetTags，从 taggedDecorations 字典中查找装饰物
+                // 2.9.8 兼容：按 targetTags 从 taggedDecorations 取装饰物
                 foreach (string tag in __instance.targetTags)
                 {
                     if (!__instance.decManager.taggedDecorations.TryGetValue(tag, out var taggedList))
@@ -245,7 +238,7 @@ namespace Iridium.Patches
 
                     if (!__instance.forceDontTweenMovement)
                     {
-                        // --- Position ---
+                        // Position
                         if (__instance.positionUsed)
                         {
                             Vector2 startPos = (__instance.movementType == DecPlacementType.LastPosition)
@@ -272,7 +265,7 @@ namespace Iridium.Patches
                             }
                         }
 
-                        // --- Parallax Offset ---
+                        // Parallax Offset
                         if (__instance.parallaxOffsetUsed)
                         {
                             if (!float.IsNaN(__instance.targetParallaxOffset.x))
@@ -294,7 +287,7 @@ namespace Iridium.Patches
                             }
                         }
 
-                        // --- Pivot ---
+                        // Pivot
                         if (__instance.pivotUsed)
                         {
                             if (!float.IsNaN(__instance.targetPivot.x))
@@ -316,7 +309,7 @@ namespace Iridium.Patches
                             }
                         }
 
-                        // --- Rotation — 每帧调用 SetRotation 同步到 transform ---
+                        // 每帧调 SetRotation 同步到 transform
                         if (__instance.rotationUsed)
                         {
                             if (tweens.TryGetValue(TweenType.Rotation, out var old) && old != null) old.Kill(true);
@@ -326,9 +319,8 @@ namespace Iridium.Patches
                                 __instance.targetRot, dur, ease);
                         }
 
-                    // --- Scale ---
-                    // 使用 float tween 逐轴插值，每个回调从 dec.scaleVec 读取另一轴的当前值，
-                    // 避免 X/Y 两轴独立 tweens 互相覆盖的问题。
+                    // Scale：逐轴 float tween，每个回调从 dec.scaleVec 读另一轴当前值，
+                    // 避免 X/Y 两条独立 tween 互相覆盖
                     if (__instance.scaleUsed)
                     {
                         if (!float.IsNaN(endScale.x))
@@ -353,7 +345,7 @@ namespace Iridium.Patches
                     }
                     }
 
-                    // --- Color ---
+                    // Color
                     if (__instance.colorUsed)
                     {
                         if (tweens.TryGetValue(TweenType.Color, out var old) && old != null) old.Kill(true);
@@ -365,7 +357,7 @@ namespace Iridium.Patches
                             () => dec.SetColor(__instance.targetColor));
                     }
 
-                    // --- Opacity ---
+                    // Opacity
                     if (__instance.opacityUsed)
                     {
                         if (tweens.TryGetValue(TweenType.Opacity, out var old) && old != null) old.Kill(true);
@@ -376,9 +368,7 @@ namespace Iridium.Patches
                             () => dec.SetOpacity(__instance.targetOpacity));
                     }
 
-                    // --- Parallax ---
-                    // 原始代码: DOTween.To(() => dec.parallax.multiplier, p => dec.parallax.multiplier = p, targetParallax / 100f, dur)
-                    // 是完整的 Vector2 插值，x/y 各自独立
+                    // Parallax：原版 DOTween.To 插的是整个 Vector2，x/y 各自独立
                     if (__instance.parallaxUsed)
                     {
                         if (tweens.TryGetValue(TweenType.Parallax, out var old) && old != null) old.Kill(true);
@@ -391,7 +381,7 @@ namespace Iridium.Patches
                             new Vector3(tp.x, tp.y, 0), dur, ease);
                     }
 
-                    // 非动画属性直接设置（与原逻辑一致）
+                    // 非动画属性直接设置
                     if (__instance.visibleUsed)
                         dec.SetVisible(__instance.visible && !dec.forceHide);
                     if (__instance.depthUsed)

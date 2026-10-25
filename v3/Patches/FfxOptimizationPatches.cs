@@ -22,10 +22,8 @@ namespace Iridium.Patches
 		private static readonly ConditionalWeakTable<scrDecoration, DecoState> _states = new();
 
 		/// <summary>
-		/// 判定是否需要本帧 LogicUpdate。
-		/// 跳过的只有"持续不可见且无判定盒"的装饰物 —— 原版对它们的 LogicUpdate
-		/// 同样做不了有用功（UpdatePosition 仅可见时执行，UpdateShader 只做隐藏收尾）。
-		/// 可见性过渡帧会更新一次，保证隐藏渲染器收尾被执行。
+		/// 跳过的只有"持续不可见且无判定盒"的装饰物 —— 原版对它们的 LogicUpdate 同样做不了
+		/// 有用功。可见性过渡帧会更新一次，保证隐藏渲染器收尾被执行。
 		/// </summary>
 		private static bool NeedsLogicUpdate(scrDecoration dec, DecoState state)
 		{
@@ -36,10 +34,9 @@ namespace Iridium.Patches
 		}
 
 		/// <summary>
-		/// 位置静止判定：无任何活跃 tween（引擎 + 原版 DOTween）、无跟随/吸附、
-		/// 视差乘数为 1（无相机位移）、旋转与缩放字段与上帧相同。
-		/// 满足时跳过 UpdatePosition（其每帧的 transform 写入会持续弄脏
-		/// 变换层级、破坏合批），改为直接执行 UpdateShader/UpdateHitboxState。
+		/// 位置静止判定：无活跃 tween（引擎 + 原版 DOTween）、无跟随/吸附、视差乘数为 1、
+		/// 旋转与缩放字段与上帧相同。满足时跳过 UpdatePosition（其每帧的 transform 写入
+		/// 会持续弄脏变换层级、破坏合批）。
 		/// </summary>
 		private static bool IsPositionStatic(scrDecoration dec, DecoState state)
 		{
@@ -79,8 +76,7 @@ namespace Iridium.Patches
 						scrDecoration dec = allDecorations[i];
 						if (dec == null) continue;
 
-						// 已被合批渲染器接管：位置/材质由顶点遍历负责，
-						// 这里直接跳过（LogicUpdate 前缀亦会兜底）。
+						// 已被合批渲染器接管：位置/材质由顶点遍历负责
 						if (StaticDecorationBatcher.IsBatched(dec))
 						{
 							if (dec.useHitbox) dec.UpdateHitboxState();
@@ -92,8 +88,7 @@ namespace Iridium.Patches
 
 						if (IsPositionStatic(dec, state))
 						{
-							// 位置静止：跳过 UpdatePosition 的 transform 重写，
-							// 其余（材质/滤镜/判定盒）照常执行
+							// 位置静止：跳过 UpdatePosition 的 transform 重写，其余照常执行
 							dec.UpdateShader(disableV15Features);
 							if (dec.useHitbox)
 							{

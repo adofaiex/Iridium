@@ -6,15 +6,9 @@ using UnityEngine;
 namespace Iridium.Modules.FerriteCore
 {
     /// <summary>
-    /// 进阶内存优化：把进程里不活跃的内存页换出到系统虚拟内存（页面文件）。
-    ///
-    /// 原理与 PCL2 的内存优化相同：先做托管 GC 与 Unity 未使用资源卸载，
-    /// 再调用系统 API 裁剪进程工作集，让操作系统把“死页”挤进页面文件 /
-    /// 压缩内存存储。游戏使用 Mono + Boehm GC，GC 后不归还物理页，
-    /// 因此这一步能真正释放物理内存。
-    ///
-    /// 工作集裁剪仅 Windows 提供（SetProcessWorkingSetSize）。
-    /// Linux/macOS 上自动降级：只执行托管侧清理，不做任何 P/Invoke。
+    /// Advanced memory optimization: page inactive process memory out to the page file.
+    /// Managed GC + Resources.UnloadUnusedAssets first, then trim the working set (Windows only);
+    /// Mono/Boehm does not return physical pages after GC, so the trim is what actually frees.
     /// </summary>
     public static class VirtualMemoryOptimizer
     {

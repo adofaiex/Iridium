@@ -7,24 +7,16 @@ using UnityEngine;
 namespace Iridium.Patches
 {
  /// <summary>
- /// DOTween优化补丁 - 使用安全的配置方式优化DOTween性能
- /// 注意：只使用配置方式，不使用任何运行时反射或Transpiler
- /// 功能完全可开关，关闭时恢复默认设置
- /// </summary>
+  /// DOTween 性能设置 — 只走配置，不做运行时反射或 Transpiler。
+  /// </summary>
  public static class DOTweenOptimizationPatches
  {
  private static bool _isInitialized = false;
- private static bool _capacityHasBeenSet = false; // 容量是否已设置（只能设置一次）
+ private static bool _capacityHasBeenSet = false; // DOTween 容量只能增不能减
 
  #region Runtime Settings
 
- /// <summary>
- /// 应用DOTween运行时设置（安全模式）
- /// 注意：
- /// - 容量设置只在第一次调用时应用（DOTween限制：只能增加不能减少容量）
- /// - 其他设置（可复用、安全模式）可以动态改变
- /// - 如果之前已经设置过容量，再次调用不会改变容量
- /// </summary>
+ /// <summary>应用 DOTween 运行时设置。容量只能设一次；其余（可复用、安全模式）可动态改变。</summary>
  public static void ApplyRuntimeSettings()
  {
  if (!Main.Settings.optimizer.enableOptimizer || !Main.Settings.optimizer.optimizeDOTweenGlobal)
@@ -34,7 +26,7 @@ namespace Iridium.Patches
 
  try
  {
- // 容量设置：只在第一次时应用（DOTween限制）
+ // 容量只在第一次应用
  if (!_capacityHasBeenSet)
  {
  int tweeners = Math.Max(200, Main.Settings.optimizer.dotweenTweenerCapacity);
@@ -46,10 +38,9 @@ namespace Iridium.Patches
  Main.Logger?.Log($"[DOTweenOptimization] Capacity set: {tweeners}/{sequences}");
  }
 
- // 可以动态改变的设置
  DOTween.defaultRecyclable = Main.Settings.optimizer.dotweenDefaultRecyclable;
 
- // 保守设置：只在生产环境禁用安全模式
+ // 保守：只在生产环境禁用安全模式
  if (!Debug.isDebugBuild && Main.Settings.optimizer.dotweenDisableSafeMode)
  {
  DOTween.useSafeMode = false;
@@ -70,18 +61,11 @@ namespace Iridium.Patches
  }
  }
 
- /// <summary>
- /// 重置DOTween设置到默认值
- /// 注意：
- /// - 容量不会恢复到默认值（DOTween限制：容量只能增加不能减少）
- /// - 其他设置（可复用、安全模式等）会恢复到默认值
- /// - 这样可以完全禁用优化效果
- /// </summary>
+ /// <summary>重置 DOTween 设置。容量不会恢复（DOTween 只能增不能减），其余恢复默认。</summary>
  public static void ResetRuntimeSettings()
  {
  try
  {
- // 恢复可动态改变的设置
  DOTween.defaultRecyclable = false;
  DOTween.useSafeMode = true;
  DOTween.logBehaviour = LogBehaviour.Default;
@@ -102,9 +86,7 @@ namespace Iridium.Patches
 
  private static int _lastReportTime = -1;
 
- /// <summary>
- /// 定期报告DOTween状态（仅用于监控，在主线程安全执行）
- /// </summary>
+ /// <summary>定期报告 DOTween 状态（仅统计，不修改行为）。</summary>
  public static void MonitorDOTweenStatus()
  {
  if (!Main.Settings.optimizer.enableOptimizer || !Main.Settings.optimizer.optimizeDOTweenGlobal)
@@ -114,15 +96,14 @@ namespace Iridium.Patches
 
  if (!_isInitialized) return;
 
- // 使用时间而不是帧数，避免在UI线程外执行
+ // 用时间而不是帧数，避免在 UI 线程外执行
  int currentTime = Environment.TickCount;
- if (currentTime - _lastReportTime < 30000) return; // 每30秒报告一次
+ if (currentTime - _lastReportTime < 30000) return;
 
  _lastReportTime = currentTime;
 
  try
  {
- // 仅报告状态，不做任何修改
  int activeTweens = DOTween.TotalPlayingTweens();
  Main.Logger?.Log($"[DOTweenOptimization] Status: Active={activeTweens}");
  }
@@ -136,9 +117,6 @@ namespace Iridium.Patches
 
  #region Safe Tween Helper - 安全的Tween辅助方法
 
- /// <summary>
- /// 安全地设置Tween的属性
- /// </summary>
  public static Tween? SetTweenProperties(Tween tween)
  {
  if (tween == null) return null;
@@ -147,7 +125,6 @@ namespace Iridium.Patches
  {
  if (Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeDOTweenGlobal)
  {
- // 只设置可复用，不修改其他关键属性
  tween.SetRecyclable(true);
  }
  }

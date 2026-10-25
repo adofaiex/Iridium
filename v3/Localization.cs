@@ -106,7 +106,7 @@ namespace Iridium
             if (_currentDict != null && _currentDict.TryGetValue(key, out string value))
                 return value;
 
-            // Fallback to 'en' or first available
+            // Fallback to 'en' or the first available language
             if (languages.TryGetValue("en", out var enDict) && enDict.TryGetValue(key, out string enValue))
             {
                 return enValue;

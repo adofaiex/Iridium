@@ -9,14 +9,9 @@ namespace Iridium.Modules.FerriteCore
 {
     /// <summary>
     /// FerriteCore-style memory/engine tuning embedded in Iridium.
-    ///
-    /// Configuration lives in a standalone <c>Config/FerriteCore.json</c>
-    /// next to the mod — it deliberately does NOT participate in Settings.xml.
-    /// Settings.xml only carries the 基础优化 master switch
-    /// (<see cref="Config.MemorySettings.enableBasicOptimization"/>).
-    ///
-    /// The module is fully optional: when the switch is off, nothing is applied
-    /// and no Harmony patches are installed.
+    /// Config lives in a standalone Config/FerriteCore.json and does not participate
+    /// in Settings.xml. Fully optional: when the 基础优化 switch is off, nothing is
+    /// applied and no Harmony patches are installed.
     /// </summary>
     public static class FerriteCoreModule
     {
@@ -68,8 +63,8 @@ namespace Iridium.Modules.FerriteCore
         }
 
         /// <summary>
-        /// Bring pre-rework config files up to the basic profile: the three
-        /// safe defaults the 基础优化 switch promises were all opt-in before.
+        /// Bring pre-rework config files up to the basic profile: the three safe
+        /// defaults the 基础优化 switch promises were all opt-in before.
         /// </summary>
         private static void MigrateConfig()
         {
@@ -116,7 +111,7 @@ namespace Iridium.Modules.FerriteCore
             Main.Logger?.Log("[FerriteCore] disabled");
         }
 
-        // ── L0: engine-level tuning ────────────────────────────────────────
+        // L0: engine-level tuning
 
         public static void Apply()
         {
@@ -242,7 +237,7 @@ namespace Iridium.Modules.FerriteCore
             }
         }
 
-        // ── Core patch: scene-switch GC ────────────────────────────────────
+        // Core patch: scene-switch GC
 
         private static void ApplyCorePatches()
         {
@@ -266,7 +261,7 @@ namespace Iridium.Modules.FerriteCore
             _coreHarmony = null;
         }
 
-        // ── L1: soft optimizations ─────────────────────────────────────────
+        // L1: soft optimizations
 
         private static void ApplyL1Patches()
         {

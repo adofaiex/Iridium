@@ -9,17 +9,10 @@ namespace Iridium.Patches.Compatibility
 	/// <summary>
 	/// Third-party required mods handling ("Ignore required third-party mods").
 	///
-	/// Instead of patching the dependency check result, the chart's
-	/// settings.requiredMods is emptied to [] right before the game decodes the
-	/// level. Every piece of game logic that reads requiredMods (LevelDataCLS.Decode,
-	/// LevelData.Decode, and any UI that displays a "mods required" notice) then
-	/// sees an empty list, so the chart loads and plays like a normal level.
-	///
-	/// The original list is kept per LevelData instance and restored when the
-	/// chart is encoded (saved/exported), so requiredMods survives a save.
-	///
-	/// Patches here are registered with the ignoreRequiredMods condition so the
-	/// whole feature is applied/removed on demand.
+	/// Instead of patching the dependency check, the chart's settings.requiredMods is
+	/// emptied to [] right before the game decodes the level, so every reader sees an
+	/// empty list. The original is kept per LevelData instance and restored on encode,
+	/// so requiredMods survives a save.
 	/// </summary>
 	public static class RequiredModsClearPatches
 	{
@@ -46,10 +39,7 @@ namespace Iridium.Patches.Compatibility
 			return raw;
 		}
 
-		/// <summary>
-		/// Empty requiredMods in the editor/play decode path (LevelData.Decode)
-		/// and stash the original value for the encode restore.
-		/// </summary>
+		/// <summary>清空解码路径的 requiredMods，并暂存原值供 encode 还原。</summary>
 		[HarmonyPatch(typeof(LevelData), nameof(LevelData.Decode))]
 		[IriPatch(Path = "compatibility/requiredMods", Pre = typeof(CompatibilitySettings), Condition = "ignoreRequiredMods")]
 		public static class LevelDataClearPatch
@@ -63,9 +53,7 @@ namespace Iridium.Patches.Compatibility
 			}
 		}
 
-		/// <summary>
-		/// Empty requiredMods in the level select decode path (LevelDataCLS.Decode).
-		/// </summary>
+		/// <summary>Level select 解码路径（LevelDataCLS.Decode）。</summary>
 		[HarmonyPatch(typeof(LevelDataCLS), nameof(LevelDataCLS.Decode))]
 		[IriPatch(Path = "compatibility/requiredMods", Pre = typeof(CompatibilitySettings), Condition = "ignoreRequiredMods")]
 		public static class LevelDataCLSClearPatch
@@ -79,10 +67,7 @@ namespace Iridium.Patches.Compatibility
 			}
 		}
 
-		/// <summary>
-		/// Restore the original requiredMods before the chart is encoded so it is
-		/// preserved when the level is saved or exported.
-		/// </summary>
+		/// <summary>Encode 前还原原 requiredMods，保存/导出时不丢。</summary>
 		[HarmonyPatch(typeof(LevelData), nameof(LevelData.EncodeToDictionary))]
 		[IriPatch(Path = "compatibility/requiredMods", Pre = typeof(CompatibilitySettings), Condition = "ignoreRequiredMods")]
 		public static class EncodeRestorePatch
@@ -99,10 +84,7 @@ namespace Iridium.Patches.Compatibility
 			}
 		}
 
-		/// <summary>
-		/// After a chart has finished loading (editor open or play), notify the
-		/// player of the ignored missing mods.
-		/// </summary>
+		/// <summary>关卡加载完成后（编辑器打开或开始游玩）提示被忽略的缺失 mod。</summary>
 		[HarmonyPatch(typeof(scnGame), nameof(scnGame.LoadLevel))]
 		[IriPatch(Path = "compatibility/requiredMods", Pre = typeof(CompatibilitySettings), Condition = "ignoreRequiredMods")]
 		public static class LevelLoadNotifyPatch

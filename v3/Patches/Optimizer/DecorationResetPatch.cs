@@ -7,37 +7,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 死亡重开时的装饰物复位优化。
-	///
-	/// 每次死亡 scrDecorationManager.ResetDecorations 对**全部装饰物**重跑
-	/// scrDecoration.Setup(sourceLevelEvent, out _)：内部含组件写法的
-	/// JSON 解析（Json.Deserialize）、字符串 Split/HashSet 分配、SetBlendMode
-	/// 的 Enum.Parse、多次 SetSprite/SetTile/SetMasking 原生调用，以及
-	/// GetComponents&lt;MonoBehaviour&gt;().Where().ToArray() 重建缓存。
-	/// 上千装饰物的谱面每次重开都是一笔可观的固定开销，而其中绝大多数
-	/// 装饰物在播放期间根本没有被事件改动过。
-	///
-	/// 实现：播放期脏标记。
-	/// - Prefix 挂在 ResetDecorations：先复刻原版的三个字典 Clear
-	///   （taggedDecorations / hitboxEventTags / hitboxEventTagDecorations）；
-	/// - 对"脏"装饰物（播放期被事件改过）交还原版 Setup + hitOnce=false；
-	/// - 对"干净"装饰物：跳过 Setup，仅重置 hitOnce=false，并按 Setup 内
-	///   的注册逻辑把该装饰物重新登记进 taggedDecorations 与
-	///   hitboxEventTags/hitboxEventTagDecorations（tags/hitboxEventTags
-	///   均为 public 字段，可直接读取；此步保证跳过 Setup 后标签索引不失效）；
-	///   同时刷新其在 taggedDecorations 列表中的位置（Remove 后 Add 到尾部，
-	///   与原版 Setup 的登记路径一致）。
-	/// - 脏标记的来源：scrDecoration 的 eventTweens 非空（被 StartEffect
-	///   建 tween）或 hitboxEvents 非空。这两个字典/列表在 ResetScene 的
-	///   tween 清理路径中会被清空，因此直接在 Reset 时刻检查它们是否残留
-	///   即可判定"播放期被改过"——无需在各个事件入口埋点。
-	///
-	/// 风险说明：若某事件路径改动了装饰物但未留 eventTweens/hitboxEvents
-	/// 痕迹，跳过 Setup 可能导致该装饰物不复位。因此本项做成独立开关，
-	/// 出问题时关闭 optimizeDecorationReset 即可回退原版行为。
-	/// 3.3.0 与 3.4.0 的 ResetDecorations / Setup 结构一致（已核对两版反编译源）。
-	/// </summary>
+	/// <summary>On reset, only re-runs scrDecoration.Setup for decorations an event actually touched (eventTweens/hitboxEvents left over); clean ones are re-registered into the tag indices only.</summary>
 	[IriPatch(Path = "optimizer/decorReset", Pre = typeof(OptimizerSettings), Condition = "optimizeDecorationReset")]
 	[HarmonyPatch(typeof(scrDecorationManager), nameof(scrDecorationManager.ResetDecorations))]
 	public static class DecorationResetPatch

@@ -5,17 +5,10 @@ using Iridium.Native;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// GDMiniJSON 解析走 iridium_core（Rust 批量解析）。
-    ///
-    /// 覆盖两个入口：
-    ///  - <see cref="Json.Deserialize(string)"/>：LevelData.LoadLevel 的完整谱面解析；
-    ///  - <see cref="Json.DeserializePartially(string, string)"/>：选关列表 /
-    ///    GetCustomLevelName 的“只解析到 actions 之前”的部分解析。
-    ///
-    /// 语义：物化后的对象图与 GDMiniJSON 完全一致（Dictionary/List/string/
-    /// int/float/bool/null；重复键后者覆盖；数字解析失败为 0）。任何解析失败
-    /// 或库缺失都原样回退到托管解析器，不改变行为。
-    /// </summary>
+/// Routes GDMiniJSON parsing through iridium_core. The materialized graph matches
+/// GDMiniJSON exactly (duplicate keys resolve to last, unparsable numbers become 0);
+/// any failure falls back to the managed parser unchanged.
+/// </summary>
     public static class JsonNativeParsePatch
     {
         [HarmonyPatch(typeof(Json), nameof(Json.Deserialize), new[] { typeof(string) })]

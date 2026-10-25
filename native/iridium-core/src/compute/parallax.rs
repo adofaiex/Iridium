@@ -1,29 +1,10 @@
 //! Static decoration batcher per-frame vertex transform.
 //!
-//! The host (C# `StaticDecorationBatcher`) owns the Unity objects and reads
-//! the per-decoration inputs; this kernel is the pure arithmetic inner loop
-//! that was previously `items × 4` managed iterations per frame.
-//!
-//! Per decoration, for each of its 4 quad corners:
-//!
-//! ```text
-//! x = b0.x + (cam.x - b0.x) * mult.x + offK.x + corner.x
-//! y = b0.y + (cam.y - b0.y) * mult.y + offK.y + corner.y
-//! z = corner.z
-//! ```
-//!
-//! with `b0 = pivotPosVec`, `mult = parallax.multiplier`, and
-//! `offK = parallaxOffset * scaleMultiplier` — identical to the original
-//! managed expression `b0 + (cam - b0) * mult + offK + corner` with the
-//! per-axis operations kept in the same order so results are bit-exact
-//! against the `System.Numerics.Vector2` reference below.
-//!
-//! The kernel also reports, per decoration, whether any corner actually moved
-//! (`dirty` bitmask, one flag per decoration), so the host can skip the
-//! `Mesh.SetVertices` upload for slots whose decorations all held still.
+//! `x = b0.x + (cam.x - b0.x) * mult.x + offK.x + corner.x` (same for y,
+//! `z = corner.z`). Per-axis operation order must not change: the managed
+//! `System.Numerics.Vector2` expression is the bit-exactness reference.
 
-/// Per-decoration gathered inputs, struct-of-arrays, 3 slots each for the
-/// 4 corners (`corner` is 3 floats per corner × 4 corners = 12 per item).
+/// Per-decoration gathered inputs, 3 slots each for the 4 corners.
 pub struct Inputs<'a> {
     /// `pivotPosVec` per decoration (x, y).
     pub base_xy: &'a [f32],
@@ -35,15 +16,9 @@ pub struct Inputs<'a> {
     pub corners: &'a [f32],
 }
 
-/// Computes world positions into `out_verts` (12 floats per decoration:
-/// `xy z` × 4 corners, in corner order) and sets `out_dirty[i] = 1` when any
-/// of decoration `i`'s four corners differs from what is already in
-/// `out_verts`.
-///
-/// `out_verts` is both input (previous frame's positions, for the dirty check)
-/// and output, so the host uploads exactly the slots that changed.
-///
-/// Returns the number of decorations whose corners moved.
+/// Writes 12 floats per decoration (`xyz` × 4 corners) into `out_verts` and
+/// sets `out_dirty[i] = 1` when any of its corners changed. Returns the
+/// number of decorations that moved.
 pub fn compute(cam: [f32; 2], inputs: &Inputs<'_>, out_verts: &mut [f32], out_dirty: &mut [u32]) -> usize {
     let n = inputs.base_xy.len() / 2;
     let mut moved = 0usize;
@@ -54,7 +29,7 @@ pub fn compute(cam: [f32; 2], inputs: &Inputs<'_>, out_verts: &mut [f32], out_di
         let my = inputs.mult_xy[i * 2 + 1];
         let kx = inputs.offset_xy[i * 2];
         let ky = inputs.offset_xy[i * 2 + 1];
-        // Hoisted per decoration: `cam - b0` is shared by all 4 corners.
+        // `cam - b0` is shared by all 4 corners.
         let dxc = cam[0] - b0x;
         let dyc = cam[1] - b0y;
 

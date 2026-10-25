@@ -5,67 +5,34 @@ using Iridium.Runtime;
 namespace Iridium.Patches
 {
 	/// <summary>
-	/// Declarative patch registration attribute.
-	/// <para>
-	/// <b>Path</b> defines a hierarchical namespace (e.g. "optimizer/texture", "bugfix/portal").
-	/// Parent path segments automatically gate child patches — if a parent is disabled,
-	/// all children are disabled regardless of their own conditions.
-	/// </para>
-	/// <para>
-	/// <b>Pre + Condition</b> specify the Settings property that controls this patch.
-	/// Pre is the settings group type (e.g. typeof(CompatibilitySettings)),
-	/// Condition is the property name (e.g. nameof(...portalTravelFix)).
-	/// They are resolved at runtime into a dot-separated path like "compatibility.portalTravelFix".
-	/// </para>
-	/// <para>
-	/// Patches without Pre/Condition inherit their parent path's condition.
-	/// Patches with Pre/Condition are AND-gated with the parent: parent must be ON AND own condition must be true.
-	/// </para>
+	/// Gating contract for reflection-driven patch registration:
+	/// <b>Path</b> is a hierarchy ("optimizer/texture"); a disabled parent disables every child.
+	/// <b>Pre</b> (settings group type) + <b>Condition</b> (property names, comma = AND) resolve to
+	/// "group.property" paths; <b>PreTypes</b> pairs each name with its own group for cross-class
+	/// conditions. With no Pre/Condition the patch inherits its parent path's condition, otherwise
+	/// its own condition is AND-ed with the parent. <b>AlwaysOn</b> ignores all of it.
 	/// </summary>
 	[AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
 	public sealed class IriPatchAttribute : Attribute
 	{
-		/// <summary>
-		/// Hierarchical path for this patch (e.g. "optimizer/texture", "bugfix/portal").
-		/// </summary>
+		/// <summary>Hierarchical path ("optimizer/texture"); parent segments gate children.</summary>
 		public string Path { get; set; } = "";
 
-		/// <summary>
-		/// Settings group type. Combined with <see cref="Condition"/> to form
-		/// a dot-separated property path (e.g. typeof(CompatibilitySettings) + "portalTravelFix"
-		/// → "compatibility.portalTravelFix").
-		/// </summary>
+		/// <summary>Settings group type; with <see cref="Condition"/> forms "group.property" paths.</summary>
 		public Type? Pre { get; set; }
 
-		/// <summary>
-		/// Optional: multiple settings group types for cross-class compound conditions.
-		/// When set, each Condition entry is resolved against its corresponding PreTypes entry.
-		/// Example: PreTypes=[typeof(A), typeof(B)], Condition="x,y" → "groupA.x,groupB.y".
-		/// </summary>
+		/// <summary>Cross-class conditions: one settings group type per <see cref="Condition"/> entry.</summary>
 		public Type[]? PreTypes { get; set; }
 
-		/// <summary>
-		/// Property name(s) within the <see cref="Pre"/> settings group.
-		/// Comma-separated names are evaluated as AND (all must be true).
-		/// When <see cref="PreTypes"/> is set, each entry maps to its corresponding type.
-		/// </summary>
+		/// <summary>Property name(s) in the settings group; comma-separated names are AND-ed.</summary>
 		public string? Condition { get; set; }
 
-		/// <summary>
-		/// If true, this patch is always active regardless of any conditions.
-		/// </summary>
+		/// <summary>Active regardless of path, Pre/Condition and <see cref="RequireMethod"/>.</summary>
 		public bool AlwaysOn { get; set; } = false;
 
-		/// <summary>
-		/// Optional: runtime reflection check. If set, the patch is only active
-		/// when the specified method exists on the target type.
-		/// Format: "TypeName.MethodName" (e.g. "scrController.LockInput").
-		/// </summary>
+		/// <summary>Reflection gate: active only while "TypeName.MethodName" exists.</summary>
 		public string? RequireMethod { get; set; }
 
-		/// <summary>
-		/// Runtimes this patch supports. Defaults to Mono only.
-		/// </summary>
 		public RuntimeKind[] SupportedRuntimes { get; set; } = new[] { RuntimeKind.Mono };
 	}
 }

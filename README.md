@@ -30,6 +30,20 @@ https://discord.gg/ddndY4xXeK
 ### Performance Optimization
 Improves overall smoothness and reduces lag by optimizing rendering efficiency, enhancing effect performance, and speeding up scene loading. Includes decoration texture compression, frame-spread decoration loading with progress, move track / move decorations optimizations (with freeroam support), particle optimization (object pooling / culling / LOD), DOTween tuning, a custom easing engine, and async input optimization for precise timing.
 
+### Native Core (Rust)
+The hottest loops now run in a small Rust library (`native/iridium-core`, C ABI) instead of Mono. Six hot paths are covered:
+
+| Area | Native entry point | Measured gain |
+| --- | --- | --- |
+| Chart JSON parsing | `iridium_core_json_*` | 477 ms -> 82 ms on a 30k event chart |
+| Easing evaluation | `iridium_core_evaluate_batch` | 3.7x on the 150k floor benchmark |
+| Editor floor path rebuild | `iridium_core_remake_path_from` | full rebuild plus incremental edits from an anchor |
+| Batched decoration vertices | `iridium_core_parallax_compute` | dirty tracking so unchanged slots skip `Mesh.SetVertices` |
+| Decoration hit queries | `iridium_core_spatial_*` | AABB broad phase skips physics queries with no candidates |
+| Texture downscaling | `iridium_core_resize_bilinear` | 1.7x-2.1x on bilinear downscale |
+
+The library is entirely optional. It is loaded with `dlopen`/`LoadLibraryEx`, gated on an ABI version probe, and every call site falls back to the original managed code when the library is missing or too old. Panics are caught at the FFI boundary and returned as error codes, so a native bug degrades performance instead of taking down the game. Bit exactness is enforced by a Rust test suite that CI runs before every release.
+
 ### UI Customization
 Offers various interface adjustments including removing the news panel, hiding the beta watermark, repositioning the autoplay text, and displaying the countdown in the editor. The v3 settings UI is organized into General / Optimizer / Editor / Compatibility / Audio tabs, with Switch/Checkbox usage aligned to their semantics, and CJK font fallback for Chinese/Japanese/Korean input and labels.
 
@@ -72,7 +86,7 @@ Select your modloader below for installation instructions:
 
 ## Build from Source
 
-1. Ensure the .NET SDK is installed.
+1. Ensure the .NET SDK is installed. The Rust toolchain is optional and only needed if you want to build the native core yourself, otherwise the mod builds fine without it.
 2. Clone this repository with submodules:
    ```bash
    git clone --recursive https://github.com/Xbodwf/Iridium.git
@@ -83,6 +97,30 @@ Select your modloader below for installation instructions:
    ```bash
    dotnet build
    ```
+
+### Building the native core
+
+`scripts/build-native.sh` compiles `iridium-core` and stages the artifact into `out/native/`, where the csproj picks it up and packs it into the release zip. Released builds already contain the `.dll`, `.so` and `.dylib` for all three platforms, so this step is only for local iteration.
+
+```bash
+# native library for the host platform
+bash scripts/build-native.sh
+
+# tests, plus the bit exactness suite CI runs before a release
+cd native/iridium-core && cargo test --release
+```
+
+On macOS, `--universal` also builds the other CPU arch and merges both slices into a single fat dylib, so one file works on arm64 and Intel (Rosetta):
+
+```bash
+bash scripts/build-native.sh --universal
+```
+
+Running the benchmarks is optional and requires `cargo bench`:
+
+```bash
+cd native/iridium-core && cargo bench
+```
 
 ---
 

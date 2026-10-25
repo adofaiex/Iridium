@@ -1,9 +1,7 @@
 //! JSON parse exports (flat DOM view).
 //!
-//! Thread model: one parser document per thread. The host calls
-//! `json_parse` -> `json_view` -> (materializes) -> `json_release` on the
-//! same thread. Pointers in `JsonView` stay valid until `json_release` or
-//! the next `json_parse` on that thread.
+//! One parser document per thread: `json_parse` -> `json_view` ->
+//! (materializes) -> `json_release` on the same thread.
 
 use crate::compute::json::{self, Doc};
 use crate::ffi;
@@ -15,11 +13,12 @@ thread_local! {
 
 /// Parses UTF-16 JSON text into the thread-local DOM.
 ///
-/// `section` (optional, may be null) mirrors `GDMiniJSON.Json.DeserializePartially`:
-/// parsing stops before the root object's key equal to `section`.
+/// `section` (optional, may be null) mirrors
+/// `GDMiniJSON.Json.DeserializePartially`: parsing stops before the root
+/// object's key equal to `section`.
 ///
 /// Returns 0 on success, negative `ffi::ERR_*` on failure. On `ERR_PARSE` the
-/// host must fall back to the managed parser (malformed input semantics).
+/// host must fall back to the managed parser.
 #[no_mangle]
 pub unsafe extern "C" fn iridium_core_json_parse(
     text: *const u16,
@@ -79,7 +78,7 @@ pub unsafe extern "C" fn iridium_core_json_view(view: *mut ffi::JsonView) -> i32
     })
 }
 
-/// Drops the DOM and its buffers (call once materialization is done).
+/// Frees the DOM and its buffers.
 #[no_mangle]
 pub extern "C" fn iridium_core_json_release() -> i32 {
     crate::guard(|| {

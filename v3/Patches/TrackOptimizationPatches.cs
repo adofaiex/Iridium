@@ -120,8 +120,7 @@ namespace Iridium.Patches
 				{
 					scrFloor target = floors[i];
 					ApplyToFloor(target);
-					// Mirror the game: MoveTrack also moves landable floors inside
-					// freeroam areas, otherwise the track breaks there.
+					// Mirror the game: MoveTrack also moves landable floors in freeroam areas
 					if (target.freeroamArea == null) continue;
 					foreach (scrFloor listFloor in target.freeroamArea.listFloors)
 					{

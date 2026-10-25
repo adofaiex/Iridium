@@ -1,10 +1,6 @@
-//! Standalone benchmarks:
-//!  - remake_path over a 150k-tile chart (Iridium's target upper bound)
-//!  - JSON parse over a synthetic 30k-event level document
-//!  - spatial grid rebuild + query over 10k AABBs
-//!
-//! Self-contained: includes the implementation modules directly and provides
-//! the `guard` shim that lib.rs would normally supply.
+//! Standalone benchmarks: remake_path over a 150k-tile chart, JSON parse
+//! over a synthetic 30k-event document, spatial grid over 10k AABBs.
+//! Self-contained: `guard` is shimmed below since lib.rs is not linked.
 
 use std::hint::black_box;
 use std::time::Instant;
@@ -21,7 +17,7 @@ mod remake_path;
 mod spatial;
 
 // Kernels call `crate::guard`; supply it at the bench crate root.
-#[allow(dead_code)]
+#[allow(dead_code)] // kernels call `crate::guard`
 fn guard(f: impl FnOnce() -> i32) -> i32 {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).unwrap_or(ffi::ERR_PANIC)
 }

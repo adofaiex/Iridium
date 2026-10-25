@@ -9,7 +9,7 @@ pub unsafe extern "C" fn iridium_core_evaluate(
     amplitude: f32,
     period: f32,
 ) -> f32 {
-    // Pure math on by-value floats; no failure modes.
+    // Pure math on by-value floats.
     crate::compute::easing::evaluate(ease, time, duration, amplitude, period)
 }
 

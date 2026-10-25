@@ -6,25 +6,15 @@ using UnityEngine;
 namespace Iridium.Core
 {
     /// <summary>
-    /// 自定义缓速引擎 — 完全脱离 DOTween 的轻量级动画系统。
-    ///
-    /// 设计要点（相对旧版的根本性修正）：
-    /// 1. IrTween 为 class（引用句柄），由引擎以 (Target, TweenType) 为键统一管理，
-    ///    同键自动 Kill(complete) 再创建 —— 与原版 moveTweens 的覆盖语义一致，
-    ///    修复了旧版"占位 null 导致重叠事件互相打架"的问题。
-    /// 2. 属性的读/写直接以 typed switch 实现（无 delegate、无闭包、无装箱），
-    ///    创建与每帧更新的托管分配为零。
-    /// 3. 支持 Goto（时间轴 scrub）与按事件（owner）批量 Kill，
-    ///    对接原版 ScrubToTime / ffxPlusBase.Kill 的语义。
+    /// Custom easing engine — a lightweight animation system fully detached from DOTween.
+    /// IrTween is a reference handle; the engine keys them by (Target, TweenType) and
+    /// Kill(complete)s an existing tween with the same key before creating a new one.
     /// </summary>
     public static class CustomEasingEngine
     {
-        // ==================== 缓速函数计算 ====================
-
         /// <summary>
-        /// 计算指定 Ease 类型在 time/duration 时刻的插值值 [0, 1]
-        ///（DOTween 语义，amplitude=1.70158, period=0 为默认参数）。
-        /// 数学实现位于 iridium_core（Rust）；库缺失时引擎整体不生效。
+        /// Evaluate an Ease at time/duration, amplitude=1.70158 and period=0 by default.
+        /// The math lives in iridium_core (Rust); without it the engine is inert.
         /// </summary>
         public static float Evaluate(Ease ease, float time, float duration)
         {
@@ -33,12 +23,9 @@ namespace Iridium.Core
 
         public static float Evaluate(Ease ease, float time, float duration, float amplitude, float period)
         {
-            // Hard native binding: the easing math lives in iridium_core.
-            // No library -> the whole engine is inert (patches gate on this
-            // and never intercept StartEffect).
+            // Easing math is hard-bound to iridium_core: without the library the engine is inert.
             return Iridium.Native.IridiumNative.Evaluate((int)ease, time, duration, amplitude, period);
         }
-        // ==================== Tween 句柄 ====================
 
         public enum ValueKind { Float, Vec2, Color }
 
@@ -151,8 +138,7 @@ namespace Iridium.Core
             }
         }
 
-        // ==================== 属性读/写（typed switch，零分配） ====================
-
+        // Typed switch rather than reflection: this runs every frame per tween.
         private static float GetCurrentFloat(object target, TweenType type)
         {
             if (target is scrFloor floor)
@@ -275,8 +261,6 @@ namespace Iridium.Core
                 floor.SetColor(value);
         }
 
-        // ==================== 全局 Tween 管理 ====================
-
         private static readonly List<IrTween> _active = new List<IrTween>(256);
         private static readonly List<IrTween> _pendingAdd = new List<IrTween>(64);
         private static readonly Dictionary<(object, TweenType), IrTween> _byKey = new Dictionary<(object, TweenType), IrTween>();
@@ -361,9 +345,7 @@ namespace Iridium.Core
             for (int i = 0; i < cap; i++) _batchAmp[i] = 1.70158f;
         }
 
-        /// <summary>每帧驱动。双指针原地压缩，死亡的 tween 一次性截断。
-        /// frameCount 幂等：同帧多次调用只生效一次。
-        /// 求值走 native 批处理（SoA 一次 FFI）；库缺失或数量少时逐条。</summary>
+        /// <summary>Per-frame driver, idempotent per frameCount. Evaluation goes through the native SoA batch when available, else one call per tween.</summary>
         public static void Update(float deltaTime)
         {
             if (!_initialized) return;
@@ -442,12 +424,7 @@ namespace Iridium.Core
             ReconcileDeadTargets();
         }
 
-        // ==================== 创建 API ====================
-
-        /// <summary>
-        /// 启动一个 float tween。若 (target, type) 已有活跃 tween，先 Kill(complete:true)
-        /// ——与原版 moveTweens 覆盖语义一致。当前值已等于目标值时不创建（同原版判定）。
-        /// </summary>
+        /// <summary>Start a float tween. Kills any live tween with the same (target, type) first; skips creation when the current value already equals the target.</summary>
         public static IrTween? Start(object target, TweenType type, float endValue, float duration, Ease ease, object? owner = null)
         {
             KillByKey(target, type, complete: true);
@@ -544,8 +521,6 @@ namespace Iridium.Core
             targetList.Add(tween);
             TargetTweensBecameActive?.Invoke(tween.Target);
         }
-
-        // ==================== Kill / Goto ====================
 
         public static void KillByKey(object target, TweenType type, bool complete)
         {

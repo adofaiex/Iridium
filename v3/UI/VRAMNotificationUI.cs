@@ -17,13 +17,10 @@ namespace Iridium.UI
         private Coroutine? _fadeCoroutine;
         private Coroutine? _completeDelayCoroutine;
 
-        // The notification's own GraphicRaycaster. FrameSpreadDecorationLoadingPatch
-        // blocks ALL raycasters while loading — including this one — which makes the
-        // Stop button unclickable. Expose it so the loading patch can skip it.
+        // Exposed so FrameSpreadDecorationLoadingPatch can skip blocking it while loading.
         public static GraphicRaycaster? InstanceRaycaster { get; private set; }
 
-        // Cached references — captured right after each Rebuild so UpdateProgress
-        // can change text without rebuilding the whole UI tree.
+        // Re-captured after each Rebuild so UpdateProgress can skip a full rebuild.
         private Text? _messageText;
 
         private string _message = "";
@@ -32,16 +29,13 @@ namespace Iridium.UI
         private bool _isPersistent = false;
         private const float FadeDuration = 0.5f;
         private const float DisplayDuration = 2.5f;
-        // Minimum time the persistent UI must stay fully visible after ShowPersistent,
-        // so that fast loads (< 0.5s) still show the progress to the player instead of
-        // fading in / out at low alpha while the screen is still black.
+        // Minimum fully-visible time after ShowPersistent, so fast loads still show progress.
         private const float MinPersistentDisplay = 0.6f;
 
         public static void Show(string message)
         {
             EnsureInstance();
-            // Cancel any pending delayed-complete so it can't override this Show's
-            // fade timer afterwards.
+            // Drop a pending delayed-complete so it can't override this Show's timer.
             if (_instance._completeDelayCoroutine != null)
             {
                 _instance.StopCoroutine(_instance._completeDelayCoroutine);
@@ -55,8 +49,7 @@ namespace Iridium.UI
         public static void ShowPersistent(string message)
         {
             EnsureInstance();
-            // Cancel any pending delayed Complete from a previous Show so the new
-            // persistent UI gets a fresh minimum-display window.
+            // Drop a pending delayed Complete so the new UI gets a fresh display window.
             if (_instance!._completeDelayCoroutine != null)
             {
                 _instance.StopCoroutine(_instance._completeDelayCoroutine);
@@ -74,34 +67,20 @@ namespace Iridium.UI
             _instance._message = message;
             _instance._isPersistent = true;
             _instance._timer = float.MaxValue;
-            // Re-resolve the Text component on every progress update instead of
-            // trusting the cached reference. The OLD IMGUI implementation
-            // (commit 538c294^) read `_message` fresh in OnGUI() every frame —
-            // the new UGUI/IML path cannot rely on a single cached Text
-            // reference because:
-            //   (a) _SetContent can be called from outside (e.g. OptimizerPatches'
-            //       VRAMNotificationPatch.Postfix → Show), which Rebuilds the
-            //       UI and leaves the cached reference pointing at a destroyed
-            //       Text component, and
-            //   (b) the wrapper's child ordering can shift between rebuilds
-            //       (pending-destroy wrappers vs new wrapper), making the
-            //       cached _messageText point at a stale object.
-            // Walking the hierarchy each call is cheap (one GetChild + Find)
-            // and matches the "always-read-the-latest-value" semantics of the
-            // old IMGUI version, which never had this "0/129 stuck" problem.
+            // The cached Text is invalidated by an external _SetContent/Rebuild and by child
+            // reordering between rebuilds, so resolve it fresh each update (one GetChild + Find).
             _instance._SetMessageText(message);
         }
 
         /// <summary>
-        /// Complete the persistent loading UI. If <paramref name="forceImmediate"/> is
-        /// false and less than <see cref="MinPersistentDisplay"/> seconds have elapsed
-        /// since <see cref="ShowPersistent"/>, the fade-out is delayed so the user
-        /// actually sees the progress for fast loads.
+        /// Complete the persistent loading UI. When forceImmediate is false and less than
+        /// MinPersistentDisplay seconds have elapsed since ShowPersistent, fade-out is
+        /// delayed so fast loads still show progress.
         /// </summary>
         public static void Complete(bool forceImmediate = false)
         {
             if (_instance == null) return;
-            // Cancel any in-flight delay coroutine so we don't double-fade.
+            // Drop the in-flight delay coroutine so we don't double-fade.
             if (_instance._completeDelayCoroutine != null)
             {
                 _instance.StopCoroutine(_instance._completeDelayCoroutine);
@@ -109,9 +88,6 @@ namespace Iridium.UI
             }
             if (!forceImmediate)
             {
-                // Enforce a minimum visible time for the persistent UI so that fast loads
-                // (where ShowPersistent was called < MinPersistentDisplay seconds ago) still
-                // get a chance to display the progress to the player before fading out.
                 float elapsedSinceShow = Time.realtimeSinceStartup - _instance._showStartTime;
                 float wait = MinPersistentDisplay - elapsedSinceShow;
                 if (wait > 0f)
@@ -156,12 +132,8 @@ namespace Iridium.UI
 
         private void _Initialize()
         {
-            // Build our own Canvas + CanvasGroup so we can:
-            //   1. avoid the renderer's full-screen dark overlay (created in EnsureRoot)
-            //   2. fade the entire notification via a single CanvasGroup
-            //   3. sit below ImlWindow's dialog (sortingOrder 32767 vs 32766)
-            // Pre-creating RootObject + a placeholder also makes the renderer's
-            // "keep child at index 0" loop behave correctly across multiple rebuilds.
+            // Own Canvas + CanvasGroup: skips the renderer's full-screen dark overlay,
+            // fades via one CanvasGroup, and sits below ImlWindow's dialog (32766 vs 32767).
             _canvasGroup = gameObject.AddComponent<CanvasGroup>();
             _canvasGroup.alpha = 0;
             _canvasGroup.blocksRaycasts = true;  // so the Stop button can receive clicks
@@ -174,9 +146,8 @@ namespace Iridium.UI
             canvasGo.AddComponent<CanvasScaler>();
             InstanceRaycaster = canvasGo.AddComponent<GraphicRaycaster>();
 
-            // Placeholder: the renderer's RebuildUI loop destroys all children except
-            // index 0. Without this anchor, a previous-frame DialogWrapper would be
-            // preserved as index 0 and leak each time _SetContent is called.
+            // Anchor at index 0: RebuildUI keeps it and destroys everything else, so a
+            // previous-frame DialogWrapper would otherwise be preserved and leak.
             var placeholder = new GameObject("Placeholder");
             placeholder.transform.SetParent(canvasGo.transform, false);
 
@@ -218,9 +189,8 @@ namespace Iridium.UI
             });
             _renderer.Rebuild();
 
-            // Renderer positions the DialogWrapper at screen center by default; we
-            // want a small panel pinned to the top-left. Also re-cache refs (the
-            // wrapper + children are recreated on every Rebuild).
+            // Small panel pinned top-left instead of the default screen center; also
+            // re-caches refs, since Rebuild recreates the wrapper and its children.
             _PostProcessLayout();
             _CacheUIRefs();
 
@@ -230,40 +200,26 @@ namespace Iridium.UI
         private void _PostProcessLayout()
         {
             if (_renderer.RootObject == null) return;
-            // IMPORTANT: the renderer's RebuildUI loop only queues the previous-frame
-            // wrapper for destruction (Destroy is end-of-frame). The new wrapper is
-            // appended to the end of the children list, so we must pick the LAST
-            // child — Transform.Find("DialogWrapper") would otherwise return the
-            // old pending-destroy wrapper, leaving the new one at its default
-            // center anchor and stale text.
+            // RebuildUI only queues the previous wrapper for end-of-frame Destroy, so the new
+            // one is the LAST child: Transform.Find would return the stale pending-destroy one.
             int lastIdx = _renderer.RootObject.transform.childCount - 1;
             if (lastIdx < 0) return;
             var wrapper = _renderer.RootObject.transform.GetChild(lastIdx) as RectTransform;
             if (wrapper == null || wrapper.gameObject.name != "DialogWrapper") return;
 
-            // Disable the wrapper's ContentSizeFitter — without this, every layout
-            // pass would overwrite our sizeDelta with the HBox's preferred width
-            // (~254px), making the wrapper oscillate between 254 and 400.
+            // Otherwise the layout pass overwrites sizeDelta with the HBox's preferred
+            // width (~254px) and the wrapper oscillates between 254 and 400.
             DisableContentSizeFitter(wrapper);
 
-            // Pin to top-left with a fixed size.
             wrapper.anchorMin = new Vector2(0, 1);
             wrapper.anchorMax = new Vector2(0, 1);
             wrapper.pivot = new Vector2(0, 1);
             wrapper.anchoredPosition = new Vector2(20, -20);
             wrapper.sizeDelta = new Vector2(400, 50);
 
-            // The HBox (built by BuildContainer) also carries a ContentSizeFitter
-            // and a LayoutElement. The ContentSizeFitter was shrinking it to the
-            // HBox's preferred width; the LayoutElement — even with minWidth=0
-            // and minHeight=0 — was driving the HBox's height to the LayoutGroup's
-            // intrinsic preferred height (max of children's preferred heights ≈
-            // 150px after text + padding), which made the HBox much taller than
-            // the 50px wrapper and turned the Icon into a tall pill and the
-            // message text into one character per line.
-            //
-            // Strip both entirely so the HBox's RectTransform is governed solely
-            // by its anchor (stretch to fill wrapper).
+            // Strip the HBox's ContentSizeFitter and LayoutElement: either one drives its
+            // RectTransform from preferred sizes, making it far taller than the 50px
+            // wrapper (text wraps to one char per line). Let the anchor govern it.
             var hbox = wrapper.Find("HBox") as RectTransform;
             if (hbox != null)
             {
@@ -271,11 +227,7 @@ namespace Iridium.UI
                 var le = hbox.GetComponent<LayoutElement>();
                 if (le != null) UnityEngine.Object.Destroy(le);
 
-                // Stop the HBox from forcing its children to expand to fill its
-                // height (BuildContainer sets childForceExpandHeight = true). With
-                // a 50px wrapper the children would otherwise be stretched into
-                // tall pills / 50px-tall buttons. Instead let each child keep its
-                // own preferred size and center them vertically in the HBox.
+                // childForceExpandHeight would stretch children into tall pills inside a 50px wrapper.
                 var hlg = hbox.GetComponent<HorizontalLayoutGroup>();
                 if (hlg != null)
                 {
@@ -284,25 +236,18 @@ namespace Iridium.UI
                     hlg.childAlignment = TextAnchor.MiddleLeft;
                 }
 
-                // Re-assert the stretch anchor post-BuildContainer so the HBox
-                // is guaranteed to fill the wrapper, not fall back to a fixed
-                // preferred size.
+                // Re-assert the stretch anchor post-BuildContainer.
                 hbox.anchorMin = Vector2.zero;
                 hbox.anchorMax = Vector2.one;
                 hbox.offsetMin = Vector2.zero;
                 hbox.offsetMax = Vector2.zero;
                 hbox.sizeDelta = Vector2.zero; // (anchor stretch) → fill wrapper
 
-                // Make the panel background non-blocking so the rest of the screen
-                // still receives clicks. The Stop button itself keeps its
-                // raycastTarget.
+                // Panel background stays click-through; the Stop button keeps raycastTarget.
                 var img = hbox.GetComponent<Image>();
                 if (img != null) img.raycastTarget = false;
 
-                // Belt-and-suspenders for the Stop button: make sure it's enabled
-                // and its image accepts raycasts. BuildButton already sets these,
-                // but if anything ever flipped them off the click would silently
-                // stop registering.
+                // BuildButton already sets these, but a silent flip here means dead clicks.
                 var btn = hbox.Find("Button");
                 if (btn != null)
                 {
@@ -313,9 +258,7 @@ namespace Iridium.UI
                 }
             }
 
-            // Force a layout rebuild on the wrapper so the HBox's newly-stripped
-            // LayoutElement + reassigned anchor take effect this frame instead of
-            // next.
+            // Apply the stripped LayoutElement and reassigned anchor this frame.
             UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(wrapper);
         }
 
@@ -346,14 +289,7 @@ namespace Iridium.UI
             if (txt != null) _messageText = txt.GetComponent<Text>();
         }
 
-        /// <summary>
-        /// Walk the live UI tree to find the message Text and set its text.
-        /// Mirrors the OLD IMGUI behavior of re-reading <c>_message</c> in
-        /// OnGUI() every frame, but for UGUI: instead of trusting the cached
-        /// <c>_messageText</c> reference (which can be invalidated by an
-        /// external Rebuild), re-resolve the Text each call. Cheap (one
-        /// GetChild + Find) and immune to stale-reference issues.
-        /// </summary>
+        /// <summary>Re-resolves the live Text each call (one GetChild + Find) so an external Rebuild can't leave us writing to a destroyed Text.</summary>
         private void _SetMessageText(string message)
         {
             if (_renderer?.RootObject == null) return;
@@ -366,19 +302,14 @@ namespace Iridium.UI
             var textComp = txt.GetComponent<Text>();
             if (textComp == null) return;
             textComp.text = message;
-            // Refresh the cached reference too — keeps _CacheUIRefs's result
-            // consistent with what we just wrote, in case anyone else reads
-            // _messageText.
+            // Keep the cache in sync for other readers of _messageText.
             _messageText = textComp;
         }
 
         private void _StartFadeIn()
         {
-            // Stop any in-flight fade so the persistent UI snaps fully visible
-            // (Complete uses _StartFadeOut to fade back down). A 0.5s fade-in was
-            // tried originally, but when frame-spread loading finishes in <0.5s
-            // (typical for levels with 100-1000 decorations) the fade-in gets
-            // interrupted by Complete at low alpha and the user sees nothing.
+            // Snap to full alpha: a fade-in gets cut off by Complete at low alpha
+            // when loading finishes in under FadeDuration.
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _canvasGroup.alpha = 1f;
             _fadeCoroutine = null;

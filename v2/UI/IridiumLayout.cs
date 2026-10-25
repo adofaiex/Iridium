@@ -82,9 +82,7 @@ public static class IridiumLayout
         scaleTimes1M => new ResolutionResources(scaleTimes1M)
     );
 
-    // ══════════════════════════════════════════════════════════════
     // Element tree (JSX-like declarative UI)
-    // ══════════════════════════════════════════════════════════════
 
     public abstract class Element
     {
@@ -630,9 +628,7 @@ public static class IridiumLayout
         }
     }
 
-    // ══════════════════════════════════════════════════════════════
     // Factory methods
-    // ══════════════════════════════════════════════════════════════
 
     public static Element VBox(
         ContainerStyle style = ContainerStyle.None,

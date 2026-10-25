@@ -160,37 +160,30 @@ namespace Iridium
 
         public Logger() { }
 
-        // Log 支持多参数和对象展开
         public void Log(params object[] args)
         {
             _writeQueue.Enqueue(new LogData(args, 0));
         }
 
-        // Warning 映射到Warning
         public void Warning(params object[] args)
         {
             _writeQueue.Enqueue(new LogData(args, 1));
         }
 
-        // Error 映射到LogException
         public void Error(params object[] args)
         {
             _writeQueue.Enqueue(new LogData(args, 2));
         }
 
-        // Dir 用于显示对象的属性列表
         public void Dir(object obj)
         {
             _writeQueue.Enqueue(new LogData(new object[1] { obj }, 3));
         }
 
-        // Debug 等同于Log
         public void Debug(params object[] args) => Log(args);
 
-        // Info 等同于Log
         public void Info(params object[] args) => Log(args);
 
-        // 转换参数为字符串，支持对象展开
         private static string Args2String(object[] args)
         {
             if (args == null || args.Length == 0)
@@ -199,7 +192,6 @@ namespace Iridium
             return string.Join(" ", args.Select(arg => Value(arg)));
         }
 
-        // 格式化单个值，区分普通值和对象
         private static string Value(object value, int depth = 0)
         {
             if (value == null)
@@ -316,7 +308,6 @@ namespace Iridium
             return $"{typeName} {{\n{nextIndent}{string.Join($",\n{nextIndent}", propStrings)}\n{indent}}}";
         }
 
-        // 转换参数为字符串，支持对象展开
         private static string FormatArgs2String(object[] args)
         {
             if (args == null || args.Length == 0)
@@ -325,7 +316,6 @@ namespace Iridium
             return string.Join(" ", args.Select(arg => FormatValue(arg)));
         }
 
-        // 格式化单个值，区分普通值和对象
         private static string FormatValue(object value, int depth = 0)
         {
             if (value == null)

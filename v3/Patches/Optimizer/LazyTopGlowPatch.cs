@@ -7,24 +7,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 大谱面加载优化的 A 部分：惰性 topGlow（发光贴片）。
-	///
-	/// 现象/数据：15.8 万砖的谱面，InstantiateFloatFloors 要 28s。每块砖在
-	/// scrFloor.Awake 里都会额外 Instantiate 一个 topGlow（SpriteRenderer +
-	/// ToggleVisible），哪怕编辑器里绝大多数砖根本不发光；加上每砖一份材质实例，
-	/// 共同造成加载时间和内存爆炸。
-	///
-	/// 方案：
-	///  - Awake 复用原逻辑，但 topGlow 改为按需创建：
-	///      * 播放世界（controller.gameworld）→ 和原来一样立即创建（游戏逻辑大量直接访问，保持原样）；
-	///      * 编辑器且不需要发光 → 指向一个共享的隐藏占位 SpriteRenderer（SetActive(false)/写 color
-	///        都落在占位上，不影响其它砖）；
-	///  - 只有真正要显示发光时（LightUp / SetToRandomColor / Start 判定为亮 /
-	///    FinishCustomLevelLoading 点亮前缀砖 / 对象装饰物开启 glow）才实体化一块砖自己的 topGlow。
-	///
-	/// 只开关整个功能的开关：optimizer.optimizeLargeLevelLoading。
-	/// </summary>
+	/// <summary>Spawns scrFloor.topGlow on demand: floors that never glow share one hidden dummy SpriteRenderer and get a real one on first use.</summary>
 	public static class LazyTopGlowPatch
 	{
 		private static AccessTools.FieldRef<scrFloor, scrController>? _controllerRef;
@@ -58,7 +41,7 @@ namespace Iridium.Patches.Optimizer
 			return _controllerRef != null && _conductorRef != null && _gcRef != null && _vfxRef != null;
 		}
 
-		/// <summary>共享占位：隐藏、不参与渲染，可安全接收 SetActive/color 等写入。</summary>
+		/// <summary>Shared stand-in: hidden and disabled, so stray SetActive/color writes stay harmless.</summary>
 		internal static SpriteRenderer Dummy
 		{
 			get
@@ -69,8 +52,7 @@ namespace Iridium.Patches.Optimizer
 					go.hideFlags = HideFlags.HideAndDontSave;
 					go.SetActive(false);
 					_dummy = go.AddComponent<SpriteRenderer>();
-					// 兜底：即使某处把占位对象 SetActive 了，也不渲染任何东西。
-					_dummy.enabled = false;
+					_dummy.enabled = false; // belt and braces: renders nothing even if something activates the object
 				}
 				return _dummy;
 			}
@@ -78,7 +60,7 @@ namespace Iridium.Patches.Optimizer
 
 		internal static bool IsDummy(SpriteRenderer? sr) => sr != null && ReferenceEquals(sr, _dummy);
 
-		/// <summary>实体化一块砖自己的 topGlow（逻辑对齐 scrFloor.Awake 原版）。</summary>
+		/// <summary>Materialize this floor's own topGlow, mirroring scrFloor.Awake.</summary>
 		internal static SpriteRenderer Create(scrFloor floor)
 		{
 			var prefab = RDConstants.data.prefab_topGlow;
@@ -93,7 +75,7 @@ namespace Iridium.Patches.Optimizer
 			return sr;
 		}
 
-		/// <summary>需要真实 topGlow 时调用：已有真实对象直接返回，占位/空则创建。</summary>
+		/// <summary>Return the real topGlow, replacing a dummy or a null one.</summary>
 		internal static SpriteRenderer Ensure(scrFloor floor)
 		{
 			if (floor.topGlow != null && !IsDummy(floor.topGlow)) return floor.topGlow;
@@ -101,11 +83,7 @@ namespace Iridium.Patches.Optimizer
 			return Create(floor);
 		}
 
-		/// <summary>
-		/// 复刻 scrFloor.Awake 的必要初始化（供正常 Awake 替换与 B 的快速初始化共用）。
-		/// callComponentAwake=true 时额外手动调用 FloorRenderer.Awake（B 的未激活克隆需要，
-		/// 激活时 Unity 会再调一次，两次都是幂等的）。
-		/// </summary>
+		/// <summary>The parts of scrFloor.Awake that must run; FloorRenderer.Awake is called manually and re-invoked idempotently on activation.</summary>
 		internal static bool TryInitialize(scrFloor floor, bool callComponentAwake)
 		{
 			if (floor == null || !InitRefs()) return false;
@@ -131,8 +109,7 @@ namespace Iridium.Patches.Optimizer
 					floor.startRot = t.rotation.eulerAngles;
 					floor.tweenRot = floor.startRot;
 				}
-				// B 路径不写 startPos/startRot/tweenRot：MakeLevel 的收尾循环随后会对
-				// 全部砖块统一重写这三项，这里省掉两次 native transform 读取。
+				// The chunked path skips these; MakeLevel's finishing loop rewrites them for every floor anyway.
 
 				if (floor.floorRenderer == null)
 				{
@@ -146,8 +123,7 @@ namespace Iridium.Patches.Optimizer
 				}
 				if (callComponentAwake && floor.floorRenderer != null)
 				{
-					// 虚拟派发到 FloorMeshRenderer.Awake / FloorSpriteRenderer.Awake
-					// （激活时 Unity 会再调一次，两次都是幂等的）
+					// Virtual dispatch to FloorMeshRenderer/FloorSpriteRenderer.Awake; Unity repeats it on activation, both are idempotent.
 					floor.floorRenderer.Awake();
 				}
 				if (floor.setHitsound == null)
@@ -209,11 +185,9 @@ namespace Iridium.Patches.Optimizer
 			public static void Prefix(scrFloor __instance)
 			{
 				if (!Enabled) return;
-				// 原版 Reset 会 Destroy(topGlow) 然后直接再调 Awake()：
-				// 必须先清掉 B 的「已初始化」标记，否则那次 Awake 会被跳过、砖块不再重建 topGlow。
+				// Vanilla Reset destroys topGlow then calls Awake again, so the initialized marker must go first.
 				ChunkedFloorSpawnPatch.UnmarkInitialized(__instance);
-				// 占位对象是共享的，先摘掉引用（原版会 Destroy 它）。
-				if (IsDummy(__instance.topGlow)) __instance.topGlow = null;
+				if (IsDummy(__instance.topGlow)) __instance.topGlow = null; // shared dummy, vanilla would Destroy it
 			}
 		}
 
@@ -259,10 +233,7 @@ namespace Iridium.Patches.Optimizer
 			}
 		}
 
-		/// <summary>
-		/// 进入播放/检查点恢复时，原版会把 seqID 之前的 topGlow 全部 SetActive(true)。
-		/// 先把这些砖的 topGlow 实体化，避免共享占位被点亮。
-		/// </summary>
+		/// <summary>Materialize topGlows for the lit prefix, which vanilla SetActive(true)s on the shared dummy otherwise.</summary>
 		[IriPatch(Path = "loading/largeLevel", Pre = typeof(OptimizerSettings), Condition = "optimizeLargeLevelLoading")]
 		[HarmonyPatch(typeof(scnGame), nameof(scnGame.FinishCustomLevelLoading))]
 		public static class FinishLoadingPatch
@@ -290,7 +261,7 @@ namespace Iridium.Patches.Optimizer
 			}
 		}
 
-		/// <summary>对象装饰物的地板开启 glow 时同样要实体化。</summary>
+		/// <summary>Object decorations enabling their floor glow need a real topGlow too.</summary>
 		[IriPatch(Path = "loading/largeLevel", Pre = typeof(OptimizerSettings), Condition = "optimizeLargeLevelLoading")]
 		[HarmonyPatch(typeof(scrObjectDecoration), nameof(scrObjectDecoration.SetFloorGlowEnabled))]
 		public static class ObjectDecorationGlowPatch

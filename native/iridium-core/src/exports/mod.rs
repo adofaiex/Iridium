@@ -1,5 +1,4 @@
-//! FFI export layer — thin `#[no_mangle]` wrappers only.
-//! Actual computation lives in `crate::compute`; data shapes in `crate::ffi`.
+//! `#[no_mangle]` FFI wrappers over `crate::compute`; data shapes in `crate::ffi`.
 
 pub mod easing;
 pub mod json;

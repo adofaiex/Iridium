@@ -7,9 +7,7 @@ using UnityEngine;
 namespace Iridium.Patches
 {
  /// <summary>
- /// DOTween优化补丁 - 使用安全的配置方式优化DOTween性能
- /// 注意：只使用配置方式，不使用任何运行时反射或Transpiler
- /// 功能完全可开关，关闭时恢复默认设置
+ /// DOTween tuning via runtime settings only (no reflection, no transpilers).
  /// </summary>
  public static class DOTweenOptimizationPatches
  {
@@ -19,11 +17,7 @@ namespace Iridium.Patches
  #region Runtime Settings
 
  /// <summary>
- /// 应用DOTween运行时设置（安全模式）
- /// 注意：
- /// - 容量设置只在第一次调用时应用（DOTween限制：只能增加不能减少容量）
- /// - 其他设置（可复用、安全模式）可以动态改变
- /// - 如果之前已经设置过容量，再次调用不会改变容量
+ /// DOTween capacity can only grow, so it is applied once; other settings are dynamic.
  /// </summary>
  public static void ApplyRuntimeSettings()
  {
@@ -71,11 +65,7 @@ namespace Iridium.Patches
  }
 
  /// <summary>
- /// 重置DOTween设置到默认值
- /// 注意：
- /// - 容量不会恢复到默认值（DOTween限制：容量只能增加不能减少）
- /// - 其他设置（可复用、安全模式等）会恢复到默认值
- /// - 这样可以完全禁用优化效果
+ /// Resets the dynamic settings; capacity stays raised (DOTween cannot shrink it).
  /// </summary>
  public static void ResetRuntimeSettings()
  {

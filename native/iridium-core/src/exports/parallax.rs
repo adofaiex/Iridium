@@ -1,6 +1,5 @@
-//! Static decoration batcher vertex transform export.
-//!
-//! Stateless: the host gathers SoA arrays each frame and passes them in.
+//! Static decoration batcher vertex transform export. Stateless: the host
+//! gathers SoA arrays each frame and passes them in.
 
 use crate::compute::parallax::{self, Inputs};
 use crate::ffi;

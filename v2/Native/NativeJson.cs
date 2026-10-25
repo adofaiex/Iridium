@@ -5,14 +5,10 @@ using System.Runtime.InteropServices;
 namespace Iridium.Native
 {
     /// <summary>
-    /// Materializes the native flat JSON DOM (iridium_core) into the same
-    /// managed object graph GDMiniJSON produces:
-    /// Dictionary&lt;string, object&gt; / List&lt;object&gt; / string / int /
-    /// float / bool / null.
-    ///
-    /// Every entry point falls back to the managed parser by returning false;
-    /// callers must treat false as "run the original".
-    /// </summary>
+/// Materializes the native flat JSON DOM (iridium_core) into the same managed object
+/// graph GDMiniJSON produces. Every entry point returns false to fall back to the
+/// managed parser, so callers must treat false as "run the original".
+/// </summary>
     internal static class NativeJson
     {
         /// <summary>Below this many UTF-16 chars the managed parser wins.</summary>
@@ -67,7 +63,7 @@ namespace Iridium.Native
                 Marshal.Copy(view.StrLen, strLen, 0, stringCount);
             }
 
-            // UTF-16 pool copied as shorts to avoid Marshal.Copy(char[]) ambiguity.
+            // UTF-16 pool copied as shorts to avoid Marshal.Copy(char[]) ambiguity
             string[]? strings = null;
             if (poolLen > 0)
             {
@@ -135,8 +131,7 @@ namespace Iridium.Native
                     {
                         int keyNode = children[start + i * 2];
                         int valNode = children[start + i * 2 + 1];
-                        // Key nodes are always strings; MiniJSON's indexer
-                        // assignment means duplicate keys resolve to last.
+                        // Key nodes are always strings; MiniJSON's indexer means duplicate keys resolve to last
                         string key = strings != null ? strings[a[keyNode]] : "";
                         dict[key] = Build(kinds, a, b, values, children, strings, valNode, depth + 1);
                     }

@@ -6,13 +6,10 @@ using HarmonyLib;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// DOTween 回收安全补丁：
-    /// 当 DOTween.defaultRecyclable = true 时，已完成的 Tween 会回到对象池复用。
-    /// ADOFAI 多处存储/遍历 Tween 引用时未检查 IsActive()，导致对已回收的 Tween 进行操作，
-    /// 造成动画异常、ease 错乱、特效损坏等问题。
-    /// 
-    /// 本文件中包含的所有补丁都通过安全的 IsActive() + null 检查来防止上述问题。
-    /// </summary>
+/// With DOTween.defaultRecyclable = true, completed tweens go back to the pool, and
+/// ADOFAI keeps stored Tween references without checking IsActive(). Every patch here
+/// guards with IsActive() + null checks.
+/// </summary>
     public static class TweenSafetyPatches
     {
         /// <summary>
@@ -82,13 +79,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// ffxPlusBase.ScrubToTime() 中的两个问题：
-        /// 1. Goto() / Kill() 操作前没有 IsActive() 检查
-        /// 2. 未检查 tween 活跃性就直接添加到 pausedTweens
-        /// 
-        /// 该补丁完整替换原方法并添加了安全性检查。
-        /// </summary>
+        /// <summary>ScrubToTime 在 Goto()/Kill() 前不查 IsActive()，也未检查活跃性就加入 pausedTweens。</summary>
         [HarmonyPatch(typeof(ffxPlusBase), "ScrubToTime")]
         public static class SafeFfxPlusBaseScrubToTime
         {

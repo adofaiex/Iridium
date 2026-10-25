@@ -5,18 +5,7 @@ using Iridium.Native;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// GDMiniJSON 解析走 iridium_core（Rust 批量解析）。
-	///
-	/// 覆盖两个入口：
-	///  - <see cref="Json.Deserialize(string)"/>：LevelData.LoadLevel 的完整谱面解析；
-	///  - <see cref="Json.DeserializePartially(string, string)"/>：选关列表 /
-	///    GetCustomLevelName 的“只解析到 actions 之前”的部分解析。
-	///
-	/// 语义：物化后的对象图与 GDMiniJSON 完全一致（Dictionary/List/string/
-	/// int/float/bool/null；重复键后者覆盖；数字解析失败为 0）。任何解析失败
-	/// 或库缺失都原样回退到托管解析器，不改变行为。
-	/// </summary>
+	/// <summary>Routes GDMiniJSON through iridium_core; the object graph must match it exactly, and any failure or missing library falls back to the managed parser.</summary>
 	public static class JsonNativeParsePatch
 	{
 		[IriPatch(Path = "loading/largeLevel", Pre = typeof(OptimizerSettings), Condition = "optimizeLargeLevelLoading")]

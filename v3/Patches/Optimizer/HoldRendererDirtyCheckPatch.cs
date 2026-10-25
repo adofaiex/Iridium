@@ -6,30 +6,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// Hold 渲染器每帧脏检查。
-	///
-	/// 原版每个 hold（scrLevelMaker.DrawHolds 为每块 hold 砖创建一个常驻
-	/// 激活的 GameObject）每帧无条件执行 Update → UpdateMesh + UpdateColor：
-	/// 每次 5+ 次材质 SetFloat/SetColor/SetVector、mesh.bounds 写入、若干
-	/// transform 读取。1 万 hold 的谱面每帧约 10 万次原生调用，是持续帧开销。
-	/// 实际上几何输入（砖块位置/缩放/宽度/角度）极少变化，每帧必须更新的
-	/// 只有 _Completion 与 alpha（填充进度/透明度）。
-	///
-	/// 实现：
-	/// - Prefix 挂在 scrHoldRenderer.Update：unfilling/hit 动画期间放行
-	///   （颜色/圆圈每帧变化）；否则用 CWT 快照比较几何输入
-	///   （startFloor.position、head/tail 的 localScale.x、tileSize、
-	///   startFloor.radiusScale、tailFloor 引用、extendAnim、exitangle），
-	///   全部未变时只更新每帧必须的 _Completion/_StartAlpha 后返回 false；
-	///   有变化时放行原版（随后 Postfix 刷新快照）。
-	/// - 快照在 Update 后记录，保证"放行原版后下一帧即可进入跳过状态"。
-	///
-	/// 行为差异：静止 hold 的 mesh.bounds 不再每帧重写（内容相同，无视觉
-	/// 影响）；_Completion/_StartAlpha 仍每帧更新，填充动画不受影响。
-	/// 回退方式：关闭 optimizeHoldRenderer。
-	/// 3.3.0 与 3.4.0 的 Update/UpdateMesh/UpdateColor 结构一致（已核对两版反编译源）。
-	/// </summary>
+	/// <summary>Skips scrHoldRenderer.UpdateMesh/UpdateColor while the geometry inputs are unchanged; _Completion and _StartAlpha still update every frame.</summary>
 	[IriPatch(Path = "optimizer/hold", Pre = typeof(OptimizerSettings), Condition = "optimizeHoldRenderer")]
 	[HarmonyPatch(typeof(scrHoldRenderer), "Update")]
 	public static class HoldRendererDirtyCheckPatch
@@ -118,8 +95,7 @@ namespace Iridium.Patches.Optimizer
 				var snap = _snapshots.GetOrCreateValue(__instance);
 				if (snap.Valid && SnapshotMatches(__instance, snap))
 				{
-					// 几何未变：只更新每帧必须的填充进度/透明度，跳过 UpdateMesh
-					// 与 UpdateColor 的静态部分（等价复刻 UpdateColor 的动态分支）
+					// Geometry unchanged: only the per-frame fill/alpha writes, replicating UpdateColor's dynamic branch.
 					if (__instance.m_meshRenderer != null)
 					{
 						Color holdColor = __instance.touchColor;

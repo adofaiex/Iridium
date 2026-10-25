@@ -6,13 +6,9 @@ using UnityEngine;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// v3 移植（适配 2.9.8）：消除输入热路径的每帧 lambda 分配。
-    ///
-    /// 原版 scrController.Simulated_PlayerControl_Update 每帧为 7 个
-    /// hold-check 回调创建捕获 this + targetTick 的匿名委托（AsyncInputUtils
-    /// .WhileFloorNotChange）。本补丁用一次性编译的委托（AccessTools.MethodDelegate）
-    /// 复刻同一逻辑，每帧零分配。字段经 FieldRef 访问。
-    /// </summary>
+/// Simulated_PlayerControl_Update allocates 7 closures per frame for its hold checks.
+/// This reproduces them as delegates compiled once via AccessTools.MethodDelegate.
+/// </summary>
     public static class PlayerInputOptimizationPatches
     {
         private static readonly Dictionary<string, Action<scrController, ulong?>> _delegates = new();

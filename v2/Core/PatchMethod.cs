@@ -256,10 +256,7 @@ namespace Iridium.Core
             }
         }
 
-        // ============================================================
-        //  桥接方案 — 使用 PatchBridge<T, Res> 中的真实静态方法
-        //  替代 DynamicMethod，确保 Harmony 2.x 完全兼容
-        // ============================================================
+        // PatchBridge<T, Res> 的真实静态方法取代 DynamicMethod，确保 Harmony 2.x 完全兼容
 
         private HarmonyMethod? _hmPrefix;
         private HarmonyMethod? _hmPostfix;

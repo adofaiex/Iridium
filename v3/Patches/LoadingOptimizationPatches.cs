@@ -34,10 +34,9 @@ namespace Iridium.Patches
 			private static bool _playWasBlocked;
 			private static bool _uiCompleted;
 			// Set by ReloadAssets when a full decoration rebuild is about to happen
-			// (level load). Editor-driven incremental updates (e.g. modifying a tile
-			// event) call UpdateDecorationObjects directly without ReloadAssets, so
-			// they must NOT be intercepted — otherwise every tile edit re-triggers a
-			// frame-spread load and blocks the whole UI.
+			// (level load). Editor-driven incremental updates call
+			// UpdateDecorationObjects directly without ReloadAssets, so they must
+			// NOT be intercepted or every tile edit re-triggers a frame-spread load.
 			private static bool _shouldFrameSpread;
 
 			public static bool IsLoading => _isLoading;
@@ -51,9 +50,8 @@ namespace Iridium.Patches
 				[HarmonyPostfix]
 				public static void Postfix(bool reloadDecorations)
 				{
-					// ReloadAssets(reloadDecorations: false) signals the caller is about
-					// to rebuild decorations manually (UpdateDecorationObjects) right
-					// after — that is the level-load path we want to frame-spread.
+					// ReloadAssets(reloadDecorations: false) means the caller rebuilds
+					// decorations manually right after — that is the level-load path.
 					if (!reloadDecorations)
 						_shouldFrameSpread = true;
 				}
@@ -71,9 +69,8 @@ namespace Iridium.Patches
 
 				if (!reloadDecorations) return true;
 
-				// Only intercept when this call is part of a level-load sequence
-				// (flagged by ReloadAssets). Direct calls from the editor (tile edits,
-				// undo/redo, ...) are left untouched.
+				// Only intercept when ReloadAssets flagged this as a level load; direct
+				// editor calls (tile edits, undo/redo) are left untouched.
 				if (!_shouldFrameSpread)
 					return true;
 				_shouldFrameSpread = false;

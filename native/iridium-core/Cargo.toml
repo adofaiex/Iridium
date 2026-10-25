@@ -14,9 +14,8 @@ crate-type = ["cdylib"]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-# Keep unwinding: lib.rs's catch_unwind guard converts panics into error
-# codes so a native bug degrades to the C# path instead of killing the
-# game (abort would defeat that). The unwinder costs ~60KB, worth it.
+# Keep unwinding: lib.rs's catch_unwind turns panics into error codes so a
+# native bug degrades to the C# path instead of aborting. ~60KB, worth it.
 strip = "symbols"
 
 [profile.release.package."*"]

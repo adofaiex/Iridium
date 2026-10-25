@@ -8,24 +8,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 命中框（Hitbox）检测热路径优化。
-	///
-	/// 原版每帧对<b>全部</b>装饰物调用 CheckHitboxHit（scrDecorationManager.Update），
-	/// 而真正参与"装饰物-装饰物"判定的只是 hitboxDetectTarget == Decoration 的少数；
-	/// 命中判定本身还有两处开销：
-	///   1. `hitboxDecoTags.Any(t => deco.tags.Contains(t))` —— LINQ + 闭包，
-	///      每个命中碰撞体每帧分配一次；
-	///   2. 在"不可能触发"的情况（无匹配标签、Once 已触发）下仍执行物理 Overlap。
-	///
-	/// 本补丁严格保持原版语义：
-	///   - 管理器循环先按 useHitbox &amp;&amp; target==Decoration 过滤，省去对其余
-	///     装饰物（绝大多数）的方法调用与 Harmony 分支；
-	///   - CheckHitboxHit 改为无分配的手写标签匹配，并在不可能触发时跳过物理查询。
-	///
-	/// 注意：v3 引用的是 2.9.8 的 UnityEngine，Collider2D 只有旧版 OverlapCollider；
-	/// 而 3.3.x 改名为 Overlap。这里在运行时解析可用的 API，两个版本通用。
-	/// </summary>
+	/// <summary>Hitbox hot path: filter decorations in the manager loop and skip the physics query when no trigger is possible, keeping vanilla semantics otherwise.</summary>
 	public static class HitboxOptimizationPatch
 	{
 		// 复用结果列表，替代原版每次 CollectionPool.Get/Release
@@ -55,16 +38,13 @@ namespace Iridium.Patches.Optimizer
 			}
 		}
 
-		/// <summary>
-		/// 解析 Collider2D 的 overlap API：
-		/// 3.3.x 的实例 Overlap &gt; 2.9.8 的实例 OverlapCollider &gt; 静态 Physics2D.OverlapCollider。
-		/// </summary>
+		/// <summary>2.9.8 only has the older Collider2D.OverlapCollider; 3.3.x renamed it to Overlap, so resolve whatever this build has.</summary>
 		private static bool EnsureOverlap()
 		{
 			if (_overlapResolved) return _overlap != null;
 			_overlapResolved = true;
 
-			// 每一级独立 try：某一级解析/委托生成失败不应影响后续回退。
+			// Independent try per level: one failure must not block the next fallback.
 			_overlap = TryInstance("Overlap") ?? TryInstance("OverlapCollider") ?? TryStatic();
 
 			if (_overlap == null)
@@ -110,15 +90,10 @@ namespace Iridium.Patches.Optimizer
 		[HarmonyPatch(typeof(scrDecorationManager), "Update")]
 		public static class ManagerUpdateHitboxFilterPatch
 		{
-			/// <summary>
-			/// 低于该检查者数量时直接走逐条 Overlap（索引重建对少量检查者不划算）。
-			/// </summary>
+			/// <summary>Below this many checkers the per-checker Overlap beats building an index.</summary>
 			private const int MinIndexedCheckers = 2;
 
-			/// <summary>
-			/// 目标数超过 检查者数×该比例 时放弃索引（重建需读取每个目标的
-			/// collider.bounds，目标远多于检查者时不划算）。
-			/// </summary>
+			/// <summary>Give up the index when targets exceed checkers × this; rebuild reads every target's collider.bounds.</summary>
 			private const int TargetToCheckerRatio = 8;
 
 			private static readonly List<scrDecoration> _spatialTargets = new List<scrDecoration>(256);
@@ -159,12 +134,7 @@ namespace Iridium.Patches.Optimizer
 				}
 			}
 
-			/// <summary>
-			/// 空间索引粗筛：语义上等价于对每个检查者执行原版 Overlap——
-			/// AABB 相交是物理相交的必要条件，标签相交是触发的必要条件，因此
-			/// “无候选”时跳过 Overlap 不会漏判；有候选时仍走原版精确物理判定。
-			/// 返回 false 表示本次未处理（调用方走逐条回退路径）。
-			/// </summary>
+			/// <summary>AABB broad phase is sound: AABB overlap and tag overlap are both necessary for a trigger, so an empty candidate set cannot miss; any candidate still runs vanilla physics.</summary>
 			private static bool TrySpatialFilteredChecks(scrDecorationManager manager)
 			{
 				if (!Iridium.Native.IridiumNative.HasSpatial) return false;

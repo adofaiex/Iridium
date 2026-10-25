@@ -7,18 +7,11 @@ using UnityEngine;
 namespace Iridium.Native
 {
     /// <summary>
-    /// Loader for the optional native hot-path library (iridium_core).
-    ///
-    /// Fully manual binding (load + dlsym/GetProcAddress) — Mono's DllImport
-    /// resolution follows the OS search path and does NOT probe the mod
-    /// directory, so manual binding gives identical, deterministic behavior
-    /// on Windows / Linux / macOS.
-    ///
-    /// Hard binding: features backed by native exports are DISABLED when the
-    /// library is missing or ABI-incompatible (no silent C# duplicates —
-    /// historical fallback code lives in git history). Gate new native
-    /// features on <see cref="Available"/>.
-    /// </summary>
+/// Loader for the optional native hot-path library (iridium_core). Binding is
+/// fully manual because Mono's DllImport resolution does not probe the mod directory.
+/// Missing or ABI-incompatible library means native-backed features are DISABLED —
+/// gate new native features on <see cref="Available"/>.
+/// </summary>
     public static class IridiumNative
     {
         private const int RequiredAbiVersion = 1;
@@ -68,10 +61,7 @@ namespace Iridium.Native
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int RemakePathFromFn(ref FloorPathInput input, float originX, float originY, ref FloorPathOutput output);
 
-        /// <summary>
-        /// Flat JSON DOM mirrored from Rust `ffi::JsonView`: 8 pointers,
-        /// then 5 scalars. Field order/type must match exactly.
-        /// </summary>
+        /// <summary>Mirrors Rust ffi::JsonView: 8 pointers then 5 scalars. Field order/type must match exactly.</summary>
         [StructLayout(LayoutKind.Sequential)]
         internal struct JsonView
         {
@@ -124,24 +114,13 @@ namespace Iridium.Native
         private static SpatialQueryFn _spatialQuery;
         private static ResizeBilinearFn _resizeBilinear;
 
-        /// <summary>
-        /// Batch path rebuild on the native side. Null unless
-        /// <see cref="Available"/> — callers must gate on that first.
-        /// </summary>
+        // Batch path rebuild. Null unless Available — callers must gate on that first.
         internal static RemakePathFn RemakePath => _remakePath;
 
-        /// <summary>
-        /// Incremental path rebuild from an anchor tile (optional export;
-        /// null on older libraries or when not <see cref="Available"/>).
-        /// </summary>
+        /// <summary>Anchor-tile incremental rebuild (optional export; null on older libraries).</summary>
         internal static RemakePathFromFn RemakePathFrom => _available ? _remakePathFrom : null;
 
-        /// <summary>
-        /// Pinned RemakePath call. <paramref name="angleOffset"/> &gt; 0 with
-        /// <paramref name="fromAnchor"/> rebuilds from an anchor tile (slot 0 of
-        /// every output = the anchor). Output arrays need <c>steps + 1</c> slots.
-        /// Returns false when the export is missing or the call failed.
-        /// </summary>
+        /// <summary>Pinned RemakePath call. fromAnchor rebuilds from an anchor tile (output slot 0 is the anchor); outputs need steps + 1 slots.</summary>
         internal static bool RemakePathPinned(
             float[] angles, int angleOffset, float[] lengthMults, int steps,
             double startAngle, float tileSize, bool fromAnchor, float originX, float originY,
@@ -229,14 +208,8 @@ namespace Iridium.Native
             get { EnsureProbed(); return _available && _resizeBilinear != null; }
         }
 
-        /// <summary>
-        /// Bilinear downscale over raw RGBA8 pixels. Bit-exact with Unity's
-        /// <c>Color32.Lerp</c> pair, so results match the managed
-        /// <c>ResizeTextureCPU</c> pixel for pixel. <paramref name="src"/> /
-        /// <paramref name="dst"/> are <c>Color32[]</c> arrays read/written in
-        /// place -- Color32 is <c>LayoutKind.Explicit</c> r@0/g@1/b@2/a@3.
-        /// Returns false when the export is missing or the call failed.
-        /// </summary>
+        // Bit-exact with the managed Color32.Lerp pair, so results must match
+// ResizeTextureCPU pixel for pixel (Color32 is Explicit: r@0/g@1/b@2/a@3)
         internal static bool ResizeBilinearPinned(
             Color32[] src, int srcW, int srcH,
             Color32[] dst, int dstW, int dstH)
@@ -264,11 +237,7 @@ namespace Iridium.Native
             }
         }
 
-        /// <summary>
-        /// Single easing evaluation on the native side. Returns 0 when the
-        /// library is absent (features gate on <see cref="Available"/> first,
-        /// so this is a safety net, not the control path).
-        /// </summary>
+        /// <summary>Single easing evaluation. Returns 0 when the library is absent; callers gate on Available first.</summary>
         internal static float Evaluate(int ease, float time, float duration, float amplitude, float period)
         {
             var fn = _evaluate;
@@ -276,11 +245,7 @@ namespace Iridium.Native
             return fn(ease, time, duration, amplitude, period);
         }
 
-        /// <summary>
-        /// Batch easing evaluation (SoA). Returns false when the export is
-        /// unavailable or the call failed; the caller falls back to
-        /// per-tween <see cref="Evaluate"/>.
-        /// </summary>
+        /// <summary>Batch easing evaluation (SoA). Returns false when unavailable or failed; caller falls back to per-tween Evaluate.</summary>
         internal static bool EvaluateBatch(
             int[] easeIds, float[] times, float[] durations,
             float[] amplitudes, float[] periods, float[] outProgress, int count)
@@ -322,12 +287,7 @@ namespace Iridium.Native
             }
         }
 
-        /// <summary>
-        /// Parses JSON with the native parser into the thread-local DOM.
-        /// `section` non-null mirrors GDMiniJSON DeserializePartially.
-        /// Returns false when the library/export is absent or input malformed
-        /// (caller must then use the managed parser).
-        /// </summary>
+        // Parses into the thread-local DOM; non-null section mirrors GDMiniJSON DeserializePartially
         internal static bool JsonParse(string text, string? section)
         {
             var fn = _jsonParse;
@@ -359,7 +319,7 @@ namespace Iridium.Native
             }
         }
 
-        /// <summary>Fetches the DOM view after a successful <see cref="JsonParse"/>.</summary>
+        /// <summary>Fetches the DOM view after a successful JsonParse.</summary>
         internal static bool JsonGetView(out JsonView view)
         {
             view = default;
@@ -403,11 +363,8 @@ namespace Iridium.Native
             }
         }
 
-        /// <summary>
-        /// Queries the spatial index with a pre-allocated unmanaged output
-        /// buffer (avoids a GCHandle per call on hot frames).
-        /// Returns candidate count (may exceed <paramref name="cap"/>). -1 on error.
-        /// </summary>
+        // Pre-allocated unmanaged output buffer avoids a GCHandle per call on hot frames.
+// Returns candidate count (may exceed cap); -1 on error.
         internal static int SpatialQueryRaw(
             float minX, float minY, float maxX, float maxY, IntPtr outIds, int cap)
         {
@@ -423,10 +380,7 @@ namespace Iridium.Native
             }
         }
 
-        /// <summary>
-        /// Queries the spatial index. Returns candidate count (may exceed
-        /// <paramref name="ids"/>.Length; only that many are written). -1 on error.
-        /// </summary>
+        /// <summary>Queries the spatial index. Returns candidate count (may exceed ids.Length; only that many are written). -1 on error.</summary>
         internal static int SpatialQuery(
             float minX, float minY, float maxX, float maxY, int[] ids, int count)
         {
@@ -472,16 +426,10 @@ namespace Iridium.Native
             }
         }
 
-        /// <summary>
-        /// Probes for the library and logs the outcome. Called once from
-        /// Main.Initialize so the result is visible in Player.log.
-        /// </summary>
+        /// <summary>Probes for the library and logs the outcome; called once from Main.Initialize so it shows in Player.log.</summary>
         public static void Probe() => EnsureProbed();
 
-        /// <summary>
-        /// Resolves a native export to a delegate. Fails (null) when the
-        /// library is not loaded; throws only on delegate type mismatch.
-        /// </summary>
+        /// <summary>Resolves a native export to a delegate. Fails (null) when the library is not loaded.</summary>
         public static T GetExport<T>(string entry) where T : class
         {
             if (_handle == IntPtr.Zero) return null;
@@ -538,8 +486,8 @@ namespace Iridium.Native
                     return;
                 }
 
-                // Optional exports: loaded best-effort so a core-compatible
-                // older library still enables the base features.
+                // Optional exports: best-effort, so a core-compatible older library still
+// enables the base features.
                 _evaluateBatch = GetExport<EvaluateBatchFn>("iridium_core_evaluate_batch");
                 _remakePathFrom = GetExport<RemakePathFromFn>("iridium_core_remake_path_from");
                 _jsonParse = GetExport<JsonParseFn>("iridium_core_json_parse");
@@ -566,7 +514,7 @@ namespace Iridium.Native
             }
         }
 
-        // ── Per-OS loader APIs (lazy-bound; only the current OS's is used) ──
+        // Per-OS loader APIs (lazy-bound; only the current OS's is used)
 
         private static bool LoadNative(string path)
         {

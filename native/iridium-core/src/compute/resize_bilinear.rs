@@ -1,50 +1,17 @@
 //! Bilinear texture downscale, bit-exact with Unity's `Color32.Lerp`.
 //!
-//! Port of the `ResizeTextureCPU` managed loops (byte-identical in
-//! `v2/Patches/OptimizerPatches.cs` and
-//! `v3/Patches/Optimizer/OptimizerShared.cs`). That code runs on the
-//! background texture-load thread, once per texture, over *every* pixel --
-//! the largest single numeric loop left in the mod.
-//!
-//! # Bit-exactness
-//!
-//! Unity's `Color32.Lerp(a, b, t)` decompiles to:
-//!
-//! ```text
-//! t = Mathf.Clamp01(t);
-//! r = (byte)((float)(int)a.r + (float)(b.r - a.r) * t);
-//! ```
-//!
-//! Three details matter and are easy to get wrong:
-//!
-//! - `b.r - a.r` is computed in **int** (so the delta is an exact integer in
-//!   -255..255) and only then widened to f32. Writing `b.r as f32 - a.r as f32`
-//!   gives the identical value, because every integer in that range is exact
-//!   in f32; we keep the int form so the mirror is obvious on review.
-//! - The `as u8` cast **truncates** toward zero -- there is no `+ 0.5f`
-//!   rounding. That is intentional here: `t` is in 0..=1 and the base pixel
-//!   supplies the integer part, so the pre-truncation value is already in
-//!   0..255 and truncation is what the managed build produces.
-//! - `Mathf.Clamp01` is a no-op for our callers (`x_lerp`/`y_lerp` are
-//!   `frac` of a non-negative product), so we skip it in the inner loop but
-//!   assert the range in debug builds.
-//!
-//! The managed code evaluates
-//! `Color32.Lerp(Color32.Lerp(c1, c2, xLerp), Color32.Lerp(c3, c4, xLerp), yLerp)`
-//! -- it **quantizes to bytes between the two lerps**. A single fused float
-//! lerp would drift by up to 1 per channel against the managed output, so we
-//! reproduce that two-stage byte quantization exactly.
+//! Port of the managed `ResizeTextureCPU` loop; see
+//! `v3/Patches/Optimizer/OptimizerShared.cs`.
 
-/// One `Color32.Lerp` stage over four channels. `t` must be in 0..=1.
+/// One `Color32.Lerp` stage. `as u8` truncates rather than rounds, and
+/// `hi - lo` must stay an integer difference widened after the fact.
 #[inline(always)]
 fn lerp8(a: [u8; 4], b: [u8; 4], t: f32) -> [u8; 4] {
     let mut out = [0u8; 4];
     for k in 0..4 {
         let lo = a[k] as i32;
         let hi = b[k] as i32;
-        // Unity widens *both* operands to f32: `(float)(int)a + (float)(b - a) * t`.
-        // Widening the base too (instead of `lo + f32`) is what keeps the sum
-        // from being an integer add that would truncate differently.
+        // Unity widens both operands: `(float)(int)a + (float)(b - a) * t`.
         out[k] = (lo as f32 + (hi - lo) as f32 * t) as u8;
     }
     out
@@ -52,25 +19,11 @@ fn lerp8(a: [u8; 4], b: [u8; 4], t: f32) -> [u8; 4] {
 
 /// Bilinear downscale from `(src_w, src_h)` into `(dst_w, dst_h)`.
 ///
-/// `src` must hold `src_w * src_h * 4` bytes (RGBA8); `dst` must hold
-/// `dst_w * dst_h * 4`. Callers validate lengths -- see `exports/resize.rs`.
-///
-/// # Bounds
-///
-/// The managed loop unconditionally reads `y1 + x_floor + 1` and
-/// `y2 + x_floor + 1`, i.e. one column/row past the sample. For a pure
-/// downscale (`dst <= src`) `x_ratio <= 1`, so `x_floor <= sw - 2` and those
-/// reads stay in bounds by construction. Rust cannot rely on that, so the
-/// sample index is clamped to `sw - 2` / `sh - 2`.
-///
-/// The clamp only ever engages when `dst > src`, which the managed path never
-/// produces (`ResizeImageBytes` only shrinks), so bit-exactness is preserved.
-///
 /// # Safety
-///
-/// Callers must guarantee `src.len() >= src_w as usize * src_h as usize * 4`
-/// and `dst.len() >= dst_w as usize * dst_h as usize * 4`. The export layer
-/// (`exports/resize.rs`) validates both before calling.
+/// `src.len() >= src_w * src_h * 4` and `dst.len() >= dst_w * dst_h * 4`;
+/// `exports/resize.rs` validates both. Sample indices are clamped to
+/// `sw - 2` / `sh - 2`, which only engages for `dst > src` -- a case the
+/// managed path never produces, so bit-exactness holds.
 pub unsafe fn downscale(
     src: &[u8],
     src_w: u32,
@@ -88,13 +41,11 @@ pub unsafe fn downscale(
     let x_ratio = (sw as f32 - 1.0) / dw as f32;
     let y_ratio = (sh as f32 - 1.0) / dh as f32;
 
-    // Highest legal sample index that still leaves a +1 neighbour in bounds.
+    // The managed loop reads one column/row past the sample.
     let max_x = sw - 2;
     let max_y = sh - 2;
 
-    // SAFETY: the caller guarantees both slices are large enough for the
-    // dimensions above; every index below is derived from clamped sample
-    // offsets and a bounded destination walk. See the # Safety section.
+    // SAFETY: caller guarantees both slice lengths (see # Safety).
     let sp = src.as_ptr();
     let dp = dst.as_mut_ptr();
 
@@ -117,15 +68,14 @@ pub unsafe fn downscale(
             let x0 = x_floor << 2;
             let x1 = x0 + 4;
 
-            // One 4-byte load per sample instead of four 1-byte loads.
-            // Color32 is r@0/g@1/b@2/a@3 in memory, so a little-endian u32
-            // keeps the channel order and `to_le_bytes` restores it on write.
+            // Color32 is r@0/g@1/b@2/a@3, so a little-endian u32 load keeps channel order.
             let c1 = read_px(sp, y1, x0);
             let c2 = read_px(sp, y1, x1);
             let c3 = read_px(sp, y2, x0);
             let c4 = read_px(sp, y2, x1);
 
-            // Quantize to bytes between the stages, exactly as managed does.
+            // Byte quantization between stages is what the managed code does;
+            // a single fused float lerp would drift by up to 1 per channel.
             let top = lerp8(c1, c2, x_lerp);
             let bot = lerp8(c3, c4, x_lerp);
             let out = lerp8(top, bot, y_lerp);
@@ -145,7 +95,7 @@ unsafe fn read_px(base: *const u8, row: usize, off: usize) -> [u8; 4] {
 mod tests {
     use super::*;
 
-    /// The pre-port managed expression, kept verbatim as the bit-exact oracle.
+    /// The pre-port managed expression, kept as the bit-exact oracle.
     fn reference(
         source: &[u8],
         sw: usize,
@@ -207,8 +157,7 @@ mod tests {
 
     #[test]
     fn matches_managed_reference_bit_for_bit() {
-        // Pure downscales, including the awkward non-power-of-two and
-        // odd-ratio shapes that make x_lerp/y_lerp land mid-byte.
+        // Odd ratios and non-power-of-two shapes make x_lerp/y_lerp land mid-byte.
         let cases: &[(usize, usize, usize, usize)] = &[
             (2, 2, 1, 1),
             (4, 4, 2, 2),
@@ -235,8 +184,7 @@ mod tests {
 
     #[test]
     fn identity_when_ratios_are_exact() {
-        // 4x4 -> 3x3 exercises partial ratios; 2x2 -> 1x1 is the
-        // degenerate "every lerp weight is 0" case.
+        // 2x2 -> 1x1 is the degenerate case: every lerp weight is 0.
         let src = synth(2, 2);
         let mut got = vec![0u8; 4];
         // SAFETY: 2x2 source and 1x1 destination, both allocated above.
@@ -266,9 +214,8 @@ mod tests {
     fn no_out_of_bounds_write_on_large_downscale() {
         let src = synth(512, 512);
         let mut got = vec![0u8; 4 * 4 * 4];
-        // SAFETY: 512x2 source and 4x4 destination, both allocated above.
+        // SAFETY: 512x512 source and 4x4 destination, both allocated above.
         unsafe { downscale(&src, 512, 512, &mut got, 4, 4) };
-        // Every destination byte must have been written.
         assert!(got.iter().any(|&b| b != 0));
     }
 }

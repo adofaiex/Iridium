@@ -1,5 +1,4 @@
-//! FFI wrapper for the RemakePath rebuild kernel.
-//! Math lives in `crate::compute::remake_path`.
+//! FFI wrapper for the RemakePath rebuild kernel in `crate::compute`.
 
 use crate::ffi::{self, FloorPathInput, FloorPathOutput};
 
@@ -15,10 +14,9 @@ pub unsafe extern "C" fn iridium_core_remake_path(
     remake(input, output, 0.0, 0.0)
 }
 
-/// Incremental path rebuild starting at an anchor tile: `input.angles`
-/// points at the anchor's angle, `input.start_angle` is the anchor's entry
-/// angle and (`origin_x`, `origin_y`) its world position. Output slot 0 is
-/// the anchor itself.
+/// Incremental rebuild anchored at a tile: `input.angles` points at the
+/// anchor's angle, `input.start_angle` its entry angle, and (`origin_x`,
+/// `origin_y`) its world position. Output slot 0 is the anchor itself.
 ///
 /// # Safety
 /// `input`/`output` inner pointers must reference caller-allocated memory.

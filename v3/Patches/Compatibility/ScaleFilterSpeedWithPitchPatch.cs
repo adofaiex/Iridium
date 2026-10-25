@@ -10,15 +10,10 @@ using Iridium.Config;
 namespace Iridium.Patches.Compatibility
 {
 	/// <summary>
-	/// 缩放CameraFilterPack着色器内部动画速度以适应音高变化
-	/// 所有CameraFilterPack组件的OnRenderImage中都有 TimeX += Time.deltaTime 驱动内部动画，
-	/// 该patch将其替换为 TimeX += Time.deltaTime * pitch，
-	/// 使录制降pitch视频后期加速后滤镜着色器动画速度与原始一致
-	/// === 与旧方案的区别 ===
-	/// 旧方案错误地只修正了tween的duration (通过adjustDurationForHardbake)，
-	/// 但滤镜着色器内部的TimeX仍然使用未缩放的Time.deltaTime，
-	/// 导致录制降pitch后着色器动画以原速运行，后期加速后显得更快
-	/// 新方案直接修改着色器的时间推进速度，从根源解决
+	/// 缩放 CameraFilterPack 着色器内部动画速度以适应音高变化：所有 OnRenderImage 里的
+	/// TimeX += Time.deltaTime 改为 TimeX += Time.deltaTime * pitch。
+	/// 只调 tween duration（AdjustDurationForHardbake）是不够的 —— 着色器内的 TimeX
+	/// 仍用未缩放的 deltaTime，降 pitch 录制后期加速后滤镜动画会比原速快。
 	/// </summary>
 	[HarmonyPatch]
 	[IriPatch(Path = "compatibility/scaleFilter", Pre = typeof(CompatibilitySettings), Condition = "scaleFilterSpeedWithPitch")]

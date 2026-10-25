@@ -7,18 +7,9 @@ using UnityEngine;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// 大物量谱面「选中/切换砖块」卡顿修复（v2 / 2.9.8）。
-    ///
-    /// 根因：
-    ///  - scnEditor.GetFloorEvents(floorID, type) 每次都全表扫描 levelData.levelEvents；
-    ///    inspector 几乎每个 Tab 的 SetSelected 都会调用一次 GetSelectedFloorEvents
-    ///    （→ GetFloorEvents），几十万事件 × 40+ Tab = 每次点砖块几十次全表扫描。
-    ///  - ShowEventIndicators 里还有一次 events.FindAll(...) 全表扫描，
-    ///    DestroyEventIndicators 则用 GameObject.FindGameObjectsWithTag 全场景扫描。
-    ///
-    /// 修复：维护 floorID → events 的惰性索引（ApplyEventsToFloors / 关卡加载后标脏重建），
-    /// 并用自跟踪的 indicator 列表替换 FindGameObjectsWithTag。
-    /// </summary>
+/// Keeps a lazily rebuilt floorID → events index: GetFloorEvents otherwise rescans
+/// the whole event list on every tab's SetSelected, i.e. dozens of full scans per click.
+/// </summary>
     public static class EditorEventIndexPatch
     {
         private static readonly Dictionary<int, List<LevelEvent>> _byFloor = new();
@@ -116,10 +107,7 @@ namespace Iridium.Patches
 
         #region ShowEventIndicators / DestroyEventIndicators
 
-        /// <summary>
-        /// 与原版逻辑一致，但用索引取本砖块事件，并把新建的 indicator 记入跟踪列表，
-        /// 避免 FindAll 全表扫描与 FindGameObjectsWithTag 全场景扫描。
-        /// </summary>
+        /// <summary>与原版一致，但事件走索引，新建的 indicator 记入跟踪列表。</summary>
         [HarmonyPatch(typeof(scnEditor), nameof(scnEditor.ShowEventIndicators))]
         public static class ShowEventIndicatorsIndexPatch
         {

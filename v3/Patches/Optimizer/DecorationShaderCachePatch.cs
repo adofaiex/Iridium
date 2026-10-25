@@ -8,19 +8,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-    /// <summary>
-    /// 装饰物渲染脏检查缓存 —— 原版 scrVisualDecoration.UpdateShader 对每个可见
-    /// 装饰物每帧无条件执行：材质 SetColor/SetFloat/SetVector、localScale 写入、
-    /// 主纹理赋值，以及（带滤镜时）整条滤镜 blit 链。装饰物数量成百上千的谱面
-    /// 上这是一笔稳定的每帧开销。
-    ///
-    /// 无滤镜：颜色/透明度/平铺/贴图/可见性全部未变化时跳过整个 UpdateShader。
-    /// 有滤镜（optimizeFilters）：只有"输出仅由源贴图与公开字段决定"的滤镜参与
-    /// 缓存（白名单来自 OpenGL Core GLSL 程序对 _Time/_TimeX 等的实际引用分析）；
-    /// 自带时间动画的滤镜（VHS/噪点/雨雪/故障等）永远走原版每帧重绘。
-    /// 滤镜字段的变化通过两条路径失效：事件应用（DecorationFilterDirtyPatch 打脏）
-    /// 和 DOTween 参数动画（缓存检查活跃 tween）。
-    /// </summary>
+    /// <summary>Skips scrVisualDecoration.UpdateShader when nothing it depends on changed; only filters proven time-independent are cacheable.</summary>
     [IriPatch(Path = "optimizer/decor", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer")]
     [HarmonyPatch(typeof(scrVisualDecoration), "UpdateShader")]
     public static class DecorationShaderCachePatch
@@ -46,8 +34,7 @@ namespace Iridium.Patches.Optimizer
         private static readonly AccessTools.FieldRef<scrVisualDecoration, MaskingType>? _maskingTypeRef =
             AccessTools.FieldRefAccess<scrVisualDecoration, MaskingType>("maskingType");
 
-        // 输出不依赖时间的 18 个 legacy 滤镜（GLSL 里不引用 _Time/_TimeX/_SinTime 等）。
-        // 其余滤镜自带时间动画，参与缓存会冻结画面，必须排除。
+        // The 18 legacy filters whose GLSL never references _Time/_TimeX/_SinTime; anything else animates on its own and must stay uncached.
         private static readonly HashSet<string> _parameterDrivenFilters = new()
         {
             "CameraFilterPackLegacy_Blur_Blurry",
@@ -191,11 +178,7 @@ namespace Iridium.Patches.Optimizer
         }
     }
 
-    /// <summary>
-    /// 装饰物滤镜字段变更打脏 —— ffxSetFilterAdvancedPlus 是运行时修改装饰物
-    /// 滤镜字段/启用状态的唯一入口（含 tween 的初始写入）。事件稀疏，逐目标
-    /// GetComponent + CWT 写入的开销远小于被省掉的整帧 blit 链。
-    /// </summary>
+    /// <summary>Marks a decoration's filter cache dirty when its filter fields or enabled flags change.</summary>
     [HarmonyPatch(typeof(ffxSetFilterAdvancedPlus), "StartEffect")]
     [IriPatch(Path = "optimizer/decor", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer,optimizeFilters")]
     public static class DecorationFilterDirtyPatch

@@ -7,14 +7,10 @@ using UnityEngine;
 namespace Iridium.Patches
 {
 	/// <summary>
-	/// Hold 渲染器每帧脏检查（自 v3 移植，2.9.8 适配）。
-	///
-	/// 每个 hold 每帧无条件执行 Update → UpdateMesh + UpdateColor（约 10 次
-	/// 材质 Set + bounds 重建），而几何输入极少变化。实现在 unfill/hit 动画
-	/// 之外，用 CWT 快照比较几何输入，未变时只更新 _Completion/_StartAlpha。
-	/// 2.9.8 的 headFloor/tailFloor/extendAlp 同为 private（FieldRef 访问），
-	/// Update/UpdateMesh/UpdateColor 结构与 3.x 一致（已核对反编译源）。
-	/// </summary>
+/// Holds update their mesh and colour unconditionally every frame. Compare a CWT
+/// snapshot of the geometry inputs and, when unchanged, only refresh
+/// _Completion / _StartAlpha instead.
+/// </summary>
 	[HarmonyPatch(typeof(scrHoldRenderer), "Update")]
 	public static class HoldRendererDirtyCheckPatch
 	{
@@ -34,7 +30,7 @@ namespace Iridium.Patches
 
 		private static readonly ConditionalWeakTable<scrHoldRenderer, Snapshot> _snapshots = new();
 
-		// 2.9.8 中这些成员是 private：缓存 FieldRef 访问器
+		// 2.9.8 中这些成员是 private
 		private static readonly AccessTools.FieldRef<scrHoldRenderer, scrFloor> _getHead =
 			AccessTools.FieldRefAccess<scrHoldRenderer, scrFloor>("headFloor");
 		private static readonly AccessTools.FieldRef<scrHoldRenderer, scrFloor> _getTail =

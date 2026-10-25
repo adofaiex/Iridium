@@ -6,10 +6,8 @@ using Iris.Iml;
 namespace Iridium.UI
 {
     /// <summary>
-    /// UGUI/IML-backed modal dialog. Equivalent of IridiumWindow (IMGUI) for the
-    /// v3 project; the v2 project keeps the IMGUI path per project hard
-    /// constraints. IML is generated dynamically via <see cref="BuildIml"/> so
-    /// any number of buttons can be rendered without per-instance IML files.
+    /// UGUI/IML-backed modal dialog. IML is generated via <see cref="BuildIml"/> so any
+    /// number of buttons can render without per-instance IML files.
     /// </summary>
     public class ImlWindow : MonoBehaviour
     {

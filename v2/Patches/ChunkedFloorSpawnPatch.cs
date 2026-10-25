@@ -8,20 +8,11 @@ using UnityEngine;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// 大谱面加载优化 B：分帧激活砖块（实验性，v2 / 2.9.8）。
-    ///
-    /// 目标：把「Instantiate 出来的砖块立即 Awake/OnEnable/Start」的成本从单帧挪到多帧，
-    /// 消除打开几十万砖谱面时的单帧长冻结与内存尖峰。做法：
-    ///  1. 批量实例化时临时把 meshFloor prefab 置为非激活（同时接管 A2 的剥离模板），
-    ///     克隆出来的砖块保持非激活（Unity 不会立刻调用 Awake/OnEnable/Start）；
-    ///  2. 立刻做一次 FastInit（复刻 scrFloor.Awake 的必要初始化 + FloorRenderer.Awake），
-    ///     保证随后 MakeLevel / ApplyEventsToFloors / DrawXxx 能正常读写砖块；
-    ///  3. 砖块进入待激活队列，由主线程每帧按时间预算分批 SetActive(true)；
-    ///  4. 进播放（scnEditor.Play / FinishCustomLevelLoading）时强制一次性全部激活。
-    ///
-    /// 延迟 Awake 的补偿（已逐个核对 2.9.8 全库）：
-    ///  - ffxCheckpoint / ffxSetHitsound 的 Decode 读取基类 floor（Awake 才设置）→ 缺失时补上。
-    /// </summary>
+/// Moves the Awake/OnEnable/Start cost of instantiated floors off a single frame:
+/// spawn inactive, run FastInit, then SetActive in time-budgeted batches. The
+/// deferred-Awake compensation for ffxCheckpoint / ffxSetHitsound Decode is
+/// verified field by field against 2.9.8.
+/// </summary>
     public static class ChunkedFloorSpawnPatch
     {
         private const int FloorThreshold = 20000;
@@ -75,8 +66,7 @@ namespace Iridium.Patches
             [HarmonyPrefix]
             public static bool Prefix(scrLevelMaker __instance)
             {
-                // 任何一次新加载都先把上一批未激活砖块补激活，避免它们被复用/销毁后
-                // 留在未激活状态（FlushAll 后，下列所有非激活砖块一定是本次新建的克隆）。
+                // 新加载前先补激活上一批未激活砖块
                 if (_pending.Count > 0) FlushAll();
 
                 if (!Enabled) return true;
@@ -86,7 +76,7 @@ namespace Iridium.Patches
                 if (EditorFloorOptimizationPatches.IncrementalActive) return true;
                 if (__instance.floorAngles == null || __instance.floorAngles.Length < FloorThreshold) return true;
 
-                // 精灵砖块路径使用别的 prefab，不走本优化
+                // 精灵砖块走别的 prefab，不适用
                 var existing = __instance.listFloors;
                 if (existing != null && existing.Count > 0 && existing[0] != null
                     && existing[0].GetComponent<FloorSpriteRenderer>() != null)
@@ -108,8 +98,8 @@ namespace Iridium.Patches
                     var originalPrefab = _meshFloorRef(__instance);
                     if (originalPrefab == null) return true;
 
-                    // B 统一接管模板：优先用 A2 的「剥掉 Num」模板，失败则退回原 prefab。
-                    // 反激活模板 → 克隆出来的砖块保持未激活，Awake/OnEnable/Start 推迟。
+                    // 优先用 A2 的「剥掉 Num」模板，失败则退回原 prefab；
+                    // 反激活模板 → 克隆出的砖块保持未激活，推迟 Awake/OnEnable/Start
                     var template = LazyFloorNumberPatch.EnsureStrippedTemplate(__instance) ?? originalPrefab;
 
                     _savedPrefab = template;
@@ -140,7 +130,7 @@ namespace Iridium.Patches
                     {
                         int enqueuedCount = 0;
                         _fastInitWatch.Restart();
-                        // 前缀已 FlushAll：这里所有「非激活」砖块一定是本次新建的克隆。
+                        // 前缀已 FlushAll：这里所有未激活砖块一定是本次新建的克隆
                         for (int i = 0; i < floors.Count; i++)
                         {
                             var floor = floors[i];
@@ -153,7 +143,7 @@ namespace Iridium.Patches
                             }
                             else
                             {
-                                // FastInit 失败：立即激活走原版生命周期，别把砖块卡在未激活状态
+                                // FastInit 失败：立即激活走原版生命周期，别卡在未激活状态
                                 ActivateFloor(floor, restoreConditionalInfo: false);
                             }
                         }
@@ -191,7 +181,7 @@ namespace Iridium.Patches
                 _bulkActive = false;
                 try
                 {
-                    // 先还原字段，再恢复被我们反激活的 prefab 引用本身。
+                    // 先还原字段，再恢复被我们反激活的 prefab 本身
                     if (_savedFieldPrefab != null && _meshFloorRef != null)
                         _meshFloorRef(__instance) = _savedFieldPrefab;
                     if (_savedPrefab != null)

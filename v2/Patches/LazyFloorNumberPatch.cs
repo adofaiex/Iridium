@@ -6,15 +6,10 @@ using UnityEngine;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// 大谱面加载优化 A2：线号文本（Num）按需生成（v2 / 2.9.8）。
-    ///
-    /// prefab 里串着一个 scrLetterPress（GameObject + RectTransform + Text）做砖块编号，
-    /// 几十万砖时白克隆、编辑器里也根本看不全。
-    ///
-    /// 方案：大谱面批量实例化时临时把 meshFloor 换成「剥掉 Num 子物件」的模板，
-    /// 编号文本改成砖块可见（OnBecameVisible / DrawFloorNums）时才从保留的模板克隆。
-    /// 纯视觉对象，逻辑/存档不受影响。
-    /// </summary>
+/// Strips the scrLetterPress number text from the meshFloor prefab on large levels
+/// and clones it only when a floor becomes visible. Purely visual; nothing about
+/// the saved chart changes.
+/// </summary>
     public static class LazyFloorNumberPatch
     {
         private const int FloorThreshold = 20000;

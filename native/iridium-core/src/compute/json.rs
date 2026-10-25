@@ -1,18 +1,10 @@
 //! JSON parser producing a flat SoA DOM for the Mono side.
 //!
-//! Output semantics mirror GDMiniJSON (the game's parser) so the host can
-//! materialize the exact same `Dictionary<string, object>` / `List<object>` /
-//! `string` / `int` / `float` / `bool` / `null` graph:
-//! - A number token containing '.' becomes f32, otherwise i32.
-//! - .NET style parse failure (TryParse returning false) yields 0, not an
-//!   error; overflow therefore also yields 0.
-//! - Strings are interned: identical content shares one pool slice, which
-//!   lets the host cache managed strings by pool offset.
-//! - Anything structurally malformed returns Err so the host falls back to
-//!   GDMiniJSON, preserving its lenient behavior on broken files.
-//!
-//! Input is UTF-16 (the C# string's code units); escape decoding emits UTF-16
-//! units directly, so surrogate pairs pass through untouched.
+//! Mirrors GDMiniJSON so the host can rebuild the same object graph:
+//! tokens with '.' are f32, others i32; `TryParse` failures (and int
+//! overflow) yield 0 rather than an error; structurally malformed input
+//! returns Err so the host falls back to GDMiniJSON. Input is UTF-16, so
+//! escape decoding emits UTF-16 units and surrogate pairs pass through.
 
 use std::collections::HashMap;
 
@@ -25,22 +17,17 @@ pub const KIND_STRING: u8 = 5;
 pub const KIND_ARRAY: u8 = 6;
 pub const KIND_OBJECT: u8 = 7;
 
-/// Nesting cap; deeper documents fall back to the managed parser instead of
-/// risking a stack overflow in the native guard.
+/// Nesting cap; deeper documents fall back to the managed parser. Recursive,
+/// so this also bounds stack depth inside the panic guard.
 const MAX_DEPTH: u32 = 128;
-/// Strings longer than this are not interned (they are usually unique).
+/// Longer strings are not interned (they are usually unique).
 const INTERN_MAX_LEN: usize = 128;
 
-/// Flat DOM. Parallel arrays: node `i` is `KIND_*` at `kinds[i]` with payload
-/// - int: `a[i]` is the value bits
-/// - float: `values[i]`
-/// - string: `a[i]` is an interned string id
-/// - array: `a[i]`/`b[i]` are offset/count into `children`
-/// - object: same as array, but children come in (key_node, value_node) pairs
-///
-/// String table: id -> (`str_off[id]`, `str_len[id]`) into the UTF-16 `strings`
-/// pool. Identical content always maps to the same id, so the host can cache
-/// managed strings by id.
+/// Flat DOM. Node `i` is `KIND_*` at `kinds[i]`; payload is int bits in `a`,
+/// float in `values`, string id in `a`, and offset/count into `children` for
+/// arrays and objects (objects store key/value node pairs). String ids index
+/// `str_off`/`str_len` into the UTF-16 `strings` pool; equal content always
+/// maps to the same id so the host can cache managed strings by id.
 #[derive(Default)]
 pub struct Doc {
     pub kinds: Vec<u8>,
@@ -54,8 +41,8 @@ pub struct Doc {
     pub root: u32,
     intern: HashMap<Box<[u16]>, u32>,
     scratch: Vec<u16>,
-    /// Stack used to keep each container's child list contiguous: nested
-    /// containers append to `children` when they close, before the parent.
+    /// Keeps each container's child list contiguous: nested containers commit
+    /// to `children` when they close, before the parent.
     pending: Vec<u32>,
 }
 
@@ -91,10 +78,8 @@ pub fn parse(text: &[u16], doc: &mut Doc) -> Result<(), ()> {
     Ok(())
 }
 
-/// Like `parse`, but stops when the root object's next key equals `section`
-/// (GDMiniJSON `DeserializePartially`); the key is left unconsumed and the
-/// object parsed so far is returned. If the key never appears at the root,
-/// the full document is parsed.
+/// Like `parse`, but stops before the root object's key equal to `section`
+/// (GDMiniJSON `DeserializePartially`), leaving that key unconsumed.
 pub fn parse_with_section(text: &[u16], section: &[u16], doc: &mut Doc) -> Result<(), ()> {
     doc.reset();
     let mut p = Parser {
@@ -151,8 +136,7 @@ impl<'a> Parser<'a> {
                 Ok(push(doc, KIND_NULL, 0, 0, 0.0))
             }
             0x2D | 0x30..=0x39 => self.parse_number(doc),
-            // Unknown token: GDMiniJSON would yield null (dictionary value)
-            // or a partial result; bail so the managed parser handles it.
+            // Unknown token: bail so the managed parser keeps its lenient behaviour.
             _ => Err(()),
         }
     }
@@ -181,9 +165,7 @@ impl<'a> Parser<'a> {
             if self.s.get(self.i) != Some(&0x3A) {
                 return Err(()); // ':'
             }
-            // DeserializePartially: stop before consuming ':'/value when the
-            // key matches, returning the object parsed so far (MiniJSON
-            // checks this in every object, root included).
+            // GDMiniJSON checks the section key in every object, root included.
             if let Some(section) = self.section {
                 let id = doc.a[key as usize] as usize;
                 let (off, len) = (doc.str_off[id] as usize, doc.str_len[id] as usize);
@@ -197,9 +179,7 @@ impl<'a> Parser<'a> {
             doc.pending.push(value);
             pairs += 1;
         }
-        // Commit the (contiguous) child list. Nested containers already
-        // committed theirs while closing, so slicing from pending keeps each
-        // container's range self-contained.
+        // Nested containers committed theirs when closing, so each range is contiguous.
         let child_start = doc.children.len() as u32;
         doc.children.extend_from_slice(&doc.pending[pending_start..]);
         doc.pending.truncate(pending_start);
@@ -249,10 +229,8 @@ impl<'a> Parser<'a> {
             return Err(());
         }
         if w.iter().any(|&c| c == 0x2E) {
-            // '.' present: float.TryParse semantics (failure => 0).
             Ok(push(doc, KIND_FLOAT, 0, 0, ascii_to_f32(w)))
         } else {
-            // no '.': int.TryParse semantics (failure/overflow => 0).
             Ok(push(doc, KIND_INT, ascii_to_i32(w) as u32, 0, 0.0))
         }
     }
@@ -464,7 +442,6 @@ mod tests {
         let doc = parse_str("{\"i\": 42, \"f\": 1.5, \"b\": true, \"n\": null, \"s\": \"hi\"}");
         assert_eq!(doc.kinds[0], KIND_OBJECT);
         assert_eq!(doc.b[0], 5);
-        // child key/value pairs
         let kids: Vec<u32> = doc.children.clone();
         let values = [
             (KIND_INT, 42i32 as f32),
@@ -490,8 +467,7 @@ mod tests {
     #[test]
     fn strings_are_interned() {
         let doc = parse_str("{\"k\": 1, \"k2\": 1, \"k\": 2}");
-        // last key wins on the host side; parser emits both pairs but the
-        // identical "k" strings must share one interned id.
+        // Both "k" keys must intern to one id; the host resolves duplicates last-wins.
         let kids = doc.children.clone();
         let key0 = kids[0] as usize;
         let key3 = kids[4] as usize;
@@ -535,14 +511,11 @@ mod tests {
         let doc = parse_str("{\"a\": [1, [2, {\"b\": \"c\"}]]}");
         let root = doc.root as usize;
         assert_eq!(doc.kinds[root], KIND_OBJECT);
-        // Root's own children start at a[root].
         let arr = doc.children[doc.a[root] as usize + 1] as usize;
         assert_eq!(doc.kinds[arr], KIND_ARRAY);
         assert_eq!(doc.b[arr], 2);
-        // First element of the outer array is an int.
         let first = doc.children[doc.a[arr] as usize] as usize;
         assert_eq!(doc.kinds[first], KIND_INT);
-        // Second element is the nested array with 2 children.
         let nested = doc.children[doc.a[arr] as usize + 1] as usize;
         assert_eq!(doc.kinds[nested], KIND_ARRAY);
         assert_eq!(doc.b[nested], 2);

@@ -38,22 +38,7 @@ namespace Iridium.Patches.UI
 		{
 			float minDiff = Mathf.Abs(Mathf.DeltaAngle(angleA * Mathf.Rad2Deg, angleB * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
 			float minDiffDeg = minDiff * Mathf.Rad2Deg;
-			// num6 drives both the arc center (lerped from the corner intersection
-			// toward the tile origin) and the radius (lerped 0..width): only large
-			// num6 (~0.9) inflates the corner arc into the big rounded OUTER
-			// corner. Vanilla keeps that look exclusively in the 89.9-105.1 band.
-			// The application interval is user-configurable (default 90-105,
-			// matching vanilla) and is HALF-OPEN: [min, max). The lower bound
-			// stays inclusive so perfect right angles (exactly 90) keep their
-			// arc; the upper bound is exclusive so the slider value reads as
-			// "up to". Exclusivity also keeps 180 unreachable when the range
-			// contains it: GetPositions detects piAngle tiles solely via
-			// shortAngle ~= PI (its own epsilon is 1e-4 rad), so replacing
-			// shortAngle there skips the piAngle early-return and the generic
-			// path intersects perfectly parallel edge rays -- inf/NaN vertices,
-			// culled triangles, a fully transparent floor. MaxAppliedAngleDeg
-			// caps the effective bound just under 180 so the Rad->Deg->Rad
-			// float round trip cannot smuggle a reversal through either.
+			// num6 drives both the arc centre and the radius, so inflating it is what turns the corner into the rounded OUTER corner; vanilla only does that in the 89.9-105.1 band. The interval is half-open [min, max) and max is capped by MaxAppliedAngleDeg so 180 stays unreachable.
 			var ui = Main.Settings?.ui;
 			float min = Mathf.Clamp(ui != null ? ui.circleArcMinAngle : 90f, 0f, 180f);
 			float max = Mathf.Clamp(ui != null ? ui.circleArcMaxAngle : 105f, min, 180f);
@@ -62,28 +47,12 @@ namespace Iridium.Patches.UI
 			return original;
 		}
 
-		// Hard ceiling just below 180 degrees, capping the configured maximum.
-		// Vanilla classifies anything within 1e-4 rad (~0.0057 deg) of PI as
-		// piAngle; 179.99 leaves an order of magnitude of head room for float
-		// conversion noise above while staying visually indistinguishable from
-		// applying the arc all the way to 180.
+		// Ceiling just under 180: vanilla's piAngle epsilon is 1e-4 rad, so this keeps a float round trip from reaching a reversal while staying visually identical to 180.
 		public const float MaxAppliedAngleDeg = 179.99f;
 	}
 
-	// All-angle arc corners. Vanilla FloorMesh.GetPositions draws the corner
-	// arc only while angleDifference < 120 degrees; beyond that the corner
-	// renders as a sharp point. GetPositions normalizes its inputs up front
-	// (swapping angles whenever the directed difference exceeds 180 degrees),
-	// which makes angleDifference always <= PI and turns the CCW gate into
-	// dead code — so widening the single CW gate to PI lets CircleArcPatch's
-	// inflated num6 (see ApplyCircleArcOverride) reach obtuse turns too.
-	//
-	// This patch intentionally does NOT touch num6: flooring it only produces
-	// a tiny invisible inner fillet, and any num6 > 0 also shrinks the inner
-	// inset (insetDistance0), which hollows out straight (piAngle) tiles.
-	//
-	// Shares the ui/circleArc condition with CircleArcPatch: one feature, one
-	// switch.
+	// Widens GetPositions' 120-degree corner-arc gate to PI; the inputs are normalized up front so angleDifference is already <= PI.
+	// num6 is deliberately untouched: flooring it only adds an invisible inner fillet and would hollow out straight piAngle tiles.
 	[HarmonyPatch(typeof(FloorMesh), "GetPositions")]
 	[IriPatch(Path = "ui/circleArc", Pre = typeof(UISettings), Condition = "enableCircleArc", RequireMethod = "FloorMesh.GetPositions")]
 	public static class AllAngleArcCornersPatch
@@ -93,19 +62,7 @@ namespace Iridium.Patches.UI
 		{
 			var codes = instructions.ToList();
 
-			// Verified against Assembly-CSharp 3.3.0 IL:
-			//
-			//   Anchor A — "angleDifference = ModAngle360(angle1 - angle0)":
-			//     ldarg.0, ldarg.0, ldarg.2, ldarg.1, sub,
-			//     call ModAngle360, stfld angleDifference
-			//   angleDifference is a FIELD; the earlier ModAngle360 calls store
-			//   back into arguments (starg), so call+stfld is unique.
-			//
-			//   Anchor C — the corner-arc gate:
-			//     ldarg.0, ldfld angleDifference, ldc.r4 2.0942953, bge.un.s <skip arc>
-			//   bge.un jumps PAST the arc body when angleDifference >= 120deg
-			//   (or unordered), so replacing the constant with PI draws the arc
-			//   for every turn below 180 degrees.
+			// IL anchors, verified against Assembly-CSharp 3.3.0: (A) "ldarg.0, ldarg.0, ldarg.2, ldarg.1, sub, call ModAngle360, stfld angleDifference" — angleDifference is a field, and the earlier ModAngle360 calls use starg, so call+stfld is unique; (C) the "ldfld angleDifference, ldc.r4 2.0942953, bge.un" 120-degree gate, where bge.un jumps past the arc body.
 
 			// Anchor A.
 			int anchorIdx = -1;
@@ -120,9 +77,7 @@ namespace Iridium.Patches.UI
 				}
 			}
 
-			// Anchor C: first "ldfld angleDifference; ldc.r4 <not PI>" after the
-			// anchor — that constant is the 120 degree gate threshold. (The
-			// later "angleDifference < PI" ternary is excluded by the PI check.)
+			// Anchor C: the first "ldfld angleDifference; ldc.r4 <not PI>" past the anchor is the gate constant; the later PI ternary is excluded by the check.
 			int gateIdx = -1;
 			for (int i = anchorIdx + 2; anchorIdx >= 0 && i < codes.Count - 2; i++)
 			{
@@ -157,9 +112,7 @@ namespace Iridium.Patches.UI
 			return result;
 		}
 
-		// Match by name: Harmony resolves instruction operands through the
-		// runtime module, so ReferenceEquals against an AccessTools-resolved
-		// MethodInfo is not reliable.
+		// Match by name: Harmony resolves operands through the runtime module, so ReferenceEquals against an AccessTools MethodInfo is not reliable.
 		private static bool IsCallTo(CodeInstruction instruction, string methodName)
 		{
 			if (instruction.opcode != OpCodes.Call && instruction.opcode != OpCodes.Callvirt) return false;

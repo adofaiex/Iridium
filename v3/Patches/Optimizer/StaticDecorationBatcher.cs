@@ -10,23 +10,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-    /// <summary>
-    /// 静态装饰物合批渲染器（M2/M3）。
-    ///
-    /// 接管"无滤镜、无遮罩、非平铺、普通混合、当前无活跃 tween"的 scrVisualDecoration：
-    /// 每个批次的四角烘焙进共享 Mesh，按 (主贴图, 层, sortingOrder) 分组 ——
-    /// 每组一个 MeshRenderer（Sprites/Default + 图集页 RT），一个 draw call。
-    /// 组间按 sortingOrder 正确排序，组内按 depth 排序的顶点顺序绘制。
-    ///
-    /// 每帧仅做位置遍历：W(t) = base + (cam - base) * parallaxMult + offK + cornerOffset，
-    /// 与原版 scrParallax.SetTrans 逐项一致（base = 实时 pivotPosVec）。旋转/缩放/pivot
-    /// 几何烘焙进四角偏移，经 SetRotation/SetScale 脏检查钩子在变化时重捕获。
-    /// 结构变化（装饰物增删/可见性/深度变化）为增量操作：与最后一个 quad 换位后截断，
-    /// 不做全量重建。装饰物被引擎 tween 接管时自动退出批次并还原原版渲染器，
-    /// tween 结束后自动回收。
-    ///
-    /// 依赖：需与自定义缓速引擎同时开启（tween 感知来自引擎事件）。
-    /// </summary>
+    /// <summary>Batches eligible scrVisualDecoration; per frame it only recomputes W(t) = base + (cam - base) * parallaxMult + offK + cornerOffset, term by term identical to scrParallax.SetTrans.</summary>
     public static class StaticDecorationBatcher
     {
         private static bool _enabled;
@@ -37,8 +21,6 @@ namespace Iridium.Patches.Optimizer
         private const int MaxRegionDim = 1024;
         private const int RegionPadding = 2;
 
-        // ---------------- 条目状态 ----------------
-
         private sealed class Item
         {
             public scrVisualDecoration Deco = null!;
@@ -48,15 +30,9 @@ namespace Iridium.Patches.Optimizer
             public int VertexIndex = -1;
             public int IdleFrames;                          // 在 slot.Items 中的位置
             public Vector3[] CornerOffsets = new Vector3[4];  // 世界顶点 - 视差根位置（含 z）
-            /// <summary>
-            /// 四角捕获版本号：每次 <see cref="RefreshCapture"/> 自增。SoA 收集时用它
-            /// 判断角偏移是否需要重拷（多数帧完全不用碰 Corners）。
-            /// </summary>
+            /// <summary>Bumped by every RefreshCapture; tells the SoA gather whether Corners need a recopy.</summary>
             public int CaptureVersion;
-            /// <summary>
-            /// 已摊平进 SoA 角缓冲的版本号。由收集循环维护 —— 与索引无关，
-            /// 装饰物增删导致顺序变化也不会把旧角偏移错配给别的装饰物。
-            /// </summary>
+            /// <summary>CaptureVersion already staged into the SoA corner buffer (index independent, so reordering cannot misattribute corners).</summary>
             public int StagedVersion = -1;
             public Color32 VColor;
         }
@@ -119,29 +95,21 @@ namespace Iridium.Patches.Optimizer
         private static readonly AccessTools.FieldRef<scrVisualDecoration, DecorationBlendMode>? _blendModeRef =
             AccessTools.FieldRefAccess<scrVisualDecoration, DecorationBlendMode>("blendMode");
 
-        // 3.4.0 新增裁剪枢轴（croppedPivotOffset，定义在基类 scrDecoration）；
-        // 3.3.x 无此字段。FieldRefAccess 在字段缺失时会抛异常，必须先取 FieldInfo
-        // 判空——否则旧版本会在静态初始化时 TypeInitializationException。
-        // 非零裁剪枢轴的装饰物在 MoveDecorations tween 下位置基准会变化，
-        // 合批只在旋转/缩放时重捕获四角，因此直接排除。
+        // croppedPivotOffset exists only on 3.4.0+. FieldRefAccess throws when the field is
+        // missing, which would TypeInitializationException on 3.3.x, so probe FieldInfo first.
         private static readonly FieldInfo? _croppedPivotField =
             AccessTools.Field(typeof(scrVisualDecoration), "croppedPivotOffset");
 
         private static readonly AccessTools.FieldRef<scrVisualDecoration, Vector2>? _croppedPivotOffsetRef =
             _croppedPivotField == null ? null : AccessTools.FieldRefAccess<scrVisualDecoration, Vector2>(_croppedPivotField);
 
-        // ---------------- 开关生命周期 ----------------
-
         public static bool Enabled => _enabled;
 
-        /// <summary>
-        /// 该装饰物当前是否由合批渲染器接管。接管后其位置/材质由顶点遍历负责，
-        /// 原版每帧的 UpdatePosition/UpdateShader 应被跳过（见 FfxOptimizationPatches）。
-        /// </summary>
+        /// <summary>Batched => callers must skip the vanilla per-frame position/shader update.</summary>
         public static bool IsBatched(scrDecoration dec)
             => _enabled && _items.TryGetValue(dec, out var item) && item.Managed;
 
-        /// <summary>当前已合批（实际由批次渲染）的装饰物数量，用于性能悬浮窗。</summary>
+        /// <summary>Batched decoration count, for the perf overlay.</summary>
         public static int BatchedCount
         {
             get
@@ -190,13 +158,10 @@ namespace Iridium.Patches.Optimizer
             }
         }
 
-        // ---------------- 资格判定 ----------------
-
         private static bool IsEligible(scrVisualDecoration dec)
         {
             if (Main.Settings?.optimizer.enableStaticDecorationBatching != true) return false;
-            // 编辑器（非试玩）态完全让位原版：合批是为游玩态烘焙的静态快照，
-            // 编辑器里改装饰物需要原版 LogicUpdate 的实时刷新。
+            // Editor mode always yields to vanilla: batching bakes a play-mode snapshot.
             if (ADOBase.isEditingLevel) return false;
             if (dec.cfpCache != null && dec.cfpCache.Length > 0) return false;   // 滤镜走 RT 管线
             if (dec.isMask()) return false;
@@ -206,7 +171,7 @@ namespace Iridium.Patches.Optimizer
             if (dec.parallax.dontAlterX || dec.parallax.dontAlterY || dec.parallax.clampToScreen) return false;
             if (dec.lockScale) return false;                                     // 顶点随相机缩放变化
             if (_blendModeRef == null || _blendModeRef(dec) != DecorationBlendMode.None) return false;
-            if (_croppedPivotOffsetRef != null && _croppedPivotOffsetRef(dec) != Vector2.zero) return false;
+            if (_croppedPivotOffsetRef != null && _croppedPivotOffsetRef(dec) != Vector2.zero) return false; // shifts the position base; corners are only recaptured on rotate/scale
 
             var mat = dec.meshRenderer != null && dec.meshRenderer.sharedMaterial != null
                 ? dec.meshRenderer.sharedMaterial.mainTexture as Texture2D : null;
@@ -219,7 +184,7 @@ namespace Iridium.Patches.Optimizer
             return true;
         }
 
-        /// <summary>捕获当前世界四角偏移（旋转/缩放/pivot 变化后重新调用）。</summary>
+        /// <summary>Recapture world corner offsets (world vertex - parallax root position).</summary>
         private static void RefreshCapture(scrVisualDecoration vis, Item item)
         {
             var mf = vis.meshRenderer != null ? vis.meshRenderer.GetComponent<MeshFilter>() : null;
@@ -231,11 +196,8 @@ namespace Iridium.Patches.Optimizer
             var p0 = vis.parallax.transform.position;
             for (int i = 0; i < 4; i++)
                 item.CornerOffsets[i] = l2w.MultiplyPoint3x4(verts[i]) - p0;
-            // 自增即可（回绕比较无关紧要：只需要「变了」这一信号）
-            item.CaptureVersion++;
+            item.CaptureVersion++; // wraparound is fine, only "changed" is read
         }
-
-        // ---------------- 增量进出批次 ----------------
 
         private static void TryManage(scrVisualDecoration vis)
         {
@@ -321,7 +283,7 @@ namespace Iridium.Patches.Optimizer
             AddQuad(slot, item);
         }
 
-        /// <summary>从批次摘除并还原原版渲染器。</summary>
+        /// <summary>Drop from its batch and restore the vanilla renderer.</summary>
         private static void Unmanage(Item item, bool restoreVanilla)
         {
             if (item.Managed && item.Slot != null)
@@ -353,8 +315,6 @@ namespace Iridium.Patches.Optimizer
             if (target is scrVisualDecoration vis && !_items.ContainsKey(vis))
                 _pending[vis] = 0;
         }
-
-        // ---------------- 增量 quad 增删 ----------------
 
         private static void AddQuad(AtlasSlot slot, Item item)
         {
@@ -406,9 +366,7 @@ namespace Iridium.Patches.Optimizer
             slot.StructuralDirty = true;
         }
 
-        // ---------------- 全量重扫 ----------------
-
-        /// <summary>全量重扫（装饰物重建 / 复位后调用）。图集与槽位跨重建复用。</summary>
+        /// <summary>Full rescan; the atlas and its slots survive a rebuild.</summary>
         public static void RebuildAll()
         {
             if (!_enabled) return;
@@ -441,9 +399,7 @@ namespace Iridium.Patches.Optimizer
             }
         }
 
-        // ---------------- 每帧：位置遍历 ----------------
-
-        /// <summary>tween 结束后的静置阈值：连续这么多帧无 tween 才纳入批次。</summary>
+        /// <summary>Frames a decoration must stay tween-free before it may rejoin a batch.</summary>
         private const int BatchIdleThreshold = 15;
 
         public static void FrameRender()
@@ -475,8 +431,8 @@ namespace Iridium.Patches.Optimizer
             if (_items.Count == 0) return;
             var cam = controller.camy.transform.position;
 
-            // 逐个装饰物读取 Unity 侧输入（字段直读，无虚调用），然后交给原生
-            // 内核算 4 个角。原生不可用时走等价的托管回退。
+            // Unity-side inputs are read field-wise (no virtual calls), then the native kernel
+            // computes the 4 corners; when it is unavailable an equivalent managed loop runs.
             if (!ComputePositionsNative(cam))
                 ComputePositionsManaged(cam);
 
@@ -503,16 +459,7 @@ namespace Iridium.Patches.Optimizer
             }
         }
 
-        // ---------------- 每帧位置计算：SoA 收集缓冲 ----------------
-
-        /// <summary>
-        /// 摊平的 SoA 缓冲。全部是进程内常驻数组，容量只增不减，每帧不清零、
-        /// 不重新分配；托管回退与原生路径共用同一份布局。
-        /// <para>
-        /// 关键：<see cref="Corners"/> 跨帧保留，四角偏移只在 <see cref="RefreshCapture"/>
-        /// 变化时更新（由 <see cref="GatherPositions"/> 里的版本号判定），不每帧重拷。
-        /// </para>
-        /// </summary>
+        /// <summary>Flat grow-only SoA scratch shared by the native kernel and the managed fallback.</summary>
         private sealed class ParallelScratch
         {
             /// <summary>当帧有效的装饰物（已剔除不可见/未受管）。</summary>
@@ -545,13 +492,10 @@ namespace Iridium.Patches.Optimizer
         }
 
         private static readonly ParallelScratch _scratch = new();
-        /// <summary>原生导出缺失或调用失败后不再重试（每次重试都是白付费的 FFI 开销）。</summary>
+        /// <summary>Stop retrying once the native export is missing or a call failed; every retry is wasted FFI.</summary>
         private static bool _nativeKnownBad;
 
-        /// <summary>
-        /// 第一遍（托管）：摘除失效装饰物，把仍受管装饰物的输入摊平到 SoA 数组，
-        /// 并把结果顶点区对齐到各 Slot 的当前顶点（这样内核能只回填变化项）。
-        /// </summary>
+        /// <summary>Flatten managed decorations into the SoA arrays and mirror the current slot verts so the kernel can backfill only changed items.</summary>
         private static int GatherPositions(Vector3 cam)
         {
             var pos = _scratch;
@@ -617,10 +561,7 @@ namespace Iridium.Patches.Optimizer
             return n;
         }
 
-        /// <summary>
-        /// 原生路径：收集后一次 FFI 调用算完所有角，再把脏项按 slot 顶点下标回填。
-        /// 原生缺导出或调用失败时返回 false，由调用方走托管回退。
-        /// </summary>
+        /// <summary>One FFI call computes every corner; false means the caller must use the managed fallback.</summary>
         private static bool ComputePositionsNative(Vector3 cam)
         {
             if (_nativeKnownBad || !Iridium.Native.IridiumNative.HasParallaxCompute) return false;
@@ -656,11 +597,7 @@ namespace Iridium.Patches.Optimizer
             return true;
         }
 
-        /// <summary>
-        /// 托管回退：与原生内核逐位等价的内联循环（原生不可用时）。
-        /// 同样先摊平进 SoA，再在摊平的顶点镜像上做脏检查 —— 与原生路径
-        /// 保持完全相同的「哪些 slot 需要上传」判定，避免两条路径抖动不同。
-        /// </summary>
+        /// <summary>Managed fallback, bit-for-bit equivalent to the native kernel and using the same dirty rule so both paths agree on which slots upload.</summary>
         private static void ComputePositionsManaged(Vector3 cam)
         {
             int n = GatherPositions(cam);
@@ -701,8 +638,6 @@ namespace Iridium.Patches.Optimizer
                 slot.PositionDirty = true;
             }
         }
-
-        // ---------------- 图集 ----------------
 
         private static Page? AcquirePageFor(Texture2D tex)
         {
@@ -747,8 +682,6 @@ namespace Iridium.Patches.Optimizer
                 (rx + w) / (float)PageSize, (ry + h) / (float)PageSize);
         }
 
-        // ---------------- 清理 ----------------
-
         private static void UnmanageAll()
         {
             foreach (var item in _items.Values)
@@ -776,8 +709,6 @@ namespace Iridium.Patches.Optimizer
             ClearBatchesAndAtlas();
         }
 
-        // ---------------- Harmony 钩子 ----------------
-
         [HarmonyPatch(typeof(scrDecorationManager), "FinishUpdateDecorations")]
         private static class FinishUpdateDecorationsHook
         {
@@ -799,11 +730,7 @@ namespace Iridium.Patches.Optimizer
             public static void Postfix() => ClearBatchesAndAtlas();
         }
 
-        /// <summary>
-        /// 已被合批接管的装饰物：位置/材质由顶点遍历负责，跳过原版 LogicUpdate
-        /// （避免每帧重复的视差重算与 transform 写入）。判定盒仍需更新。
-        /// 独立于 Ffx 优化开关，保证任何配置下都不做重复劳动。
-        /// </summary>
+        /// <summary>Batched decorations skip vanilla LogicUpdate; the hitbox still needs updating.</summary>
         [HarmonyPatch(typeof(scrDecoration), nameof(scrDecoration.LogicUpdate))]
         private static class LogicUpdateSkipHook
         {

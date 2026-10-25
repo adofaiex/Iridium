@@ -14,7 +14,7 @@ namespace System
         public int Value => _value < 0 ? ~_value : _value;
         public bool IsFromEnd => _value < 0;
 
-        // --- 关键所在：编译器要求的成员 ---
+        // 关键所在：编译器要求的成员
         public int GetOffset(int length)
         {
             int offset = _value;
@@ -24,7 +24,6 @@ namespace System
             }
             return offset;
         }
-        // -------------------------------
 
         public override bool Equals(object obj) => obj is Index other && Equals(other);
         public bool Equals(Index other) => _value == other._value;
