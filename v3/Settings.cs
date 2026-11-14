@@ -1592,7 +1592,7 @@ namespace Iridium
             // UMM / MiniModLoader draw their own IMGUI settings page, but the real settings
             // UI is the standalone UGUI panel. This page only explains how to open it.
             var hotkey = string.IsNullOrEmpty(panelToggleHotkey) ? "Ctrl+F9" : panelToggleHotkey;
-            var highlighted = $"<color=#D973A5><b>{hotkey}</b></color>";
+            var highlighted = $"[<color=#D973A5><b>{hotkey}</b></color>]";
             var hint = string.Format(Localization.Get("PanelHotkeyHint", language), highlighted);
 
             var textStyle = new GUIStyle(IridiumLayout.SecondaryText) { richText = true, wordWrap = true };
