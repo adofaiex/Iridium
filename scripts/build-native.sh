@@ -9,6 +9,10 @@
 #                slices into one fat dylib, so a single file works whether
 #                the game is arm64 or Intel x86_64 (Rosetta). Reuses the
 #                host build above as one of the two slices.
+#   --arm        additionally cross-compile the Linux ARM64 slice (arm-v8a)
+#                -> libiridium_core_arm64.so. Needs the rustup target
+#                aarch64-unknown-linux-gnu plus gcc-aarch64-linux-gnu
+#                (CI installs it).
 #
 # Any other arguments are passed through to `cargo build`.
 set -euo pipefail
@@ -16,11 +20,13 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 
 cross=false
 universal=false
+arm=false
 args=()
 for a in "$@"; do
     case "$a" in
         --cross)     cross=true ;;
         --universal) universal=true ;;
+        --arm)       arm=true ;;
         *)           args+=("$a") ;;
     esac
 done
@@ -74,4 +80,19 @@ if [ "$universal" = true ]; then
             echo "build-native.sh: --universal ignored (not macOS)" >&2
             ;;
     esac
+fi
+
+# --arm: cross-compile the Linux ARM64 (arm-v8a) slice only. The name matches
+# the runtime probe (libiridium_core_arm64.so). Needs the rustup target
+# aarch64-unknown-linux-gnu plus gcc-aarch64-linux-gnu (CI installs it).
+if [ "$arm" = true ]; then
+    target="aarch64-unknown-linux-gnu"
+    env_key="CARGO_TARGET_$(echo "$target" | tr 'a-z-' 'A-Z_')_LINKER"
+
+    if command -v rustup >/dev/null 2>&1; then
+        rustup target add "$target" >/dev/null 2>&1 || true
+    fi
+    env "$env_key=aarch64-linux-gnu-gcc" cargo build --release --target "$target" ${args[@]+"${args[@]}"}
+    cp "target/$target/release/libiridium_core.so" "$repo/out/native/libiridium_core_arm64.so"
+    echo "staged: $repo/out/native/libiridium_core_arm64.so ($target)"
 fi

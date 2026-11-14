@@ -156,35 +156,65 @@ namespace Iridium.Patches.Optimizer
         [HarmonyPatch(typeof(scrVisualDecoration), "UpdateShader")]
         private static class DecorationFilterInvokePatch
         {
-            private static readonly MethodInfo? _vanillaInvoke = AccessTools.Method(
-                typeof(MethodInfo), nameof(MethodInfo.Invoke),
-                new[] { typeof(object), typeof(object[]) });
             private static readonly MethodInfo? _fastInvoke = AccessTools.Method(
                 typeof(GameplayAllocationOptimizationPatches), nameof(FastInvoke));
 
             [HarmonyTranspiler]
             public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
             {
-                if (_vanillaInvoke == null || _fastInvoke == null)
+                // This method's IL differs between game versions, and inspecting an operand
+                // whose type cannot be resolved throws. A throwing transpiler aborts the
+                // whole patch ("Patching exception in method ..."), so any problem here must
+                // degrade to "no optimisation" instead.
+                try
                 {
-                    Main.Logger?.Error("[GameplayAlloc] MethodInfo.Invoke not found, skipping transpile");
-                    return instructions;
-                }
-                var replaced = 0;
-                var codes = instructions.ToList();
-                for (int i = 0; i < codes.Count; i++)
-                {
-                    if (codes[i].operand is MethodInfo mi && mi.MethodSignatureEquals(_vanillaInvoke))
+                    if (_fastInvoke == null)
                     {
-                        codes[i].operand = _fastInvoke;
+                        Main.Logger?.Warning("[GameplayAlloc] FastInvoke missing, skipping transpile");
+                        return instructions;
+                    }
+
+                    var codes = instructions.ToList();
+                    int replaced = 0;
+                    foreach (var code in codes)
+                    {
+                        if (code.operand is not MethodInfo mi) continue;
+                        if (!IsReflectionInvoke(mi)) continue;
+
+                        code.operand = _fastInvoke;
                         replaced++;
                     }
+
+                    if (replaced == 0)
+                        Main.Logger?.Log("[GameplayAlloc] no reflection Invoke in scrVisualDecoration.UpdateShader (this game version already avoids it)");
+                    else
+                        Main.Logger?.Log($"[GameplayAlloc] replaced {replaced} reflection Invoke call(s) in scrVisualDecoration.UpdateShader");
+
+                    return codes;
                 }
-                if (replaced == 0)
-                    Main.Logger?.Error("[GameplayAlloc] MethodInfo.Invoke call site not found in scrVisualDecoration.UpdateShader");
-                else
-                    Main.Logger?.Log($"[GameplayAlloc] replaced {replaced} reflection Invoke call(s) in scrVisualDecoration.UpdateShader");
-                return codes;
+                catch (Exception ex)
+                {
+                    Main.Logger?.Warning($"[GameplayAlloc] UpdateShader transpile skipped: {ex.Message}");
+                    return instructions;
+                }
+            }
+
+            /// <summary>MethodInfo/MethodBase.Invoke(object, object[]) — matched without touching
+            /// <see cref="MemberInfo.DeclaringType"/>, which may be unresolvable at patch time.</summary>
+            private static bool IsReflectionInvoke(MethodInfo method)
+            {
+                try
+                {
+                    if (method.Name != nameof(MethodInfo.Invoke)) return false;
+                    var parameters = method.GetParameters();
+                    return parameters.Length == 2
+                        && parameters[0].ParameterType == typeof(object)
+                        && parameters[1].ParameterType == typeof(object[]);
+                }
+                catch
+                {
+                    return false;
+                }
             }
         }
     }
@@ -194,13 +224,22 @@ namespace Iridium.Patches.Optimizer
         /// <summary>参数类型逐一比较的签名匹配（重载区分用）。</summary>
         public static bool MethodSignatureEquals(this MethodInfo a, MethodInfo b)
         {
-            if (a.DeclaringType != b.DeclaringType || a.Name != b.Name) return false;
-            var pa = a.GetParameters();
-            var pb = b.GetParameters();
-            if (pa.Length != pb.Length) return false;
-            for (int i = 0; i < pa.Length; i++)
-                if (pa[i].ParameterType != pb[i].ParameterType) return false;
-            return true;
+            // Operand comparison can throw when a referenced type is not resolvable on the
+            // current game build; treat that as "no match" so the patch keeps working.
+            try
+            {
+                if (a.DeclaringType != b.DeclaringType || a.Name != b.Name) return false;
+                var pa = a.GetParameters();
+                var pb = b.GetParameters();
+                if (pa.Length != pb.Length) return false;
+                for (int i = 0; i < pa.Length; i++)
+                    if (pa[i].ParameterType != pb[i].ParameterType) return false;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

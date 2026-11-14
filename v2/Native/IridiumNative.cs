@@ -422,7 +422,15 @@ namespace Iridium.Native
                     return "iridium_core.dll";
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                     return "libiridium_core.dylib";
-                return "libiridium_core.so";
+
+                // Linux ARM ships ABI-specific slices (CI: build-native.sh --arm);
+                // x86/x64 keeps the unsuffixed name.
+                switch (RuntimeInformation.ProcessArchitecture)
+                {
+                    case Architecture.Arm64: return "libiridium_core_arm64.so";  // arm-v8a
+                    case Architecture.Arm:   return "libiridium_core_armv7.so";  // arm-v7a
+                    default:                 return "libiridium_core.so";
+                }
             }
         }
 

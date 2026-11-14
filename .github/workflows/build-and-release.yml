@@ -43,8 +43,40 @@ jobs:
         if-no-files-found: error
         retention-days: 7
 
+  # Linux ARM64 (arm-v8a) slice. Kept as its own job because it needs the
+  # aarch64 cross linker; the artifact ships inside every version zip.
+  native-linux-arm:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-unknown-linux-gnu
+
+    - name: Install ARM64 cross linker
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+
+    - name: Cache Rust build
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: native/iridium-core
+
+    - name: Build ARM64 library (arm-v8a)
+      run: ./scripts/build-native.sh --arm
+
+    - name: Upload ARM64 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: native-linux-arm
+        path: out/native/libiridium_core_arm64.so
+        if-no-files-found: error
+        retention-days: 7
+
   build:
-    needs: native-macos
+    needs: [native-macos, native-linux-arm]
     strategy:
       matrix:
         include:
@@ -104,6 +136,13 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: native-dylib
+        path: out/native
+
+    # Linux ARM64 (arm-v8a) slice from native-linux-arm.
+    - name: Add Linux ARM64 library (from native-linux-arm job)
+      uses: actions/download-artifact@v4
+      with:
+        name: native-linux-arm
         path: out/native
 
     # Bit-exactness kernels: fail the release if a port drifts from C#.

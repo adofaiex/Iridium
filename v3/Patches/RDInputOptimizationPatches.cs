@@ -1,7 +1,9 @@
 using Iridium.Config;
+using Iridium.Runtime;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace Iridium.Patches
 {
@@ -68,20 +70,44 @@ namespace Iridium.Patches
         [IriPatch(Path = "optimizer/rdInput",
             Pre = typeof(OptimizerSettings),
             Condition = "optimizeRDInputAllocations")]
-        [HarmonyPatch(typeof(RDInput), "GetStateKeys")]
-        public static class GetStateKeysPatch
+        public sealed class GetStateKeysPatch : MonoAdaptivePatch
         {
-            [HarmonyPrefix]
-            public static bool Prefix(ButtonState state, ref List<AnyKeyCode> __result)
+            /// <summary>
+            /// 3.4.0 changed the signature: <c>static void GetStateKeys(List&lt;AnyKeyCode&gt; keys,
+            /// ButtonState state)</c>. Vanilla now fills the caller's list, so there is nothing
+            /// to optimise and the old <c>ref __result</c> prefix cannot bind (patch failure).
+            /// Resolve the target and pick the matching prefix at runtime.
+            /// </summary>
+            private static bool _legacyListReturning;
+
+            public override string Id => "RDInputGetStateKeys";
+
+            protected override MethodBase? GetTargetMethod()
+            {
+                var method = AccessTools.Method(typeof(RDInput), "GetStateKeys");
+                var parameters = method?.GetParameters();
+                _legacyListReturning = method != null
+                    && method.ReturnType != typeof(void)
+                    && parameters is { Length: 1 };
+                return method;
+            }
+
+            protected override MethodInfo? Prefix => AccessTools.Method(
+                typeof(GetStateKeysPatch),
+                _legacyListReturning ? nameof(PrefixLegacy) : nameof(PrefixModern));
+
+            /// <summary>Old signature: returns a fresh list, so hand back the pooled one.</summary>
+            public static bool PrefixLegacy(ButtonState state, ref List<AnyKeyCode> __result)
             {
                 if (!Main.Settings.optimizer.optimizeRDInputAllocations)
-                {
                     return true;
-                }
 
                 __result = GetStateKeys(state);
                 return false;
             }
+
+            /// <summary>New signature: no allocation to remove; keep vanilla behaviour.</summary>
+            public static bool PrefixModern(ButtonState state) => true;
         }
     }
 }

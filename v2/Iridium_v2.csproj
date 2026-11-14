@@ -323,6 +323,8 @@
 			<FilesToCopy Include="$(ProjectDir)..\out\native\iridium_core.dll" Condition="Exists('$(ProjectDir)..\out\native\iridium_core.dll')" />
 			<FilesToCopy Include="$(ProjectDir)..\out\native\libiridium_core.so" Condition="Exists('$(ProjectDir)..\out\native\libiridium_core.so')" />
 			<FilesToCopy Include="$(ProjectDir)..\out\native\libiridium_core.dylib" Condition="Exists('$(ProjectDir)..\out\native\libiridium_core.dylib')" />
+			<!-- Linux ARM64 (arm-v8a) slice; the runtime probe picks it by process arch. -->
+			<FilesToCopy Include="$(ProjectDir)..\out\native\libiridium_core_arm64.so" Condition="Exists('$(ProjectDir)..\out\native\libiridium_core_arm64.so')" />
 			<FilesToCopy Include="$(ProjectDir)Info.json" />
 			<ResourceFiles Include="$(ProjectDir)Resources\**\*" Exclude="$(ProjectDir)Resources\**\*\" />
 		</ItemGroup>
@@ -351,8 +353,8 @@
 	<Target Name="SkipDeployNotice" AfterTargets="DeployAndLaunch" Condition="'$(Loader)' != '' AND ('$(GameExePath)' == '' OR !Exists('$(GameExePath)'))">
 		<Message Text="GameExePath is not set or not found — deploy skipped. Set ADOFAI_GAME_PATH in v2/.env (see v2/.env.example) to enable deploy+launch." Importance="high" />
 	</Target>
-	<Target Name="ValidateLoader" BeforeTargets="DeployAndLaunch" Condition="'$(Loader)' != '' AND '$(Loader)' != 'ML' AND '$(Loader)' != 'UMM' AND '$(Loader)' != 'BepInEx'">
-		<Error Text="Invalid Loader value '$(Loader)'. Use -p:Loader=ML, -p:Loader=UMM, or -p:Loader=BepInEx" />
+	<Target Name="ValidateLoader" BeforeTargets="DeployAndLaunch" Condition="'$(Loader)' != '' AND '$(Loader)' != 'ML' AND '$(Loader)' != 'UMM' AND '$(Loader)' != 'BepInEx' AND '$(Loader)' != 'MlWithUMMBridge'">
+		<Error Text="Invalid Loader value '$(Loader)'. Use -p:Loader=ML, -p:Loader=UMM, -p:Loader=BepInEx, or -p:Loader=MlWithUMMBridge" />
 	</Target>
 	<Target Name="DeployAndLaunch" AfterTargets="CopyToOut" Condition="'$(Loader)' != '' AND '$(GameExePath)' != '' AND Exists('$(GameExePath)')">
 		<PropertyGroup>
@@ -360,6 +362,8 @@
 			<ModsDir Condition="'$(Loader)' == 'UMM'">$(GameDir)\Mods\$(AssemblyName)\</ModsDir>
 			<ModsDir Condition="'$(Loader)' == 'ML'">$(GameDir)\Mods\</ModsDir>
 			<ModsDir Condition="'$(Loader)' == 'BepInEx'">$(GameDir)\BepInEx\plugins\$(AssemblyName)\</ModsDir>
+			<!-- MelonLoader + UMMBridge: loaded by the UMM bridge, so it lives under UMMMods. -->
+			<ModsDir Condition="'$(Loader)' == 'MlWithUMMBridge'">$(GameDir)\UMMMods\$(AssemblyName)\</ModsDir>
 		</PropertyGroup>
 		<MakeDir Directories="$(ModsDir)" />
 		<MakeDir Directories="$(ModsDir)Resources" />

@@ -1,8 +1,10 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using HarmonyLib;
 using UnityEngine;
 using Iridium.UI;
 using Iridium.Runtime;
+using Object = UnityEngine.Object;
 
 namespace Iridium
 {
@@ -18,11 +20,89 @@ namespace Iridium
 
         private static string CurrentVersion => VersionManager.GetFullVersionString();
 
+        /// <summary>
+        /// First Iridium log line: mod version, OS + ABI, runtime and the game build.
+        /// Bug reports are triaged with this, and when the game ships a build commit SHA
+        /// that is the authoritative identifier (the human version string is secondary).
+        /// </summary>
+        private static void LogStartupBanner()
+        {
+            try
+            {
+                Logger?.Log($"[Startup] Iridium {VersionManager.GetFullVersionString()} | " +
+                            $"{SystemInfo.operatingSystem} ({ArchitectureName()}) | Mono | game {DescribeGameBuild()}");
+            }
+            catch (System.Exception ex)
+            {
+                Logger?.Log($"[Startup] Iridium {VersionManager.GetFullVersionString()} (startup info unavailable: {ex.Message})");
+            }
+        }
+
+        private static string ArchitectureName()
+        {
+            try
+            {
+                switch (RuntimeInformation.ProcessArchitecture)
+                {
+                    case Architecture.X86: return "x86/i386";
+                    case Architecture.X64: return "x64/amd64";
+                    // ABI-style names: 32-bit ARM targets are arm-v7a, 64-bit is arm-v8a.
+                    case Architecture.Arm: return "arm-v7a";
+                    case Architecture.Arm64: return "arm-v8a/aarch64";
+                }
+            }
+            catch
+            {
+                // IL2CPP / older profiles may not implement RuntimeInformation.
+            }
+            return System.Environment.Is64BitProcess ? "x64/amd64" : "x86/i386";
+        }
+
+        private static string DescribeGameBuild()
+        {
+            string version = Application.version;
+            string commit = ReadGameBuildField("buildCommit");
+            string date = ReadGameBuildField("buildDate");
+
+            if (string.IsNullOrEmpty(commit)) return version; // older game builds have no SHA
+            return string.IsNullOrEmpty(date) ? $"{version} @ {commit}" : $"{version} @ {commit} ({date})";
+        }
+
+        /// <summary>
+        /// Reads Releases.buildCommit / buildDate reflectively: 2.9.8 does not ship them.
+        /// Returns "" when absent or still "not-set".
+        /// </summary>
+        private static string ReadGameBuildField(string fieldName)
+        {
+            try
+            {
+                foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var type = assembly.GetType("Releases", throwOnError: false);
+                    var field = type?.GetField(fieldName, BindingFlags.Public | BindingFlags.Static);
+                    if (field == null) continue;
+
+                    if (field.GetValue(null) is string value
+                        && !string.IsNullOrEmpty(value)
+                        && !string.Equals(value, "not-set", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        return value;
+                    }
+                }
+            }
+            catch
+            {
+                // Reflection over game assemblies is best-effort only.
+            }
+            return "";
+        }
+
         public static bool Initialize(IHandler handler)
         {
             _mainThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
             Handler = handler;
             Logger = new Logger();
+            LogStartupBanner();
             Settings = handler.LoadSettings<Settings>();
             Localization.Load();
             Settings.ValidateCustomEasingConflict(Settings);
