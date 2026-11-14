@@ -1589,16 +1589,51 @@ namespace Iridium
         /// </summary>
         public void OnGUI()
         {
+            // UMM / MiniModLoader draw their own IMGUI settings page, but the real settings
+            // UI is the standalone UGUI panel. This page only explains how to open it.
             var hotkey = string.IsNullOrEmpty(panelToggleHotkey) ? "Ctrl+F9" : panelToggleHotkey;
-            var hint = string.Format(Localization.Get("PanelHotkeyHint", language), hotkey);
+            var highlighted = $"<color=#D973A5><b>{hotkey}</b></color>";
+            var hint = string.Format(Localization.Get("PanelHotkeyHint", language), highlighted);
 
-            IridiumLayout.Render(
-                IridiumLayout.VBox(
-                    IridiumLayout.ContainerStyle.Padding,
-                    null,
-                    IridiumLayout.Text(hint, IridiumLayout.TextStyle.Secondary)
-                )
-            );
+            var textStyle = new GUIStyle(IridiumLayout.SecondaryText) { richText = true, wordWrap = true };
+            GUILayout.Label(hint, textStyle);
+
+            if (LinkButton(Localization.Get("PanelHotkeyOpenLink", language)))
+                Iridium.UI.PanelShell.Show();
+        }
+
+        private static GUIStyle? _linkStyle;
+
+        /// <summary>Underlined accent-coloured text that behaves like a link.</summary>
+        private static bool LinkButton(string text)
+        {
+            var accent = new Color(0xD9 / 255f, 0x73 / 255f, 0xA5 / 255f, 1f);
+
+            _linkStyle ??= new GUIStyle(IridiumLayout.SecondaryText)
+            {
+                richText = false,
+                wordWrap = false,
+                alignment = TextAnchor.MiddleLeft,
+            };
+            _linkStyle.normal.textColor = accent;
+            _linkStyle.hover.textColor = Color.white;
+            _linkStyle.active.textColor = Color.white;
+
+            bool clicked = GUILayout.Button(text, _linkStyle, GUILayout.ExpandWidth(false));
+
+            if (Event.current != null && Event.current.type == EventType.Repaint)
+            {
+                var rect = GUILayoutUtility.GetLastRect();
+                if (rect.height > 0f)
+                {
+                    var previous = GUI.color;
+                    GUI.color = accent;
+                    GUI.DrawTexture(new Rect(rect.x, rect.yMax - 1f, rect.width, 1f), Texture2D.whiteTexture);
+                    GUI.color = previous;
+                }
+            }
+
+            return clicked;
         }
 
         /// <summary>True while the user is recording a new shortcut in the settings UI.</summary>
