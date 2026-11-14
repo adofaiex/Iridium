@@ -12,24 +12,24 @@ namespace Iridium.UI
     /// </summary>
     public static class Layout
     {
-        // ---- theme tokens (Colors.iml) ----
-        public static readonly Color Backdrop = new Color(0f, 0f, 0f, 0.55f);
-        public static readonly Color Window = Hex(0x151617);        // bg-default
-        public static readonly Color WindowAlt = Hex(0x0D0E0F);     // bg-alt
-        public static readonly Color Control = Hex(0x313338);        // element
-        public static readonly Color ControlBorder = Hex(0x494F5C);  // bg-element-border
-        public static readonly Color Accent = Hex(0xD973A5);         // primary
-        public static readonly Color TextTitle = Hex(0xF8F9FA);      // text-title
-        public static readonly Color TextSubtitle = Hex(0xF1F3F5);   // text-subtitle
-        public static readonly Color TextNormal = Hex(0xE9ECEF);     // text-normal
-        public static readonly Color TextMuted = Hex(0x7D7E7F);      // text-secondary
-        public static readonly Color Separator = new Color(1f, 1f, 1f, 0.08f);
+        // ---- theme tokens (ImlTheme is the single source of truth) ----
+        public static Color Backdrop => Iris.Iml.ImlTheme.Backdrop;
+        public static Color Window => Iris.Iml.ImlTheme.Window;          // bg-default
+        public static Color WindowAlt => Iris.Iml.ImlTheme.WindowAlt;    // bg-alt
+        public static Color Control => Iris.Iml.ImlTheme.Control;        // element
+        public static Color ControlBorder => Iris.Iml.ImlTheme.ControlBorder;
+        public static Color Accent => Iris.Iml.ImlTheme.Accent;          // primary
+        public static Color TextTitle => Iris.Iml.ImlTheme.TextTitle;
+        public static Color TextSubtitle => Iris.Iml.ImlTheme.TextSubtitle;
+        public static Color TextNormal => Iris.Iml.ImlTheme.TextNormal;
+        public static Color TextMuted => Iris.Iml.ImlTheme.TextMuted;
+        public static Color Separator => Iris.Iml.ImlTheme.Separator;
 
         // ---- metrics ----
         public const float TitleBarHeight = 40f;
-        public const float WindowRadius = 16f;
-        public const float ControlRadius = 8f;
-        public const float Spacing = 8f;
+        public static float WindowRadius => Iris.Iml.ImlTheme.ContainerRadius;
+        public static float ControlRadius => Iris.Iml.ImlTheme.ControlRadius;
+        public static float Spacing => Iris.Iml.ImlTheme.Spacing;
         public const float ScrollbarWidth = 8f;
 
         public static Color Hex(int rgb)
