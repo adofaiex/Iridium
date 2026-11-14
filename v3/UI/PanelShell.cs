@@ -146,9 +146,7 @@ namespace Iridium.UI
             panelImg.color = PanelColor;
             // Rounded window, matching the IMGUI theme (Background container radius 16).
             // The sprite is a plain white 9-slice, so tinting keeps the theme color.
-            // Baked fill + 1px outline: the window needs an edge to read as a floating card.
-            panelImg.sprite = Layout.PanelSprite(Layout.Window, Layout.WindowRadius,
-                new Color(1f, 1f, 1f, 0.10f));
+            panelImg.sprite = Layout.Rounded(Layout.WindowRadius);
             panelImg.type = Image.Type.Sliced;
 
             // Title bar

@@ -22,7 +22,6 @@
             </HBox>
         </>}
 
-        <Separator />
         <HBox align="center">
             <Text text={optLabel('CompressImage')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('CompressImage')" />
@@ -40,7 +39,6 @@
             </HBox>
             {isInfoExpanded('ShowSavedMemory') && <Text text={localize('ShowSavedMemoryInfo')} style="hint" />}
 
-            <Separator />
             <HBox align="center" class="indent">
                 <Text text={optLabel('UseLossyCompression')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('UseLossyCompression')" />
@@ -59,7 +57,6 @@
                 {isInfoExpanded('LossyQuality') && <Text text={localize('LossyQualityInfo')} style="hint" />}
             </>}
 
-            <Separator />
             <HBox align="center">
                 <Text text={optLabel('MultipleOf4')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('MultipleOf4')" />
@@ -68,7 +65,6 @@
             </HBox>
             {isInfoExpanded('MultipleOf4') && <Text text={localize('MultipleOf4Info')} style="hint" />}
 
-            <Separator />
             <HBox align="center">
                 <Text text={optLabel('DivideImageBy')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('DivideImageBy')" />
@@ -77,7 +73,6 @@
             </HBox>
             {isInfoExpanded('DivideImageBy') && <Text text={localize('DivideImageByInfo')} style="hint" />}
 
-            <Separator />
             <HBox align="center">
                 <Text text={optLabel('DontResizeCollider')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('DontResizeCollider')" />
@@ -87,7 +82,6 @@
             {isInfoExpanded('DontResizeCollider') && <Text text={localize('DontResizeColliderInfo')} style="hint" />}
         </>}
 
-        <Separator />
         <HBox align="center">
             <Text text={optLabel('DisableShadows')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('DisableShadows')" />
@@ -96,7 +90,6 @@
         </HBox>
         {isInfoExpanded('DisableShadows') && <Text text={localize('DisableShadowsInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <ArrowButton direction={settings.expandMemoryOpts ? 'down' : 'right'} on-click="OnSectionToggle('memory')" />
             <Text text={localize('MemorySettings')} style="subtitle" />
@@ -111,7 +104,6 @@
         </HBox>
         {isInfoExpanded('BasicMemoryOptimization') && <Text text={localize('BasicMemoryOptimizationInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={optLabel('EnableVirtualMemoryOptimization')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('EnableVirtualMemoryOptimization')" />

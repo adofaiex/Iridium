@@ -181,26 +181,6 @@ namespace Iridium.UI
             return button;
         }
 
-        /// <summary>Card sprite with a 1px outline baked in (window / popovers).</summary>
-        public static Sprite PanelSprite(Color fill, float radius, Color border)
-        {
-            int r = Mathf.Max(Mathf.RoundToInt(radius), 1);
-            var key = "panel:" + ColorUtility.ToHtmlStringRGBA(fill) + ":" + r + ":"
-                      + ColorUtility.ToHtmlStringRGBA(border);
-            if (_spriteCache.TryGetValue(key, out var cached)) return cached;
-
-            int texSize = Mathf.Max(2 * r + 2, 16);
-            var tex = Iris.Iml.GuiTextureFactory.GetRoundedRect(texSize, texSize, r, fill, border, 1);
-            tex.hideFlags = HideFlags.HideAndDontSave;
-
-            var sprite = Sprite.Create(tex, new UnityEngine.Rect(0, 0, tex.width, tex.height),
-                new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect,
-                new Vector4(r, r, r, r));
-            sprite.hideFlags = HideFlags.HideAndDontSave;
-            _spriteCache[key] = sprite;
-            return sprite;
-        }
-
         public static void Stretch(RectTransform rect)
         {
             rect.anchorMin = Vector2.zero;

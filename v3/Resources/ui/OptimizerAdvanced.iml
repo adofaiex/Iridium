@@ -28,7 +28,6 @@
             {isInfoExpanded('ChunkedFloorSpawn') && <Text text={localize('ChunkedFloorSpawnInfo')} style="hint" />}
         </>}
 
-        <Separator />
         <HBox align="center">
             <Text text={optLabel('FrameSpreadDecorationLoading')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('FrameSpreadDecorationLoading')" />
@@ -85,7 +84,6 @@
         </HBox>
         {isInfoExpanded('OptimizeEditorEventIndicators') && <Text text={localize('OptimizeEditorEventIndicatorsInfo')} style="hint" />}
 
-        <Separator />
         <Text text={localize('LoadingOptimizations')} style="subtitle" />
         <HBox align="center">
             <Text text={optLabel('CustomLevelReadOptimization')} style="label" />

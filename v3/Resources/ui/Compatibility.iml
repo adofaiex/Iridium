@@ -1,10 +1,8 @@
 <Iris>
     <VBox gap="4">
         <Text text={localize('CompatibilitySettings')} style="title" />
-        <Separator />
 
         <Text text={localize('CompatibleBehavior')} style="subtitle" />
-        <Separator />
 
         <HBox align="center">
             <Text text={localize('EnableLegacyPauseFix')} style="label" />
@@ -14,7 +12,6 @@
         </HBox>
         {isInfoExpanded('EnableLegacyPauseFix') && <Text text={localize('EnableLegacyPauseFixInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('EnableNoFailTooEarly')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('EnableNoFailTooEarly')" />
@@ -23,7 +20,6 @@
         </HBox>
         {isInfoExpanded('EnableNoFailTooEarly') && <Text text={localize('EnableNoFailTooEarlyInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('ScaleFilterSpeedWithPitch')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('ScaleFilterSpeedWithPitch')" />
@@ -32,7 +28,6 @@
         </HBox>
         {isInfoExpanded('ScaleFilterSpeedWithPitch') && <Text text={localize('ScaleFilterSpeedWithPitchInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('FixCameraRelativeDrag')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('FixCameraRelativeDrag')" />
@@ -41,9 +36,7 @@
         </HBox>
         {isInfoExpanded('FixCameraRelativeDrag') && <Text text={localize('FixCameraRelativeDragInfo')} style="hint" />}
 
-        <Separator />
         <Text text={localize('BugFixes')} style="subtitle" />
-        <Separator />
 
         <HBox align="center">
             <Text text={localize('PortalTravelFix')} style="label" />
@@ -53,7 +46,6 @@
         </HBox>
         {isInfoExpanded('PortalTravelFix') && <Text text={localize('PortalTravelFixInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('FixEditorPlayResetMistakes')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('FixEditorPlayResetMistakes')" />
@@ -62,7 +54,6 @@
         </HBox>
         {isInfoExpanded('FixEditorPlayResetMistakes') && <Text text={localize('FixEditorPlayResetMistakesInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('FixTurnaroundCondition')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('FixTurnaroundCondition')" />
@@ -71,7 +62,6 @@
         </HBox>
         {isInfoExpanded('FixTurnaroundCondition') && <Text text={localize('FixTurnaroundConditionInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('FixJudgeRotation')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('FixJudgeRotation')" />
@@ -80,7 +70,6 @@
         </HBox>
         {isInfoExpanded('FixJudgeRotation') && <Text text={localize('FixJudgeRotationInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('FixCoopPauseLock')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('FixCoopPauseLock')" />
@@ -89,9 +78,7 @@
         </HBox>
         {isInfoExpanded('FixCoopPauseLock') && <Text text={localize('FixCoopPauseLockInfo')} style="hint" />}
 
-        <Separator />
         <Text text={localize('LegacyLevelBehavior')} style="subtitle" />
-        <Separator />
 
         <HBox align="center">
             <Text text={localize('ForceAngleData')} style="label" />
@@ -101,9 +88,7 @@
         </HBox>
         {isInfoExpanded('ForceAngleData') && <Text text={localize('ForceAngleDataInfo')} style="hint" />}
 
-        <Separator />
         <Text text={localize('PatchMode')} style="subtitle" />
-        <Separator />
 
         <HBox align="center">
             <Text text={localize('UseILPatch')} style="label" />
@@ -113,9 +98,7 @@
         </HBox>
         {isInfoExpanded('UseILPatch') && <Text text={localize('UseILPatchInfo')} style="hint" />}
 
-        <Separator />
         <Text text={localize('ThirdPartyMods')} style="subtitle" />
-        <Separator />
 
         <HBox align="center">
             <Text text={localize('IgnoreRequiredMods')} style="label" />

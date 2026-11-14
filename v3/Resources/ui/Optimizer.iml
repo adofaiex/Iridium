@@ -2,7 +2,6 @@
     <VBox gap="4">
         <!-- 大标题：与其他顶层 Tab 保持一致 -->
         <Text text={localize('OptimizerSettings')} style="title" />
-        <Separator />
 
         <!-- 总开关：所有子 Tab 共享，置于子 Tab 条上方 -->
         <HBox align="center">

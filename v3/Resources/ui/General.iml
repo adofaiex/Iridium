@@ -1,10 +1,8 @@
 <Iris>
     <VBox gap="4">
         <Text text={localize('GeneralSettings')} style="title" />
-        <Separator />
 
         <Text text={localize('Language')} style="subtitle" />
-        <Separator />
         <HBox>
             <ForEach items={getLanguages()} template="LangBtn" />
         </HBox>
@@ -23,9 +21,7 @@
         </HBox>
         {isInfoExpanded('PanelToggleHotkey') && <Text text={localize('PanelToggleHotkeyInfo')} style="hint" />}
 
-        <Separator />
         <Text text={localize('UIBehavior')} style="subtitle" />
-        <Separator />
 
         <HBox align="center">
             <Text text={localize('RemoveNews')} style="label" />
@@ -35,7 +31,6 @@
         </HBox>
         {isInfoExpanded('RemoveNews') && <Text text={localize('RemoveNewsInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('HideBetaWatermark')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('HideBetaWatermark')" />
@@ -44,7 +39,6 @@
         </HBox>
         {isInfoExpanded('HideBetaWatermark') && <Text text={localize('HideBetaWatermarkInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('ForceDifficultyUI')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('ForceDifficultyUI')" />
@@ -53,7 +47,6 @@
         </HBox>
         {isInfoExpanded('ForceDifficultyUI') && <Text text={localize('ForceDifficultyUIInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('AlwaysCountdown')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('AlwaysCountdown')" />
@@ -62,7 +55,6 @@
         </HBox>
         {isInfoExpanded('AlwaysCountdown') && <Text text={localize('AlwaysCountdownInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('EnablePausePlanetTrail')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('EnablePausePlanetTrail')" />
@@ -71,7 +63,6 @@
         </HBox>
         {isInfoExpanded('EnablePausePlanetTrail') && <Text text={localize('EnablePausePlanetTrailInfo')} style="hint" />}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('EnableCircleArc')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('EnableCircleArc')" />
@@ -80,13 +71,11 @@
         </HBox>
         {isInfoExpanded('EnableCircleArc') && <Text text={localize('EnableCircleArcInfo')} style="hint" />}
         {settings.ui.enableCircleArc && <>
-            <Separator />
             <HBox align="center">
                 <Text text={localize('CircleArcMinAngle')} style="label" />
                 <Fill />
                 <Slider value={settings.ui.circleArcMinAngle} min="0" max="180" step="1" showValue="true" on-changed="OnCircleArcMinAngleChanged" />
             </HBox>
-            <Separator />
             <HBox align="center">
                 <Text text={localize('CircleArcMaxAngle')} style="label" />
                 <Fill />
@@ -94,9 +83,7 @@
             </HBox>
         </>}
 
-        <Separator />
         <Text text={localize('AutoplayDisplay')} style="subtitle" />
-        <Separator />
 
         <HBox align="center">
             <Text text={localize('ShowAutoplayHintUI')} style="label" />
@@ -107,7 +94,6 @@
         {isInfoExpanded('ShowAutoplayHintUI') && <Text text={localize('ShowAutoplayHintUIInfo')} style="hint" />}
 
         {settings.ui.showAutoplayHintUI && <>
-            <Separator />
             <HBox align="center">
                 <Text text={localize('CustomAutoplayHint')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('CustomAutoplayHint')" />
@@ -121,7 +107,6 @@
             </>}
         </>}
 
-        <Separator />
         <HBox align="center">
             <Text text={localize('MoveAutoplayText')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('MoveAutoplayText')" />
@@ -131,21 +116,17 @@
         {isInfoExpanded('MoveAutoplayText') && <Text text={localize('MoveAutoplayTextInfo')} style="hint" />}
 
         {settings.ui.moveAutoplayText && <>
-            <Separator />
             <HBox align="center">
                 <Text text="X:" style="label" />
                 <Slider value={settings.ui.autoplayTextX} min="-500" max="500" showValue="true" on-changed="OnAutoplayTextXChanged" />
             </HBox>
-            <Separator />
             <HBox align="center">
                 <Text text="Y:" style="label" />
                 <Slider value={settings.ui.autoplayTextY} min="-300" max="300" showValue="true" on-changed="OnAutoplayTextYChanged" />
             </HBox>
         </>}
 
-        <Separator />
         <Text text={localize('JudgeTextSettings')} style="subtitle" />
-        <Separator />
 
         <HBox align="center">
             <Text text={localize('EnableJudgeTextCustomization')} style="label" />
@@ -159,28 +140,24 @@
             <Text text={localize('CustomJudgeText')} style="label" />
             <Text text={localize('JudgeTextOffsetHint')} style="hint" />
 
-            <Separator />
             <HBox align="center">
                 <Text text={localize('JudgeText_TooEarly')} style="label" />
                 <Fill />
                 <TextField value={settings.judgeText.tooEarly} on-text-submit="OnJudgeTextChanged" />
             </HBox>
 
-            <Separator />
             <HBox align="center">
                 <Text text={localize('JudgeText_VeryEarly')} style="label" />
                 <Fill />
                 <TextField value={settings.judgeText.veryEarly} on-text-submit="OnJudgeTextChanged" />
             </HBox>
 
-            <Separator />
             <HBox align="center">
                 <Text text={localize('JudgeText_EarlyPerfect')} style="label" />
                 <Fill />
                 <TextField value={settings.judgeText.earlyPerfect} on-text-submit="OnJudgeTextChanged" />
             </HBox>
 
-            <Separator />
             {!settings.judgeText.extendedHitMargins && <HBox align="center">
                 <Text text={localize('JudgeText_Perfect')} style="label" />
                 <Fill />
@@ -188,35 +165,30 @@
             </HBox>}
 
             {settings.judgeText.extendedHitMargins && <>
-                <Separator />
                 <HBox align="center">
                     <Text text={localize('JudgeText_PerfectMinus')} style="label" />
                     <Fill />
                     <TextField value={settings.judgeText.perfectMinus} on-text-submit="OnJudgeTextChanged" />
                 </HBox>
 
-                <Separator />
                 <HBox align="center">
                     <Text text={localize('JudgeText_XPerfect')} style="label" />
                     <Fill />
                     <TextField value={settings.judgeText.xPerfect} on-text-submit="OnJudgeTextChanged" />
                 </HBox>
 
-                <Separator />
                 <HBox align="center">
                     <Text text={localize('JudgeText_PerfectPlus')} style="label" />
                     <Fill />
                     <TextField value={settings.judgeText.perfectPlus} on-text-submit="OnJudgeTextChanged" />
                 </HBox>
 
-                <Separator />
                 <HBox align="center">
                     <Text text={localize('JudgeText_Midspin')} style="label" />
                     <Fill />
                     <TextField value={settings.judgeText.midspin} on-text-submit="OnJudgeTextChanged" />
                 </HBox>
 
-                <Separator />
                 <HBox align="center">
                     <Text text={localize('JudgeText_FailedFloor')} style="label" />
                     <Fill />
@@ -224,42 +196,36 @@
                 </HBox>
             </>}
 
-            <Separator />
             <HBox align="center">
                 <Text text={localize('JudgeText_LatePerfect')} style="label" />
                 <Fill />
                 <TextField value={settings.judgeText.latePerfect} on-text-submit="OnJudgeTextChanged" />
             </HBox>
 
-            <Separator />
             <HBox align="center">
                 <Text text={localize('JudgeText_VeryLate')} style="label" />
                 <Fill />
                 <TextField value={settings.judgeText.veryLate} on-text-submit="OnJudgeTextChanged" />
             </HBox>
 
-            <Separator />
             <HBox align="center">
                 <Text text={localize('JudgeText_TooLate')} style="label" />
                 <Fill />
                 <TextField value={settings.judgeText.tooLate} on-text-submit="OnJudgeTextChanged" />
             </HBox>
 
-            <Separator />
             <HBox align="center">
                 <Text text={localize('JudgeText_Multipress')} style="label" />
                 <Fill />
                 <TextField value={settings.judgeText.multipress} on-text-submit="OnJudgeTextChanged" />
             </HBox>
 
-            <Separator />
             <HBox align="center">
                 <Text text={localize('JudgeText_FailMiss')} style="label" />
                 <Fill />
                 <TextField value={settings.judgeText.failMiss} on-text-submit="OnJudgeTextChanged" />
             </HBox>
 
-            <Separator />
             <HBox align="center">
                 <Text text={localize('JudgeText_FailOverload')} style="label" />
                 <Fill />
