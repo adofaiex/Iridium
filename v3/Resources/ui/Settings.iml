@@ -11,6 +11,13 @@
             <Setter property="align" value="left" />
         </Style>
 
+        <!-- Tab bar: equal-width segmented control (flexGrow shares the row evenly). -->
+        <Style name="tab" on=".tab">
+            <Setter property="flexGrow" value="1" />
+            <Setter property="height" value="34" />
+            <Setter property="fontSize" value="13" />
+        </Style>
+
         <Template name="LangBtn">
             <Button text={item.displayName} class={settings.language == item.key ? 'primary' : 'element'} on-click="OnLanguageClick(item.key)" />
         </Template>
@@ -31,11 +38,11 @@
         {!settings.IsSearching && <>
             <!-- Tab bar -->
             <HBox>
-                <Button text={localize('GeneralSettings')} class={settings.currentTab == 'general' ? 'primary' : 'element'} on-click="OnTabClick('general')" />
-                <Button text={localize('OptimizerSettings')} class={settings.currentTab == 'optimizer' ? 'primary' : 'element'} on-click="OnTabClick('optimizer')" />
-                <Button text={localize('EditorSettings')} class={settings.currentTab == 'editor' ? 'primary' : 'element'} on-click="OnTabClick('editor')" />
-                <Button text={localize('CompatibilitySettings')} class={settings.currentTab == 'compatibility' ? 'primary' : 'element'} on-click="OnTabClick('compatibility')" />
-                <Button text={localize('AudioSettings')} class={settings.currentTab == 'audio' ? 'primary' : 'element'} on-click="OnTabClick('audio')" />
+                <Button text={localize('GeneralSettings')} style="tab" class={settings.currentTab == 'general' ? 'primary' : 'element'} on-click="OnTabClick('general')" />
+                <Button text={localize('OptimizerSettings')} style="tab" class={settings.currentTab == 'optimizer' ? 'primary' : 'element'} on-click="OnTabClick('optimizer')" />
+                <Button text={localize('EditorSettings')} style="tab" class={settings.currentTab == 'editor' ? 'primary' : 'element'} on-click="OnTabClick('editor')" />
+                <Button text={localize('CompatibilitySettings')} style="tab" class={settings.currentTab == 'compatibility' ? 'primary' : 'element'} on-click="OnTabClick('compatibility')" />
+                <Button text={localize('AudioSettings')} style="tab" class={settings.currentTab == 'audio' ? 'primary' : 'element'} on-click="OnTabClick('audio')" />
                 <Fill />
                 <Text text={"Iridium " + getVersion()} style="text-secondary" />
             </HBox>
