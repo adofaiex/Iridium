@@ -166,7 +166,7 @@ namespace Iridium.UI
 
             _titleLabel = new GameObject("Title", typeof(RectTransform)).AddComponent<Text>();
             _titleLabel.text = Main.Handler?.ModId ?? "Iridium";
-            _titleLabel.font = Layout.UiFont;
+            _titleLabel.font = Layout.FontFor(_titleLabel.text);
             _titleLabel.fontSize = 18;
             _titleLabel.color = TitleColor;
             _titleLabel.alignment = TextAnchor.MiddleLeft;
@@ -202,7 +202,7 @@ namespace Iridium.UI
 
             var closeLabel = new GameObject("Label", typeof(RectTransform)).AddComponent<Text>();
             closeLabel.text = "\u00d7";
-            closeLabel.font = Layout.UiFont;
+            closeLabel.font = Layout.FontFor(closeLabel.text);
             closeLabel.fontSize = 28;
             closeLabel.color = CloseColor;
             closeLabel.alignment = TextAnchor.MiddleCenter;

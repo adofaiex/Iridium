@@ -36,37 +36,12 @@ namespace Iridium.UI
             => new Color(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, 1f);
 
         // ---- font ----
-        private static Font _uiFont;
 
         /// <summary>System CJK font when available, otherwise Unity's built-in Arial.</summary>
-        public static Font UiFont
-        {
-            get
-            {
-                if (_uiFont != null) return _uiFont;
-                _uiFont = TrySystemFont() ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
-                return _uiFont;
-            }
-        }
+        public static Font UiFont => Iris.Iml.ImlFonts.Fallback;
 
-        private static Font TrySystemFont()
-        {
-            string[] candidates =
-            {
-                "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans CJK JP", "PingFang SC",
-                "WenQuanYi Micro Hei", "Droid Sans Fallback", "SimHei",
-            };
-            foreach (var name in candidates)
-            {
-                try
-                {
-                    var font = Font.CreateDynamicFontFromOSFont(name, 14);
-                    if (font != null) return font;
-                }
-                catch { }
-            }
-            return null;
-        }
+        /// <summary>SUIT for Latin text, CJK system font for everything else.</summary>
+        public static Font FontFor(string text) => Iris.Iml.ImlFonts.For(text);
 
         // ---- sprites (cached) ----
         private static readonly Dictionary<string, Sprite> _spriteCache = new();
@@ -172,7 +147,7 @@ namespace Iridium.UI
         {
             var rect = Node(parent, "Text");
             var text = rect.gameObject.AddComponent<Text>();
-            text.font = UiFont;
+            text.font = Iris.Iml.ImlFonts.For(value);
             text.text = value ?? string.Empty;
             text.fontSize = size;
             text.color = color;
