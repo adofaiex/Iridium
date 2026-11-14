@@ -15,6 +15,7 @@
         </HBox>
         {isInfoExpanded('EnableCustomEasingEngine') && <Text text={localize('EnableCustomEasingEngineInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeFilters')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeFilters')" />
@@ -23,6 +24,7 @@
         </HBox>
         {isInfoExpanded('OptimizeFilters') && <Text text={localize('OptimizeFiltersInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('EnableDOTweenOptimization')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('EnableDOTweenOptimization')" />
@@ -65,6 +67,7 @@
             {isInfoExpanded('DOTweenDisableSafeMode') && <Text text={localize('DOTweenDisableSafeModeInfo')} style="hint" />}
         </>}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeParticle')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeParticle')" />

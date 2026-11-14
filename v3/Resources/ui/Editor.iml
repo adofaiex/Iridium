@@ -1,6 +1,7 @@
 <Iris>
     <VBox gap="4">
         <Text text={localize('EditorShortcuts')} style="title" />
+        <Separator />
 
         <HBox align="center">
             <Text text={localize('EnableEditorShortcuts')} style="label" />
@@ -11,7 +12,9 @@
         {isInfoExpanded('EnableEditorShortcuts') && <Text text={localize('EnableEditorShortcutsInfo')} style="hint" />}
 
         {settings.editorShortcuts.enableEditorShortcuts && <>
+            <Separator />
             <Text text={localize('EditorShortcutsDecoration')} style="subtitle" />
+            <Separator />
 
             <HBox align="center">
                 <Text text={localize('ShortcutSelectAll')} style="label" />
@@ -37,7 +40,9 @@
                 <Button text={getShortcutDisplay(settings.editorShortcuts.focusDecorationKey, settings.editorShortcuts.focusDecorationModifiers)} on-click="OnBindFocusDecorationKey" />
             </HBox>
 
+            <Separator />
             <Text text={localize('EditorShortcutsNavigation')} style="subtitle" />
+            <Separator />
 
             <HBox align="center">
                 <Text text={localize('ShortcutGoToFloor')} style="label" />
@@ -51,6 +56,7 @@
                 <Button text={getShortcutDisplay(settings.editorShortcuts.selectAllFloorsKey, settings.editorShortcuts.selectAllFloorsModifiers)} on-click="OnBindSelectAllFloorsKey" />
             </HBox>
 
+            <Separator />
             <HBox align="center">
                 <Text text={localize('CameraFollowOnFloorSelect')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('CameraFollowOnFloorSelect')" />
@@ -59,7 +65,9 @@
             </HBox>
             {isInfoExpanded('CameraFollowOnFloorSelect') && <Text text={localize('CameraFollowOnFloorSelectInfo')} style="hint" />}
 
+            <Separator />
             <Text text={localize('EditorShortcutsPopup')} style="subtitle" />
+            <Separator />
 
             <HBox align="center">
                 <Text text={localize('ShortcutPopupSave')} style="label" />
@@ -74,7 +82,9 @@
             </HBox>
         </>}
 
+        <Separator />
         <Text text={localize('EditorAutoplayShortcuts')} style="subtitle" />
+        <Separator />
 
         <HBox align="center">
             <Text text={localize('EditorPauseAllowed')} style="label" />
@@ -85,6 +95,7 @@
         {isInfoExpanded('EditorPauseAllowed') && <Text text={localize('EditorPauseAllowedInfo')} style="hint" />}
 
         {settings.compatibility.editorPauseAllowed && <>
+            <Separator />
             <HBox align="center">
                 <Text text={localize('EditorPauseEnabled')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('EditorPauseEnabled')" />
@@ -102,7 +113,9 @@
             </>}
         </>}
 
+        <Separator />
         <Text text={localize('EditorFloorOptimizations')} style="subtitle" />
+        <Separator />
 
         <HBox align="center">
             <Text text={localize('EnableEditorFloorOptimization')} style="label" />
@@ -113,6 +126,7 @@
         {isInfoExpanded('EnableEditorFloorOptimization') && <Text text={localize('EnableEditorFloorOptimizationInfo')} style="hint" />}
 
         {settings.optimizer.enableEditorFloorOptimization && <>
+            <Separator />
             <HBox align="center">
                 <Text text={localize('IncrementalFloorInsert')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('IncrementalFloorInsert')" />
@@ -121,6 +135,7 @@
             </HBox>
             {isInfoExpanded('IncrementalFloorInsert') && <Text text={localize('IncrementalFloorInsertInfo')} style="hint" />}
 
+            <Separator />
             <HBox align="center">
                 <Text text={localize('SkipApplyEventsOnInsert')} style="label" />
                 <Icon type="information" on-click="OnInfoToggle('SkipApplyEventsOnInsert')" />
@@ -130,6 +145,7 @@
             {isInfoExpanded('SkipApplyEventsOnInsert') && <Text text={localize('SkipApplyEventsOnInsertInfo')} style="hint" />}
 
             {settings.optimizer.incrementalFloorInsert && <>
+                <Separator />
                 <HBox align="center">
                     <Text text={localize('RangeBasedRedraw')} style="label" />
                     <Icon type="information" on-click="OnInfoToggle('RangeBasedRedraw')" />
@@ -138,6 +154,7 @@
                 </HBox>
                 {isInfoExpanded('RangeBasedRedraw') && <Text text={localize('RangeBasedRedrawInfo')} style="hint" />}
 
+                <Separator />
                 <HBox align="center">
                     <Text text={localize('SkipRedundantRemakePath')} style="label" />
                     <Icon type="information" on-click="OnInfoToggle('SkipRedundantRemakePath')" />
@@ -146,6 +163,7 @@
                 </HBox>
                 {isInfoExpanded('SkipRedundantRemakePath') && <Text text={localize('SkipRedundantRemakePathInfo')} style="hint" />}
 
+                <Separator />
                 <HBox align="center">
                     <Text text={localize('OptimizeOffsetFloorEvents')} style="label" />
                     <Icon type="information" on-click="OnInfoToggle('OptimizeOffsetFloorEvents')" />

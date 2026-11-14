@@ -14,6 +14,7 @@
         </HBox>
         {isInfoExpanded('OptimizeDecorationUpdate') && <Text text={localize('OptimizeDecorationUpdateInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeHitboxDetection')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeHitboxDetection')" />
@@ -22,6 +23,7 @@
         </HBox>
         {isInfoExpanded('OptimizeHitboxDetection') && <Text text={localize('OptimizeHitboxDetectionInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeTileUpdate')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeTileUpdate')" />
@@ -30,6 +32,7 @@
         </HBox>
         {isInfoExpanded('OptimizeTileUpdate') && <Text text={localize('OptimizeTileUpdateInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeHoldRenderer')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeHoldRenderer')" />
@@ -38,6 +41,7 @@
         </HBox>
         {isInfoExpanded('OptimizeHoldRenderer') && <Text text={localize('OptimizeHoldRendererInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeMoveDecorations')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeMoveDecorations')" />
@@ -46,6 +50,7 @@
         </HBox>
         {isInfoExpanded('OptimizeMoveDecorations') && <Text text={localize('OptimizeMoveDecorationsInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeFfxDecorations')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeFfxDecorations')" />
@@ -54,6 +59,7 @@
         </HBox>
         {isInfoExpanded('OptimizeFfxDecorations') && <Text text={localize('OptimizeFfxDecorationsInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeDecorationShaderCache')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeDecorationShaderCache')" />
@@ -62,6 +68,7 @@
         </HBox>
         {isInfoExpanded('OptimizeDecorationShaderCache') && <Text text={localize('OptimizeDecorationShaderCacheInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeScnGameUpdate')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeScnGameUpdate')" />
@@ -70,6 +77,7 @@
         </HBox>
         {isInfoExpanded('OptimizeScnGameUpdate') && <Text text={localize('OptimizeScnGameUpdateInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('SkipEventIfPaused')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('SkipEventIfPaused')" />
@@ -78,6 +86,7 @@
         </HBox>
         {isInfoExpanded('SkipEventIfPaused') && <Text text={localize('SkipEventIfPausedInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeDeathReset')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeDeathReset')" />
@@ -86,6 +95,7 @@
         </HBox>
         {isInfoExpanded('OptimizeDeathReset') && <Text text={localize('OptimizeDeathResetInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeDecorationReset')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeDecorationReset')" />
@@ -94,6 +104,7 @@
         </HBox>
         {isInfoExpanded('OptimizeDecorationReset') && <Text text={localize('OptimizeDecorationResetInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeOnBeat')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeOnBeat')" />
@@ -102,6 +113,7 @@
         </HBox>
         {isInfoExpanded('OptimizeOnBeat') && <Text text={localize('OptimizeOnBeatInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeSpectrum')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeSpectrum')" />
@@ -125,6 +137,7 @@
         </HBox>
         {isInfoExpanded('OptimizeGameplayAllocations') && <Text text={localize('OptimizeGameplayAllocationsInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizePlayerInputAllocations')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizePlayerInputAllocations')" />
@@ -133,6 +146,7 @@
         </HBox>
         {isInfoExpanded('OptimizePlayerInputAllocations') && <Text text={localize('OptimizePlayerInputAllocationsInfo')} style="hint" />}
 
+        <Separator />
         <HBox align="center">
             <Text text={optLabel('OptimizeRDInputAllocations')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('OptimizeRDInputAllocations')" />
