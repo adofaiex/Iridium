@@ -73,7 +73,7 @@ namespace Iridium
 
         public void TriggerGUI()
         {
-            Iridium.UI.PanelShell.RenderGui(() => OnGUI?.Invoke());
+            Iridium.UI.PanelShell.RenderGui(() => OnGUI?.Invoke(), hostIsImGuiPage: false);
         }
 
         public void TriggerToggle(bool value) => OnToggle?.Invoke(value);

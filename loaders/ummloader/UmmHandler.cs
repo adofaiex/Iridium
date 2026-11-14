@@ -17,7 +17,7 @@ namespace Iridium
             _entry.OnToggle = (_, v) => { OnToggle?.Invoke(v); return true; };
             // The panel chrome (window frame, content slot) is version-specific and lives
             // in Iridium.UI.PanelShell, which is mirrored across v2/v3.
-            _entry.OnGUI = _ => Iridium.UI.PanelShell.RenderGui(() => OnGUI?.Invoke());
+            _entry.OnGUI = _ => Iridium.UI.PanelShell.RenderGui(() => OnGUI?.Invoke(), hostIsImGuiPage: true);
             _entry.OnSaveGUI = _ => OnSaveGUI?.Invoke();
         }
 

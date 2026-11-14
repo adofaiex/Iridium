@@ -80,11 +80,13 @@ namespace Iridium.UI
         }
 
         /// <summary>
-        /// IMGUI frame hook. v3 renders nothing through IMGUI; the hook only exists so
-        /// loader code can stay identical across game versions.
+        /// IMGUI frame hook. The settings tree itself is UGUI, but managers that draw their
+        /// own settings page (UMM, MiniModLoader) get the explanation text here; the other
+        /// loaders call this every OnGUI frame and must stay silent.
         /// </summary>
-        public static void RenderGui(Action imGuiContent)
+        public static void RenderGui(Action imGuiContent, bool hostIsImGuiPage)
         {
+            if (hostIsImGuiPage) imGuiContent?.Invoke();
         }
 
         public static void Dispose()

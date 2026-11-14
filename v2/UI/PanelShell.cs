@@ -42,7 +42,10 @@ namespace Iridium.UI
         }
 
         /// <summary>Draws the window chrome and invokes the IMGUI content inside it.</summary>
-        public static void RenderGui(Action imGuiContent)
+        /// <param name="imGuiContent">Settings page content (IMGUI).</param>
+        /// <param name="hostIsImGuiPage">Only meaningful to the v3 shell (hint vs UGUI panel);
+        /// v2 always draws its IMGUI window, so the flag is ignored.</param>
+        public static void RenderGui(Action imGuiContent, bool hostIsImGuiPage = true)
         {
             if (!_visible) return;
 
