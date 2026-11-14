@@ -168,8 +168,12 @@ namespace Iridium
             // how AsyncPatchManager applies pending patches).
             try
             {
-                Iridium.UI.PanelShell.Tick(dt);
+                // Settings first: it may rebuild the tree (tab / info toggles). The shell
+                // then re-fits the freshly built list in the SAME frame — the other order
+                // showed the new ScrollView at the IML's fixed height for one frame, which
+                // looked like the page twitching.
                 Settings?.TickUI();
+                Iridium.UI.PanelShell.Tick(dt);
             }
             catch (System.Exception ex)
             {
