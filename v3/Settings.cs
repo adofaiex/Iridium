@@ -1593,7 +1593,9 @@ namespace Iridium
             // UI is the standalone UGUI panel. This page only explains how to open it.
             var hotkey = string.IsNullOrEmpty(panelToggleHotkey) ? "Ctrl+F9" : panelToggleHotkey;
             var highlighted = $"[<color=#D973A5><b>{hotkey}</b></color>]";
-            var hint = string.Format(Localization.Get("PanelHotkeyHint", language), highlighted);
+            // Get(key, args) is the formatting overload: pass the hotkey as {0} (passing
+            // the language id here would format the template with "zh"/"en").
+            var hint = Localization.Get("PanelHotkeyHint", highlighted);
 
             var textStyle = new GUIStyle(IridiumLayout.SecondaryText) { richText = true, wordWrap = true };
             GUILayout.Label(hint, textStyle);
