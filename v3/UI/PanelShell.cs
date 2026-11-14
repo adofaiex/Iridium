@@ -16,11 +16,13 @@ namespace Iridium.UI
         private const float TitleBarHeight = 40f;
         private const float CloseButtonSize = 34f;
         private const float Margin = 20f;
-        private static readonly Color BackdropColor = new Color(0f, 0f, 0f, 0.5f);
-        private static readonly Color PanelColor = new Color(0x15 / 255f, 0x16 / 255f, 0x17 / 255f, 1f);
-        private static readonly Color TitleColor = new Color(0xF8 / 255f, 0xF9 / 255f, 0xFA / 255f, 1f);
-        private static readonly Color CloseColor = new Color(0xE9 / 255f, 0xEC / 255f, 0xEF / 255f, 1f);
-        private static readonly Color CloseHover = new Color(0xD9 / 255f, 0x73 / 255f, 0xA5 / 255f, 1f);
+        // Theme tokens come from the shared UGUI toolkit (UI/Layout.cs) so the window
+        // chrome and the settings tree stay on the same palette.
+        private static Color BackdropColor => Layout.Backdrop;
+        private static Color PanelColor => Layout.Window;
+        private static Color TitleColor => Layout.TextTitle;
+        private static Color CloseColor => Layout.TextNormal;
+        private static Color CloseHover => Layout.Accent;
 
         private static GameObject? _root;
         private static RectTransform? _panel;
@@ -142,7 +144,7 @@ namespace Iridium.UI
             panelImg.color = PanelColor;
             // Rounded window, matching the IMGUI theme (Background container radius 16).
             // The sprite is a plain white 9-slice, so tinting keeps the theme color.
-            panelImg.sprite = Iris.Iml.IrisGoRenderer.RoundedSprite(16);
+            panelImg.sprite = Layout.Rounded(Layout.WindowRadius);
             panelImg.type = Image.Type.Sliced;
 
             // Title bar
@@ -164,7 +166,7 @@ namespace Iridium.UI
 
             _titleLabel = new GameObject("Title", typeof(RectTransform)).AddComponent<Text>();
             _titleLabel.text = Main.Handler?.ModId ?? "Iridium";
-            _titleLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            _titleLabel.font = Layout.UiFont;
             _titleLabel.fontSize = 18;
             _titleLabel.color = TitleColor;
             _titleLabel.alignment = TextAnchor.MiddleLeft;
@@ -200,7 +202,7 @@ namespace Iridium.UI
 
             var closeLabel = new GameObject("Label", typeof(RectTransform)).AddComponent<Text>();
             closeLabel.text = "\u00d7";
-            closeLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            closeLabel.font = Layout.UiFont;
             closeLabel.fontSize = 28;
             closeLabel.color = CloseColor;
             closeLabel.alignment = TextAnchor.MiddleCenter;
