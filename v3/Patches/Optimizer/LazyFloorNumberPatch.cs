@@ -6,20 +6,10 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 大谱面加载优化 A2：线号文本（Num）按需生成。
-	///
-	/// scrLevelMaker.InstantiateFloatFloors 用 meshFloor prefab 克隆每块砖，
-	/// prefab 里串着一个 scrLetterPress（GameObject + RectTransform + Text）做砖块编号。
-	/// 15 万砖就是 15 万个编号对象，加载时白克隆、编辑器里也根本看不全。
-	///
-	/// 方案：大谱面批量实例化时临时把 meshFloor 换成「剥掉 Num 子物件」的模板，
-	/// 编号文本改成砖块可见（OnBecameVisible / DrawFloorNums）时才从保留的 Num 模板克隆。
-	/// 纯视觉对象，逻辑/存档不受影响。
-	/// </summary>
+	/// <summary>Strips the scrLetterPress Num object off the meshFloor prefab for huge levels and clones it back per floor only when the number becomes visible.</summary>
 	public static class LazyFloorNumberPatch
 	{
-		/// <summary>超过这个砖数才启用剥离（小谱面保持原版行为，便于排查）。</summary>
+		/// <summary>Only strip above this floor count; small levels keep vanilla behaviour to ease debugging.</summary>
 		private const int FloorThreshold = 20000;
 
 		private static AccessTools.FieldRef<scrLevelMaker, GameObject>? _meshFloorRef;
@@ -57,8 +47,7 @@ namespace Iridium.Patches.Optimizer
 				// 模板一：用于批量实例化（剥掉 Num）
 				var stripped = UnityEngine.Object.Instantiate(prefab);
 				stripped.name = "Iridium_StrippedFloor";
-				// 注意：Instantiate 会复制 hideFlags，不能给模板设 HideAndDontSave，
-				// 否则克隆出的砖块会带着 DontSave 标志跨场景泄漏。
+				// Instantiate copies hideFlags; HideAndDontSave here would leak DontSave onto every cloned floor.
 				stripped.hideFlags = HideFlags.None;
 				UnityEngine.Object.DontDestroyOnLoad(stripped);
 
@@ -83,9 +72,7 @@ namespace Iridium.Patches.Optimizer
 				strippedFloor.editorNumText = null!;
 				_strippedPrefab = stripped;
 
-				// 模板本身不是场景内容：挪到视野外。否则它会以默认材质停在 prefab 原位置
-				// （谱面起点）渲染出一块额外的砖。克隆时游戏都显式传入 position/rotation，
-				// 不受模板位置影响。
+				// Park it out of view, or it renders as an extra floor at the prefab origin.
 				stripped.transform.position = new Vector3(0f, -100000f, 0f);
 			}
 			catch (Exception e)
@@ -97,7 +84,7 @@ namespace Iridium.Patches.Optimizer
 
 		private static bool IsDummy(scrLetterPress? text) => text != null && ReferenceEquals(text, _numDummy);
 
-		/// <summary>给砖块创建自己的编号文本（仅在可见/需要显示时调用）。</summary>
+		/// <summary>Give this floor its own number text; only call when it is actually visible.</summary>
 		internal static void EnsureNumText(scrFloor floor)
 		{
 			if (floor == null || floor.editorNumText != null) return;
@@ -118,7 +105,7 @@ namespace Iridium.Patches.Optimizer
 			}
 		}
 
-		/// <summary>B（分帧激活）调用：确保剥离模板已就绪并返回它。</summary>
+		/// <summary>Called by the chunked spawner: ensure the stripped template exists and return it.</summary>
 		internal static GameObject? EnsureStrippedTemplate(scrLevelMaker lm)
 		{
 			if (!InitRefs()) return null;
@@ -126,7 +113,7 @@ namespace Iridium.Patches.Optimizer
 			return _strippedPrefab;
 		}
 
-		/// <summary>B 接管批量实例化时，A2 不再自己替换模板。</summary>
+		/// <summary>True when the chunked spawner owns template swapping.</summary>
 		internal static bool HandoverToChunkedSpawn => ChunkedFloorSpawnPatch.Enabled;
 
 		#region 批量实例化模板替换
@@ -235,10 +222,7 @@ namespace Iridium.Patches.Optimizer
 			}
 		}
 
-		/// <summary>
-		/// scnEditor.Play 会遍历全部砖块隐藏编号（未判空）。这里给缺失编号的砖临时挂共享占位，
-		/// 结束后摘掉，避免给 15 万砖真正创建编号对象。
-		/// </summary>
+		/// <summary>Vanilla Play hides every number without a null check; borrow the shared dummy so no per-floor object is created.</summary>
 		[IriPatch(Path = "loading/largeLevel", Pre = typeof(OptimizerSettings), Condition = "optimizeLargeLevelLoading")]
 		[HarmonyPatch(typeof(scnEditor), nameof(scnEditor.Play))]
 		public static class PlayPatch

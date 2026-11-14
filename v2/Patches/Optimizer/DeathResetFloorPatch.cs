@@ -7,19 +7,10 @@ using UnityEngine;
 namespace Iridium.Patches
 {
 	/// <summary>
-	/// 死亡重开时的砖块复位跳过（自 v3 移植，2.9.8 适配）。
-	///
-	/// 每次死亡 ResetScene 对全部砖块调用 ResetToLevelStart：写 transform、
-	/// opacity、tapsSoFar=0 并 SetTrackStyle(initialTrackStyle)（多次材质
-	/// 写入 + mesh 置脏）。15 万砖 ≈ 每次重开百万级原生调用。
-	///
-	/// 实现原则：只在所有写入都是幂等重复时跳过。两层判定：
-	/// 1. 幂等写入检查（position/euler/tweenRot/localScale/opacity/taps）；
-	/// 2. 样式输入快照（Postfix 在完整复位后记录 SetTrackStyle 的全部输入，
-	///    输入一致才允许跳过）。
-	/// freeroam 且未生成（2.9.8 会递归复位子砖）直接放行。
-	/// 2.9.8 与 3.x 的 ResetToLevelStart 结构一致（已核对反编译源）。
-	/// </summary>
+/// Skips ResetToLevelStart on death-restart, but only when every write it would
+/// make is an idempotent repeat: the transform/opacity/taps values already match
+/// and the SetTrackStyle inputs are unchanged since the last full reset.
+/// </summary>
 	[HarmonyPatch(typeof(scrFloor), nameof(scrFloor.ResetToLevelStart))]
 	public static class DeathResetFloorPatch
 	{

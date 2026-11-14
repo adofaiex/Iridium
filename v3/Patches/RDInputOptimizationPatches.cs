@@ -6,17 +6,12 @@ using System.Collections.Generic;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// Eliminates per-frame List allocations in the RDInput query path.
+    /// Eliminates the per-frame List allocation in the RDInput query path.
     ///
-    /// Vanilla RDInput.GetStateKeys allocates a fresh List<AnyKeyCode> and copies
-    /// the held/pressed key lists into it on every call. scrPlayer.ValidInputWasReleased
-    /// calls RDInput.GetMainHeldKeys() every frame per player, and
-    /// CountValidKeysPressed / IterateValidKeysHeld call GetMainPressKeys as well.
-    ///
-    /// This patch replaces GetStateKeys with a pooled implementation: each ButtonState
-    /// gets its own reusable [ThreadStatic] List, cleared and refilled on demand. All
-    /// call sites consume the returned list immediately within the same method and do
-    /// not hold it across frames, so reusing the buffer is safe.
+    /// Vanilla RDInput.GetStateKeys builds a fresh List&lt;AnyKeyCode&gt; on every call,
+    /// and scrPlayer.ValidInputWasReleased calls GetMainHeldKeys every frame per player.
+    /// Each ButtonState gets a reusable [ThreadStatic] List instead: all call sites
+    /// consume the result immediately and never hold it across frames.
     /// </summary>
     public static class RDInputOptimizationPatches
     {
@@ -79,7 +74,6 @@ namespace Iridium.Patches
             [HarmonyPrefix]
             public static bool Prefix(ButtonState state, ref List<AnyKeyCode> __result)
             {
-                // Opt-in optimization — when disabled, fall through to the original.
                 if (!Main.Settings.optimizer.optimizeRDInputAllocations)
                 {
                     return true;

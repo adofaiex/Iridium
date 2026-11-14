@@ -14,25 +14,12 @@ using UnityEngine;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// Iridium v2（ADOFAI 2.9.8）加载 / 播放 / 编辑 v3（3.0 ~ 3.4.0，谱面版本 16~19）谱面的兼容层。
-    ///
-    /// 按 PLAN.md（.adofai/disk/iridium/v2-v3-level-compat）实现：
-    /// 1. 版本门：Decode 前临时把 settings.version 降到 15 放行 FutureVersion 检查，
-    ///    Decode 结束后还原 dict 与 LevelData.version；Encode 时把硬编码的 15
-    ///    改回打开时的真实版本，避免 v2 保存一次谱面就被降级。
-    /// 2. v3 属性保留：2.9.8 的 LevelEvent.Decode 只认识自身属性表中的键，
-    ///    v3 专属属性会在加载时被直接丢弃；LevelEvent.Encode 也不会写回未知键。
-    ///    因此这里在 Decode 后把白名单属性存入旁路表（不注入 data，避免干扰
-    ///    2.9.8 的 inspector / ApplyPropertiesToRealEvents 等逻辑），Encode 后
-    ///    再把它们追加回 JSON，保证「v3 谱面 → v2 打开 → 保存」不丢数据。
-    /// 3. 运行时 polyfill：
-    ///    - SetFilterAdvanced.targetType（2.9.8 类本身已支持 Decoration，仅 Decode 写死 Camera）
-    ///    - AddDecoration / MoveDecorations 的 originalSize 与 cropPivotOffset
-    ///      （2.9.8 没有 textureScaleMultiplier / croppedPivotOffset 字段，用旁路表模拟）
-    ///    - FreeRoam.outCam（2.9.8 UpdateFreeroam 无条件移动相机，按事件属性跳过）
-    ///    - TrackSettings.trackShadowColor（2.9.8 SetTrackStyle 同样写 _ShadowColor，直接覆盖）
-    ///    - BackgroundSettings.customBGPrefab（2.9.8 无对应资源体系，加载时提示降级）
-    /// </summary>
+/// Load/save v3 charts on 2.9.8: temporarily pin settings.version to 15 before Decode
+/// to pass the FutureVersion check, park v3-only properties in a side table (never
+/// injected into data), and re-emit them on Encode. Also polyfills SetFilterAdvanced.
+/// targetType, decoration originalSize / cropPivotOffset, FreeRoam.outCam and
+/// TrackSettings.trackShadowColor.
+/// </summary>
     public static class V3LevelCompatPatches
     {
         /// <summary>2.9.8 能接受的最高谱面版本。</summary>
@@ -41,11 +28,7 @@ namespace Iridium.Patches
         /// <summary>首个 v3 谱面版本。</summary>
         public const int MinV3Version = 16;
 
-        /// <summary>
-        /// 需要保留 / 消费的 v3 专属属性（与 data/property-gap.json 一一对应）。
-        /// Decode 时只抓取这张表里的键，避免把 settings 大字典里的其它小节
-        /// （SongSettings/TrackSettings 等键都混在同一个 dict 里）错误地挂到每个事件上。
-        /// </summary>
+        /// <summary>v3-only properties to keep, matching data/property-gap.json one to one.</summary>
         private static readonly Dictionary<LevelEventType, string[]> V3PropertiesByEvent = new()
         {
             [LevelEventType.AddDecoration] = new[] { "originalSize", "cropPivotOffset" },
@@ -74,8 +57,6 @@ namespace Iridium.Patches
         private static readonly Regex EncodeVersionLine = new(
             "^(?<prefix>[ \\t]*\"version\"[ \\t]*:[ \\t]*)15(?<suffix>[ \\t]*,?)",
             RegexOptions.Multiline | RegexOptions.Compiled);
-
-        // ─────────────────────────── v3 属性旁路表 ───────────────────────────
 
         private static readonly ConditionalWeakTable<LevelEvent, Dictionary<string, object>> _v3EventData = new();
 
@@ -226,8 +207,6 @@ namespace Iridium.Patches
                 result = AppendField(result, kv.Key, Json.Serialize(kv.Value));
         }
 
-        // ─────────────────────── v3 新增枚举值的安全回退 ───────────────────────
-
         private static bool SafeEnumIsDefined(Type enumType, string name)
         {
             try
@@ -262,13 +241,9 @@ namespace Iridium.Patches
             return typeName;
         }
 
-        /// <summary>
-        /// 3.4.0 把 SetFilterAdvanced.filterProperties 直接序列化成 JSON 对象
-        /// （<c>"filterProperties": { "filter_x": ... }</c>），而 2.9.8 只会把属性值
-        /// 当字符串拼成 <c>{value}</c> 再解析；对象形式会让 Json.Deserialize 返回 null，
-        /// 随后 foreach 抛 NullReferenceException 导致整张谱加载失败。
-        /// 这里把对象形式转成 2.9.8 认的「内部 JSON 字符串」形式；v3 保存时也能再读回。
-        /// </summary>
+        // 3.4.0 serializes filterProperties as a JSON object; 2.9.8 only parses the
+// {value} string form, and the object form makes Json.Deserialize return null
+// and NRE in the following foreach
         private static void NormalizeV3PropertyShapes(LevelEventInfo? info, Dictionary<string, object>? dict)
         {
             if (info?.propertiesInfo == null || dict == null) return;
@@ -312,10 +287,8 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>3.x 给枚举加了新成员（审计结果：仅 ObjectDecorationType.PlayerBubble），
-        /// 2.9.8 的 LevelEvent.Decode 会 Enum.Parse 失败直接抛异常导致整张谱面加载失败。
-        /// 这里把未知值替换成默认值让解码通过，原值记录在旁路表并在 Encode 时还原。
-        /// </summary>
+        // Enum members added in 3.x (e.g. ObjectDecorationType.PlayerBubble) make 2.9.8's
+// Enum.Parse throw and fail the whole chart; substitute the default, restore on Encode
         private static void PrepareUnknownEnumValues(
             LevelEvent instance, Dictionary<string, object>? dict, string? explicitEventType, bool isGlobal)
         {
@@ -375,12 +348,7 @@ namespace Iridium.Patches
             }
         }
 
-        // ─────────────────────── 事件解码兜底（v3 谱面） ───────────────────────
-
-        /// <summary>
-        /// 把 data / disabled 补全成「至少能安全访问」的状态：
-        /// 保留已解出的键，缺失的键填属性默认值并标记为 disabled（与 Decode 的语义一致）。
-        /// </summary>
+        /// <summary>Fill data / disabled: missing keys get their default and are marked disabled, matching Decode's semantics.</summary>
         private static void PopulateEventData(
             LevelEvent instance, Dictionary<string, object>? dict, LevelEventInfo? info, bool rawValues)
         {
@@ -405,11 +373,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// 原版 Decode 对未知事件类型会留下 info == null，LevelData.Decode 随后在
-        /// levelEvent.info.taroDLCCheck 直接 NRE。这里补一个只读 fake info（第三方事件
-        /// 那套机制），保证整张谱不会因为单个未知事件加载失败。
-        /// </summary>
+        /// <summary>Unknown event types leave info == null after Decode and LevelData.Decode then NREs on info.taroDLCCheck; attach a read-only fake info.</summary>
         private static void AttachFallbackInfo(
             LevelEvent instance, Dictionary<string, object>? dict, string? explicitEventType, bool isGlobal)
         {
@@ -434,11 +398,7 @@ namespace Iridium.Patches
             PopulateEventData(instance, dict, info, rawValues: info.type == LevelEventType.None);
         }
 
-        /// <summary>
-        /// 单个事件解码失败时（原版 Decode 对某些 v3 值形态会 NRE / 抛异常），
-        /// 不让异常冒泡炸掉整张谱：记录原始事件数据，补齐 info/data/disabled 后继续加载。
-        /// 未实现的行为按第三方事件处理（只读、保存不丢），符合「不反向移植但不崩」的约定。
-        /// </summary>
+        /// <summary>Swallow a single failed event decode, fill info/data/disabled and keep loading; unimplemented behaviour is treated as a read-only third-party event.</summary>
         private static void SalvageFailedEvent(
             LevelEvent instance, Dictionary<string, object>? dict, string? explicitEventType,
             bool isGlobal, Exception exception)
@@ -483,8 +443,6 @@ namespace Iridium.Patches
             }
         }
 
-        // ─────────────────────────── 装饰物 polyfill 状态 ───────────────────────────
-
         private sealed class DecorationCompatState
         {
             public Vector2 TextureScaleMultiplier = Vector2.one;
@@ -528,20 +486,14 @@ namespace Iridium.Patches
 
         private static void ApplyMoveDecorationState(scrVisualDecoration visual)
         {
-            // SetPosition 内部会走 UpdatePosition -> UpdateLock -> SetScale，
-            // 因此 tsm 变化也会一并生效（与 3.4.0 的调用顺序一致）。
+            // SetPosition internally reaches SetScale, so tsm changes take effect too
             visual.SetPosition(visual.pivotPosVec, visual.pivotOffsetVec);
         }
 
-        // ─────────────────────────── 开关联动 ───────────────────────────
-
         private static bool Enabled => Main.Settings.compatibility.enableV3LevelCompat;
 
-        /// <summary>
-        /// 当前是否正在解码 v3（version &gt; 15）谱面。供 CustomEventsPatches 判断
-        /// 是否要把未知事件注册成「第三方事件」那样的只读 fake event。
-        /// 两个 Prefix 的执行顺序不固定，所以这里同时看标志位与 dict 里的原始版本号。
-        /// </summary>
+        // Decoding a v3 chart (version > 15). The two Prefixes have no fixed order, so also
+// check the raw version in the dict.
         private static bool _decodingV3Chart;
 
         public static bool IsDecodingV3Chart(Dictionary<string, object>? dict = null)
@@ -581,8 +533,6 @@ namespace Iridium.Patches
                 Main.Logger?.Log($"[V3Compat] UpdatePatches failed: {e}");
             }
         }
-
-        // ─────────────────────────── 1. 版本门 ───────────────────────────
 
         /// <summary>LevelData.Decode：临时降级 settings.version 放行 >15 的谱面，结束后还原。</summary>
         [HarmonyPatch(typeof(LevelData), nameof(LevelData.Decode))]
@@ -707,15 +657,9 @@ namespace Iridium.Patches
             }
         }
 
-        // ─────────────────────────── 2. v3 属性保留 ───────────────────────────
-
         [HarmonyPatch(typeof(LevelEvent), nameof(LevelEvent.Decode))]
         public static class LevelEventDecodeExtrasPatch
         {
-            /// <summary>
-            /// 在原版 Decode 之前把 v3 的「新值形态」规整成 2.9.8 能解析的形式
-            /// （如 filterProperties 的对象形式 → 内部 JSON 字符串），并处理新增枚举值。
-            /// </summary>
             [HarmonyPrefix]
             public static void Prefix(LevelEvent __instance, Dictionary<string, object> dict,
                 string? explicitEventType, bool isGlobal)
@@ -749,11 +693,7 @@ namespace Iridium.Patches
                 }
             }
 
-            /// <summary>
-            /// 原版 Decode 在 v3 谱面上仍可能因未知值形态抛异常（NRE 等）。
-            /// 只对 v3 谱面兜底：记录失败事件并降级为可加载的默认值 / 只读事件，
-            /// 避免单个事件把整张谱的加载炸掉。
-            /// </summary>
+            // Only salvage on v3 charts, so one bad event cannot fail the whole chart
             [HarmonyFinalizer]
             public static Exception? Finalizer(
                 Exception? __exception, LevelEvent __instance, Dictionary<string, object>? dict,
@@ -814,12 +754,8 @@ namespace Iridium.Patches
             }
         }
 
-        // ─────────────────────────── 3.1 SetFilterAdvanced.targetType ───────────────────────────
-
-        /// <summary>
-        /// 2.9.8 的 Decode 把 targetType 写死为 Camera 后立即调用 Setup()，
-        /// 所以在 Decode 前记下真实值，Setup 前再写回实例。
-        /// </summary>
+        // 2.9.8's Decode hardcodes targetType to Camera then calls Setup() immediately,
+// so record the real value before Decode and write it back before Setup
         [HarmonyPatch(typeof(ffxSetFilterAdvancedPlus), nameof(ffxSetFilterAdvancedPlus.Decode))]
         public static class FilterAdvancedTargetTypeDecodePatch
         {
@@ -875,8 +811,6 @@ namespace Iridium.Patches
             }
         }
 
-        // ───────────── 3.2 AddDecoration / MoveDecorations：originalSize + cropPivotOffset ─────────────
-
         [HarmonyPatch(typeof(scrDecoration), nameof(scrDecoration.Setup))]
         public static class DecorationSetupCompatPatch
         {
@@ -908,10 +842,8 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// 3.4.0 的 scrDecoration.SetPosition 把 (pivotOffset + croppedPivotOffset) / trueScaleMultiplier
-        /// 写入 childTransform.localPosition；2.9.8 二者都不存在，用旁路表补上。
-        /// </summary>
+        // 3.4.0's SetPosition writes (pivotOffset + croppedPivotOffset) / trueScaleMultiplier
+// into localPosition; 2.9.8 has neither field
         [HarmonyPatch(typeof(scrDecoration), nameof(scrDecoration.SetPosition))]
         public static class DecorationSetPositionCompatPatch
         {
@@ -1052,12 +984,7 @@ namespace Iridium.Patches
             }
         }
 
-        // ─────────────────────────── 3.3 FreeRoam.outCam ───────────────────────────
-
-        /// <summary>
-        /// 3.x 在 UpdateFreeroam 里用 scrFloor.moveCamAtFreeroamEnd 决定是否回调相机；
-        /// 2.9.8 无条件调用 MoveCameraToTile。这里把该调用替换成 outCam 感知版本。
-        /// </summary>
+        // 3.x gates the camera call on scrFloor.moveCamAtFreeroamEnd; 2.9.8 always calls MoveCameraToTile
         [HarmonyPatch(typeof(scrController), nameof(scrController.UpdateFreeroam))]
         public static class FreeRoamOutCamPatch
         {
@@ -1137,12 +1064,7 @@ namespace Iridium.Patches
             return false;
         }
 
-        // ─────────────────────────── 3.4 TrackSettings.trackShadowColor ───────────────────────────
-
-        /// <summary>
-        /// 3.x 把 trackShadowColor 传进 SetTrackStyle 覆盖 _ShadowColor；
-        /// 2.9.8 的 SetTrackStyle 已经写同一个材质属性，只是颜色固定，这里覆写即可。
-        /// </summary>
+        // 2.9.8's SetTrackStyle writes the same material property, just with a fixed colour
         [HarmonyPatch(typeof(scrFloor), nameof(scrFloor.SetTrackStyle))]
         public static class TrackShadowColorPatch
         {
@@ -1182,12 +1104,8 @@ namespace Iridium.Patches
             }
         }
 
-        // ─────────────────────────── 3.5 BackgroundSettings.customBGPrefab ───────────────────────────
-
-        /// <summary>
-        /// 2.9.8 没有 Resources/InternalLevels/Shared/Prefabs 体系，无法还原自定义背景；
-        /// 加载成功后提示玩家该属性被忽略（属性本身仍会被保留到保存）。
-        /// </summary>
+        // 2.9.8 has no prefab system, so the custom background cannot be restored;
+// the property itself is still preserved on save.
         [HarmonyPatch(typeof(scnGame), "LoadLevel")]
         public static class CustomBackgroundPrefabNoticePatch
         {

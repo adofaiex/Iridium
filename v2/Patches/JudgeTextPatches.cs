@@ -7,22 +7,13 @@ using UnityEngine;
 
 namespace Iridium.Patches
 {
-    /// <summary>
-    /// Judge Text Patches - Customizes judge text display with offset support
-    /// Uses SuperStrictJudge's approach for accurate timing calculation
-    /// </summary>
+    /// <summary>Judge text display with offset support, using SuperStrictJudge's timing approach.</summary>
     public static class JudgeTextPatches
     {
-        // Cached settings reference for performance
         private static JudgeTextSettings Settings => Main.Settings.judgeText;
 
         /// <summary>
-        /// Calculate timing offset from angular offset in radians.
-        /// angularOffset = targetExitAngle - actualAngle (as passed to scrHitTextMesh.Show)
-        /// 
-        /// Sign convention (User requested):
-        /// 提前 (Early hit) = +
-        /// 错过 (Late hit) = -
+        /// Timing offset from angular offset (targetExitAngle - actualAngle). Sign convention: early hit = +, late hit = -.
         /// </summary>
         private static double CalculateTimingFromAngle(float angularOffset)
         {
@@ -34,20 +25,13 @@ namespace Iridium.Patches
             double speed = controller.speed;
             double pitch = conductor.song.pitch;
 
-            // Standard Timing (Early = Negative, Late = Positive)
-            // angularOffset is (target - actual). 
-            // If isCW (Clockwise, angle decreasing): Early means actual > target, so angularOffset < 0.
-            // If !isCW (Counter-Clockwise, angle increasing): Early means actual < target, so angularOffset > 0.
+            // Standard timing is early = negative, late = positive.
             double standardTiming = angularOffset * (controller.isCW ? 1.0 : -1.0) * 60000.0 / (Math.PI * bpm * speed * pitch);
-            
-            // User requested: 提前 (Early) = +, 错过 (Late) = -
-            // This is the exact inverse of standard timing.
+            // Inverse of standard timing, per the requested sign convention
             return -standardTiming;
         }
 
-        /// <summary>
-        /// Get display text for offset mode
-        /// </summary>
+        /// <summary>Get display text for offset mode</summary>
         private static string GetOffsetText(double timing)
         {
             if (double.IsNaN(timing) || double.IsInfinity(timing))
@@ -59,9 +43,7 @@ namespace Iridium.Patches
             return $"{(ms >= 0 ? "+" : "-")}{Math.Abs(ms)}ms";
         }
 
-        /// <summary>
-        /// Patch for scrHitTextMesh.Init - Handles custom judge text mode (not offset mode)
-        /// </summary>
+        /// <summary>scrHitTextMesh.Init：自定义文本模式（非 offset 模式）。</summary>
         [HarmonyPatch(typeof(scrHitTextMesh), "Init")]
         public static class HitTextMeshInitPatch
         {
@@ -74,10 +56,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Patch for scrHitTextMesh.Show - Handles offset mode display
-        /// The 'angle' parameter is the angular offset in radians (targetExitAngle - actualAngle)
-        /// </summary>
+        /// <summary>scrHitTextMesh.Show：offset 模式显示，angle 参数是弧度角偏移。</summary>
         [HarmonyPatch(typeof(scrHitTextMesh), "Show")]
         public static class HitTextMeshShowPatch
         {
@@ -100,15 +79,13 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Patch for scrController.Awake_Rewind - Reset state (if any) on rewind
-        /// </summary>
+        /// <summary>scrController.Awake_Rewind：倒带时重置状态。</summary>
         [HarmonyPatch(typeof(scrController), "Awake_Rewind")]
         public static class ResetTimingOnRewindPatch
         {
             public static void Postfix()
             {
-                // No global state anymore, but keeping for future use or consistency
+                // 目前没有全局状态，保留以备后用
             }
         }
     }

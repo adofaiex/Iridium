@@ -20,7 +20,7 @@ namespace Iridium.Patches
 
         private static readonly ConditionalWeakTable<scrParticleDecoration, ParticleUpdateState> _states = new();
 
-        // ===== 池化 =====
+        // 池化
         private const int MaxPoolSize = 256;
         private static Transform _poolRoot = null!;
         private static readonly Stack<GameObject> _objectPool = new();

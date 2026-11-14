@@ -8,12 +8,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 大物量谱面加载耗时诊断。
-	/// 每次加载只多几行 [LoadProfiler] 日志，始终启用，方便定位
-	/// JSON 解析 / 砖块实例化 / 事件应用 / 装饰物 各阶段耗时。
-	/// 需要上传日志时按这些行报数即可。
-	/// </summary>
+	/// <summary>Per-stage [LoadProfiler] timings and memory snapshots; always on, quote these lines in bug reports.</summary>
 	public static class LoadProfilerPatch
 	{
 		private static readonly Stopwatch TotalWatch = new();

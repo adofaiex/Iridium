@@ -5,12 +5,10 @@ using System.Collections.Generic;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// v3 移植：消除 RDInput.GetStateKeys 每帧的 List 分配。
-    /// 原版每次调用都会 new 一个 List&lt;AnyKeyCode&gt; 并拷贝按键列表；
-    /// scrController.ValidInputWasReleased 每帧都会通过 GetMainHeldKeys 间接触发。
-    /// 这里为每个 ButtonState 维护一个 [ThreadStatic] 可复用 List（调用方都在
-    /// 同一方法内立即消费，不跨帧持有），语义不变。
-    /// </summary>
+/// RDInput.GetStateKeys allocated a fresh List per call. Each ButtonState now reuses a
+/// [ThreadStatic] list; callers consume it within the same call, so nothing holds it
+/// across frames.
+/// </summary>
     public static class RDInputOptimizationPatches
     {
         [ThreadStatic] private static List<AnyKeyCode>? _cachedWentDown;

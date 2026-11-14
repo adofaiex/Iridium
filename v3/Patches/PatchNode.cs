@@ -4,11 +4,7 @@ using System.Reflection;
 
 namespace Iridium.Patches
 {
-	/// <summary>
-	/// A node in the hierarchical path tree.
-	/// Pure structure — no condition logic. Conditions are defined
-	/// on each patch via <see cref="IriPatchAttribute.Pre"/> + <see cref="IriPatchAttribute.Condition"/>.
-	/// </summary>
+	/// <summary>Path tree only; gating lives on <see cref="IriPatchAttribute"/>.</summary>
 	public sealed class PatchNode
 	{
 		public Dictionary<string, PatchNode> Children { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -21,9 +17,6 @@ namespace Iridium.Patches
 			return this;
 		}
 
-		/// <summary>
-		/// Find a node by a slash-separated path (e.g. "optimizer/editorFloor/insert").
-		/// </summary>
 		public static PatchNode? Find(string fullPath)
 		{
 			if (string.IsNullOrEmpty(fullPath)) return null;
@@ -47,10 +40,7 @@ namespace Iridium.Patches
 			return current;
 		}
 
-		/// <summary>
-		/// Collect all ancestor path segments from root to this node (inclusive).
-		/// Used by PatchManager to resolve inherited conditions.
-		/// </summary>
+		/// <summary>Root-to-node path prefixes, used to resolve inherited conditions.</summary>
 		public static List<string> GetAncestorPaths(string fullPath)
 		{
 			var result = new List<string>();
@@ -66,12 +56,7 @@ namespace Iridium.Patches
 			return result;
 		}
 
-		/// <summary>
-		/// Resolve a dot-separated property path (e.g. "optimizer.enableOptimizer")
-		/// into a Func&lt;bool&gt; that reads from <see cref="Main.Settings"/>.
-		/// Supports negation with "!" prefix (e.g. "!optimizer.dontCompress").
-		/// Returns () => true if the path is empty or null.
-		/// </summary>
+		/// <summary>"group.property" → Func&lt;bool&gt;; a "!" prefix negates, empty/null is always true.</summary>
 		public static Func<bool> ResolveSetting(string? settingPath)
 		{
 			if (string.IsNullOrEmpty(settingPath))
@@ -108,7 +93,7 @@ namespace Iridium.Patches
 				return () => false;
 			}
 
-			// Support bool fields directly, and non-bool fields (e.g. enums) via Convert.ToBoolean
+			// bool fields directly, enums via Convert.ToBoolean
 			Type fieldType = field.FieldType;
 			Func<object?, bool> converter;
 			if (fieldType == typeof(bool))

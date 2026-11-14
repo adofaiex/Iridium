@@ -47,7 +47,6 @@ namespace Iridium
         private string _optimizerSubTab = "basics";
         public string optimizerSubTab => _optimizerSubTab;
 
-        // ── 全局搜索 ──
         // 顶层 Tab 栏的搜索框：非空时显示全局结果页（跨所有 Tab 匹配选项），
         // 点击结果跳转到对应 Tab/子 Tab 并自动展开区块与 Info 说明。
         private string _searchQuery = "";
@@ -204,8 +203,7 @@ namespace Iridium
             return key.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        // Collapsible section states (default collapsed). Used by the settings IML
-        // to show/hide option groups so the panel stays readable.
+        // Collapsible option groups, collapsed by default.
         private readonly Dictionary<string, bool> _sectionExpanded = new();
         public bool expandImageOpts => IsSectionExpanded("image");
         public bool expandRenderingOpts => IsSectionExpanded("rendering");
@@ -320,8 +318,7 @@ namespace Iridium
                 _renderer.LogDelegate = msg => Main.Logger.Log(msg);  // 适配签名
             _renderer.SetHotReload(false);
 
-            // DataContext wraps 'this' as 'settings' - expressions use settings.currentTab etc.
-            // This is set once; no need to update every frame since 'this' is a reference.
+            // DataContext wraps 'this' as 'settings' for IML expressions; set once since 'this' is a reference.
             _renderer.SetDataContext(new { settings = this });
 
             _renderer.RegisterFunction("localize", args =>
@@ -783,7 +780,6 @@ namespace Iridium
                 Save();
             });
 
-            // --- 2.1.0 new hot-path optimizations ---
             _renderer.RegisterHandler("OnOptimizeEditorInteractionsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
@@ -1105,9 +1101,8 @@ namespace Iridium
             {
                 bool value = obj is bool b ? b : false;
                 ui.enableCircleArc = value;
-                // CircleArcPatch + AllAngleArcCornersPatch form one feature.
-                // Apply synchronously (handler already runs on the main thread)
-                // so the mesh rebuild below sees the new patch state.
+                // CircleArcPatch + AllAngleArcCornersPatch form one feature; apply
+                // synchronously so the mesh rebuild below sees the new state.
                 PatchManager.UpdatePatchByType(typeof(CircleArcPatch));
                 PatchManager.UpdatePatchByType(typeof(AllAngleArcCornersPatch));
                 RefreshFloorMeshCache();
@@ -1139,9 +1134,8 @@ namespace Iridium
             });
         }
 
-        // FloorMesh caches built meshes by angle pair, which does not include
-        // mod settings. Drop every cached entry and rebuild so a circle-arc
-        // toggle takes effect immediately on existing tiles.
+        // FloorMesh caches by angle pair only, so drop every entry and rebuild to make
+        // a circle-arc toggle take effect on existing tiles.
         private static void RefreshFloorMeshCache()
         {
             try
@@ -1342,8 +1336,7 @@ namespace Iridium
             {
                 bool value = obj is bool b ? b : false;
                 patchMode.useILPatch = value;
-                // Reapply adaptive Mono patches through the backend so their
-                // Prefix/Postfix and Transpiler implementations switch together.
+                // Reapply through the backend so Prefix/Postfix and Transpiler impls switch together.
                 Iridium.Patches.PatchManager.ReapplyAllPatches();
                 Save();
             });
@@ -1480,7 +1473,6 @@ namespace Iridium
 
         private void StartBinding(string target)
         {
-            // Save old values for cancel
             GetBinding(target, out _bindingOldKey, out _bindingOldMods);
             _bindingTarget = target;
             _bindingPreview = null;

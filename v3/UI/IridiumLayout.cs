@@ -14,22 +14,10 @@ using Iridium.Polyfill;
 
 namespace Iridium.UI;
 
-// Declarative, JSX-like element tree. Build a tree of elements with the static
-// factory methods (VBox, HBox, Text, Button, ...) and render it once per frame
-// from OnGUI with Render(...). Interaction is expressed via callbacks
-// (onClick / onChanged) instead of return values.
-//
-//   IridiumLayout.Render(
-//       IridiumLayout.VBox(ContainerStyle.Padding,
-//           IridiumLayout.HBox(
-//               IridiumLayout.Button("Save", onClick: Save),
-//               IridiumLayout.Text("Hello")
-//           )
-//       )
-//   );
-//
-// The imperative engine is kept internally (IridiumLayout.Engine) and is used as
-// the bridge for Iris.Iml's IIrrLayout adapter (IridiumLayoutAdapter in Settings.cs).
+// Declarative, JSX-like element tree: build a tree with the static factory
+// methods (VBox, HBox, Text, Button, ...) and render it from OnGUI via Render(...).
+// Interaction goes through callbacks (onClick / onChanged). Engine backs
+// Iris.Iml's IIrrLayout adapter (IridiumLayoutAdapter in Settings.cs).
 public static class IridiumLayout
 {
     public enum ArrowStyle
@@ -83,9 +71,7 @@ public static class IridiumLayout
         scaleTimes1M => new ResolutionResources(scaleTimes1M)
     );
 
-    // ══════════════════════════════════════════════════════════════
-    // Element tree (JSX-like declarative UI)
-    // ══════════════════════════════════════════════════════════════
+    // Element tree
 
     public abstract class Element
     {
@@ -571,9 +557,7 @@ public static class IridiumLayout
         }
     }
 
-    // ══════════════════════════════════════════════════════════════
     // Factory methods
-    // ══════════════════════════════════════════════════════════════
 
     public static Element VBox(
         ContainerStyle style = ContainerStyle.None,

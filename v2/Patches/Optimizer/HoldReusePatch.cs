@@ -7,13 +7,9 @@ using UnityEngine;
 namespace Iridium.Patches
 {
 	/// <summary>
-	/// 死亡重开时 Hold 对象复用（自 v3 移植，2.9.8 适配）。
-	///
-	/// 每次死亡 DrawHolds(true) 会 Destroy 全部 hold GameObject 再逐个重建
-	/// （GameObject + MeshFilter + MeshRenderer + new Material + CreateMesh）。
-	/// 实现在"播放中重开、几何未变"时复用现有对象，仅 CreateMesh + Unfill。
-	/// 2.9.8 的 DrawHolds 与 3.x 结构一致（已核对反编译源）。
-	/// </summary>
+/// On death-restart, reuses existing hold GameObjects when the geometry has not
+/// changed instead of destroying and rebuilding them (CreateMesh + Unfill only).
+/// </summary>
 	[HarmonyPatch(typeof(scrLevelMaker), "DrawHolds", new[] { typeof(bool) })]
 	public static class HoldReusePatch
 	{

@@ -4,23 +4,18 @@ using UnityEngine;
 
 namespace Iridium.Core
 {
-    /// <summary>
-    /// 自定义缓速引擎 — 替代 DOTween 的轻量级动画系统。
-    /// 用于 MoveTrack / RecolorTrack / MoveDecoration 的 StartEffect 场景。
-    /// 特点：零 GC 分配（struct Tween）、每帧 Update 驱动、对象池管理。
-    /// </summary>
+    /// <summary>Lightweight easing engine replacing DOTween for MoveTrack / RecolorTrack / MoveDecoration StartEffect.</summary>
     public static class CustomEasingEngine
     {
-        // ==================== 缓速函数计算 ====================
-
         private const float PiOver2 = (float)Math.PI / 2f;
 
-        /// <summary>
-        /// 计算指定 Ease 类型在 t/duration 时刻的插值值 [0, 1]。
-        /// 移植自 DOTween EaseManager.Evaluate。
-        /// </summary>
+        /// <summary>Value in [0, 1] for the given Ease at t/duration. Ported from DOTween's EaseManager.Evaluate.</summary>
         public static float Evaluate(Ease ease, float time, float duration)
         {
+            // Native fast path; the managed switch below is the fallback
+            if (Iridium.Native.IridiumNative.Available)
+                return Iridium.Native.IridiumNative.Evaluate((int)ease, time, duration, 1.70158f, 0f);
+
             if (duration <= 0f) return time >= 0f ? 1f : 0f;
 
             switch (ease)
@@ -102,12 +97,7 @@ namespace Iridium.Core
             }
         }
 
-        // ==================== Tween 数据结构 ====================
-
-        /// <summary>
-        /// 轻量级 Tween — 使用 struct 避免堆分配。
-        /// 通过 _activeTweens 列表统一驱动，支持 float / Vector3 / Color 插值。
-        /// </summary>
+        /// <summary>struct Tween to avoid heap allocation; driven from _activeTweens, supports float / Vector3 / Color.</summary>
         public struct IrTween
         {
             public enum TweenState { Running, Completed, Killed }
@@ -155,6 +145,31 @@ namespace Iridium.Core
                 ApplyInterpolated(t);
             }
 
+            /// <summary>批处理第一阶段：推进时间但不应用。</summary>
+            public bool Advance(float dt, out bool completing)
+            {
+                completing = false;
+                if (IsKilled || State == TweenState.Completed) return false;
+                ElapsedTime += dt;
+                if (ElapsedTime >= Duration)
+                {
+                    ElapsedTime = Duration;
+                    completing = true;
+                }
+                return true;
+            }
+
+            /// <summary>批处理第二阶段：用已算好的进度应用插值。</summary>
+            public void ApplyInterpolatedProgress(float t) => ApplyInterpolated(t);
+
+            /// <summary>批处理收尾：应用终态并触发完成回调。</summary>
+            public void FinalizeComplete()
+            {
+                ApplyFinal();
+                State = TweenState.Completed;
+                OnComplete?.Invoke();
+            }
+
             public void Kill(bool complete = true)
             {
                 if (IsKilled) return;
@@ -199,8 +214,6 @@ namespace Iridium.Core
             public readonly bool IsActive => !IsKilled && State != TweenState.Completed;
         }
 
-        // ==================== 全局 Tween 管理 ====================
-
         /// <summary>所有活跃的 Tweens（每帧遍历更新）</summary>
         private static readonly System.Collections.Generic.List<IrTween> _activeTweens = new(256);
 
@@ -213,22 +226,45 @@ namespace Iridium.Core
         /// <summary>当前活跃 Tween 数量</summary>
         public static int ActiveCount => _activeTweens.Count;
 
-        /// <summary>
-        /// 初始化引擎（注册到 Main.Update）。
-        /// 只需调用一次。
-        /// </summary>
         public static void Initialize()
         {
             if (_initialized) return;
             _initialized = true;
         }
 
-        /// <summary>
-        /// 每帧调用 — 驱动所有活跃 Tweens。
-        /// 使用双指针原地压缩算法：活跃 tween 前移，死亡 tween 末尾一次性清除。
-        /// 避免每元素 RemoveAt（O(n) 移位）和额外的 _pendingRemove 列表开销。
-        /// 必须在 Main.Update 中调用。
-        /// </summary>
+        /// <summary>批处理缓冲（SoA）；按需扩容。</summary>
+        private static int[] _batchEase = new int[64];
+        private static float[] _batchTime = new float[64];
+        private static float[] _batchDur = new float[64];
+        private static float[] _batchAmp = new float[64];
+        private static float[] _batchPer = new float[64];
+        private static float[] _batchOut = new float[64];
+        private static int[] _batchIndex = new int[64];
+
+        /// <summary>低于该数量时逐条求值（FFI 开销大于收益）。</summary>
+        private const int BatchThreshold = 8;
+
+        static CustomEasingEngine()
+        {
+            for (int i = 0; i < _batchAmp.Length; i++) _batchAmp[i] = 1.70158f;
+        }
+
+        private static void EnsureBatchCapacity(int n)
+        {
+            if (_batchEase.Length >= n) return;
+            int cap = _batchEase.Length;
+            while (cap < n) cap *= 2;
+            _batchEase = new int[cap];
+            _batchTime = new float[cap];
+            _batchDur = new float[cap];
+            _batchAmp = new float[cap];
+            _batchPer = new float[cap];
+            _batchOut = new float[cap];
+            _batchIndex = new int[cap];
+            for (int i = 0; i < cap; i++) _batchAmp[i] = 1.70158f;
+        }
+
+        /// <summary>驱动所有活跃 Tween；数量足够时缓动求值走 native 批处理。必须在 Main.Update 中调用。</summary>
         public static void Update(float deltaTime)
         {
             if (!_initialized) return;
@@ -243,6 +279,12 @@ namespace Iridium.Core
             int count = _activeTweens.Count;
             if (count == 0) return;
 
+            if (Iridium.Native.IridiumNative.HasEvaluateBatch && count >= BatchThreshold)
+            {
+                UpdateBatched(deltaTime, count);
+                return;
+            }
+
             // 双指针原地压缩：write 跟踪下一个存活位置，read 遍历所有元素
             int write = 0;
             for (int read = 0; read < count; read++)
@@ -254,10 +296,74 @@ namespace Iridium.Core
                     _activeTweens[write] = tween;
                     write++;
                 }
-                // 死亡的 tween 直接跳过（不写入任何位置）
             }
 
             // 一次性截断尾部所有死亡 tween（内部只是 Size--，无数组移位）
+            if (write < count)
+                _activeTweens.RemoveRange(write, count - write);
+        }
+
+        private static void UpdateBatched(float deltaTime, int count)
+        {
+            EnsureBatchCapacity(count);
+
+            // 第一阶段：推进时间，收集非完成项的求值输入（不应用）。
+            int n = 0;
+            for (int read = 0; read < count; read++)
+            {
+                var tween = _activeTweens[read];
+                if (!tween.Advance(deltaTime, out bool completing))
+                    continue; // Killed / Completed：直接压缩掉
+
+                _activeTweens[read] = tween; // Advance 修改了 ElapsedTime
+
+                if (completing)
+                {
+                    _batchIndex[read] = -1; // 标记：稍后 FinalizeComplete
+                    continue;
+                }
+                _batchEase[n] = (int)tween.EaseType;
+                _batchTime[n] = tween.ElapsedTime;
+                _batchDur[n] = tween.Duration;
+                _batchIndex[read] = n;
+                n++;
+            }
+
+            bool evaluated = n > 0 && Iridium.Native.IridiumNative.EvaluateBatch(
+                _batchEase, _batchTime, _batchDur, _batchAmp, _batchPer, _batchOut, n);
+
+            // 第二阶段：按原顺序应用插值 / 收尾，同时压缩。
+            int write = 0;
+            for (int read = 0; read < count; read++)
+            {
+                var tween = _activeTweens[read];
+                if (!tween.IsActive) continue;
+
+                int slot = read < _batchIndex.Length ? _batchIndex[read] : -2;
+                if (slot == -1)
+                {
+                    tween.FinalizeComplete();
+                }
+                else if (slot >= 0 && slot < n)
+                {
+                    float t = evaluated
+                        ? _batchOut[slot]
+                        : Evaluate(tween.EaseType, tween.ElapsedTime, tween.Duration);
+                    tween.ApplyInterpolatedProgress(t);
+                }
+                else
+                {
+                    // 无槽位（不应发生）：退回逐条。
+                    tween.Update(0f);
+                }
+
+                if (tween.IsActive)
+                {
+                    _activeTweens[write] = tween;
+                    write++;
+                }
+            }
+
             if (write < count)
                 _activeTweens.RemoveRange(write, count - write);
         }
@@ -269,10 +375,7 @@ namespace Iridium.Core
             _pendingAdd.Clear();
         }
 
-        /// <summary>
-        /// 杀死所有活跃 Tweens（触发 OnComplete 回调，使目标值到达终态）。
-        /// 用于在游戏退出播放/倒带时与 DOTween.KillAll 同步清理。
-        /// </summary>
+        /// <summary>杀死所有活跃 Tweens，触发 OnComplete 使目标值到达终态（与 DOTween.KillAll 同步）。</summary>
         public static void KillAll()
         {
             // 先合入待新增的，确保所有 tween 都在列表中
@@ -281,15 +384,12 @@ namespace Iridium.Core
                 _activeTweens.AddRange(_pendingAdd);
                 _pendingAdd.Clear();
             }
-            // 对每个活跃 tween 杀死（complete=true → 应用终态 + 触发 OnComplete）
             for (int i = 0; i < _activeTweens.Count; i++)
             {
                 _activeTweens[i].Kill(complete: true);
             }
             ClearAll();
         }
-
-        // ==================== 工厂方法 ====================
 
         /// <summary>创建一个 float Tween 并立即加入更新队列</summary>
         public static IrTween To(

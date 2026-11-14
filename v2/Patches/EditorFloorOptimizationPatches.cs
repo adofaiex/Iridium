@@ -18,6 +18,9 @@ namespace Iridium.Patches
         private static int _incrementalSeqID;
         private static int _rebuildTick;
 
+        private const double Pi1_5 = 4.71238899230957; // MathF.PI * 1.5
+        private const float SentinelNoAngle = 999f;
+
         internal static bool IncrementalActive => _incrementalMode;
 
         #endregion
@@ -76,16 +79,14 @@ namespace Iridium.Patches
 
                 try
                 {
-                    // Convert char to angle — midspin fallback to original
                     float floorAngle = scrLevelMaker.GetAngleFromFloorCharDirection(floorType);
                     if (floorAngle == 999f) return true;
 
-                    // Inject data before RemakePath runs
                     __instance.levelData.pathData = __instance.levelData.pathData.Insert(sequenceID, floorType.ToString());
                     __instance.levelData.angleData.Insert(sequenceID, floorAngle);
 
-                    // Let RemakePath() run the full chain (MakeLevel → InstantiateFloatFloors → post-process → draws).
-                    // Our InstantiateFloatFloors patch intercepts to reuse existing floors.
+                    // Let RemakePath() run the full chain; the InstantiateFloatFloors patch
+// below intercepts it to reuse existing floors.
                     _incrementalMode = true;
                     _incrementalIsInsert = true;
                     _incrementalSeqID = sequenceID;
@@ -93,13 +94,13 @@ namespace Iridium.Patches
                     __instance.RemakePath();
 
                     _incrementalMode = false;
-                    return false; // data already inserted, skip original
+                    return false;
                 }
                 catch (Exception e)
                 {
                     Main.Logger?.Error($"[EditorFloorOptimization] InsertCharPrefix failed: {e}");
                     _incrementalMode = false;
-                    return true; // fallback to original
+                    return true;
                 }
             }
         }
@@ -153,7 +154,7 @@ namespace Iridium.Patches
             [HarmonyPrefix]
             public static bool Prefix(scrLevelMaker __instance)
             {
-                if (!_incrementalMode) return true; // normal mode - let original run
+                if (!_incrementalMode) return true;
 
                 try
                 {
@@ -164,17 +165,15 @@ namespace Iridium.Patches
                     {
                         int seqID = _incrementalSeqID;
 
-                        // Create ONE new floor
                         _meshFloorRef ??= AccessTools.FieldRefAccess<scrLevelMaker, GameObject>("meshFloor");
                         _spriteFloorRef ??= AccessTools.FieldRefAccess<scrLevelMaker, GameObject>("spriteFloor");
                         GameObject prefab = _meshFloorRef(__instance);
                         if (prefab == null) prefab = _spriteFloorRef(__instance);
-                        if (prefab == null) return true; // fallback
+                        if (prefab == null) return true;
 
                         GameObject container = GameObject.Find("Floors");
                         if (container == null) container = new GameObject("Floors");
 
-                        // Calculate position for new floor
                         var prevFloor = floors[Math.Max(0, seqID)];
                         double radius = scrController.instance.tileSize;
                         float ang = __instance.floorAngles[Math.Min(seqID, __instance.floorAngles.Length - 1)];
@@ -188,10 +187,8 @@ namespace Iridium.Patches
                         newObj.transform.parent = container.transform;
                         var newFloor = newObj.GetComponent<scrFloor>();
 
-                        // Insert into list at correct position
                         floors.Insert(seqID + 1, newFloor);
 
-                        // Remove excess floors if we have too many
                         while (floors.Count > targetCount)
                         {
                             var extra = floors[floors.Count - 1];
@@ -199,14 +196,10 @@ namespace Iridium.Patches
                             floors.RemoveAt(floors.Count - 1);
                         }
 
-                        // Now rebuild geometry for all floors from insertion point
-                        // Reuse existing floor 0 setup
                         RebuildPositionsAndAngles(__instance, seqID);
                     }
                     else
                     {
-                        // Delete mode - floor was already removed from list by our prefix
-                        // Remove excess floors
                         while (floors.Count > targetCount)
                         {
                             var extra = floors[floors.Count - 1];
@@ -214,7 +207,6 @@ namespace Iridium.Patches
                             floors.RemoveAt(floors.Count - 1);
                         }
 
-                        // Add missing floors if needed
                         while (floors.Count < targetCount)
                         {
                             _meshFloorRef ??= AccessTools.FieldRefAccess<scrLevelMaker, GameObject>("meshFloor");
@@ -234,13 +226,13 @@ namespace Iridium.Patches
                         RebuildPositionsAndAngles(__instance, Math.Max(0, _incrementalSeqID - 1));
                     }
 
-                    return false; // skip original InstantiateFloatFloors
+                    return false;
                 }
                 catch (Exception e)
                 {
                     Main.Logger?.Error($"[EditorFloorOptimization] InstFloatPrefix failed: {e}");
                     _incrementalMode = false;
-                    return true; // fallback
+                    return true;
                 }
             }
         }
@@ -255,17 +247,16 @@ namespace Iridium.Patches
             var angles = lm.floorAngles;
             if (floors == null || floors.Count == 0 || angles == null) return;
 
+            // Native fast path: iridium_core computes all angles/positions in one call,
+// C# only writes them back. The managed loop below is the fallback.
+            if (NativeRebuild(lm, Math.Max(0, fromSeqID))) return;
+
             int start = Math.Max(0, fromSeqID);
 
-            // 旧实现在每次增量重建时都会对 [0, start) 的每块砖做
-            // GetComponents<ffxPlusBase>() + DestroyImmediate 清理。150k 砖时这是
-            // 15 万次原生查询，是「新建一块就卡一下」的主要来源，且没有必要：
-            //   - 未开启 skipApplyEventsOnInsert：随后的 scnGame.ApplyEventsToFloors
-            //     会自己清空并重建所有砖块的 ffx；
-            //   - 开启时：本次操作不会向该范围重新添加 ffx，不存在累积。
-            // 重建范围内的砖块由下面的 ResetFloorState 负责清理。
+            // Floors in [0, start) are not cleaned here: without skipApplyEventsOnInsert
+            // the following ApplyEventsToFloors rebuilds all ffx anyway, and with it
+            // this operation adds no ffx in that range.
 
-            // Full rebuild from floor 0
             if (start == 0)
             {
                 var floor0 = floors[0];
@@ -276,9 +267,8 @@ namespace Iridium.Patches
                 floor0.prevfloor = null;
             }
 
-            // 插入点之前的砖块本次不会被改动，锚点直接用砖块上已保存的位置/入射角，
-            // 避免每次插入都从 0 号砖重算一遍（O(start) 三角函数）。
-            // 为防止增量累加的浮点误差无限累积，每 64 次重建做一次完整重算。
+            // Floors before the insertion point are untouched, so reuse their stored
+// position/entry angle; every 64th rebuild recomputes from 0 to stop drift.
             Vector3 cumulativePos;
             double prevEntryAngle;
             bool fullRecompute = start <= 0 || (++_rebuildTick & 63) == 0;
@@ -302,8 +292,8 @@ namespace Iridium.Patches
                 prevEntryAngle = entryAngle;
             }
 
-            // Reset the anchor floor if we're not doing a full rebuild (floor 0 was
-            // already reset above). All other floors are reset once as nextFloor below.
+            // Reset the anchor floor unless doing a full rebuild (floor 0 was already
+            // reset above); every other floor is reset once as nextFloor below.
             if (start > 0)
             {
                 if (float.IsNaN(cumulativePos.x) || float.IsNaN(cumulativePos.y) || double.IsNaN(prevEntryAngle))
@@ -370,10 +360,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Replicate scrLevelMaker.ResetFloor logic for incremental reuse:
-        /// destroy stray ffxPlusBase components, reset transform, call floor.Reset().
-        /// </summary>
+        /// <summary>Replicate scrLevelMaker.ResetFloor for incremental reuse: destroy stray ffxPlusBase, reset transform, call floor.Reset().</summary>
         private static void ResetFloorState(scrFloor floor, Vector3 position)
         {
             if (floor == null) return;
@@ -386,6 +373,124 @@ namespace Iridium.Patches
             floor.transform.rotation = Quaternion.identity;
             floor.transform.localScale = Vector3.one;
             floor.Reset();
+        }
+
+        /// <summary>Native rebuild via iridium_core with the same anchor/periodic-recompute policy as the managed loop; false when native is unavailable.</summary>
+        private static bool NativeRebuild(scrLevelMaker lm, int start)
+        {
+            if (Iridium.Native.IridiumNative.RemakePath == null) return false;
+
+            var floors = lm.listFloors;
+            var angles = lm.floorAngles;
+            if (floors == null || angles == null || floors.Count == 0) return false;
+
+            int total = Math.Min(angles.Length, floors.Count - 1);
+            if (total < 0) return false;
+            if (start > total) start = total;
+
+            float tileSize = scrController.instance != null ? (float)scrController.instance.tileSize : 0.631f;
+
+            // Incremental rebuilds reuse the stored state of floors[start]; every 64th
+            // rebuild (or an invalid anchor) recomputes from floor 0 to stop drift.
+            bool fromAnchor = false;
+            float originX = 0f, originY = 0f;
+            double startAngle = Pi1_5;
+            if (start > 0)
+            {
+                if (Iridium.Native.IridiumNative.RemakePathFrom == null) return false;
+                bool fullRecompute = (++_rebuildTick & 63) == 0;
+                Vector3 anchorPos = floors[start].transform.position;
+                double anchorEntry = floors[start].entryangle;
+                if (fullRecompute || float.IsNaN(anchorPos.x) || float.IsNaN(anchorPos.y) || double.IsNaN(anchorEntry))
+                {
+                    // Prefix pass: compute the anchor from floor 0 natively.
+                    var pe = new double[start + 1];
+                    var pxs = new double[start + 1];
+                    var ppx = new float[start + 1];
+                    var ppy = new float[start + 1];
+                    if (!Iridium.Native.IridiumNative.RemakePathPinned(
+                        angles, 0, Ones(start), start, Pi1_5, tileSize, false, 0f, 0f, pe, pxs, ppx, ppy))
+                        return false;
+                    anchorPos = new Vector3(ppx[start], ppy[start], 0f);
+                    anchorEntry = pe[start];
+                }
+                fromAnchor = true;
+                originX = anchorPos.x;
+                originY = anchorPos.y;
+                startAngle = anchorEntry;
+            }
+
+            int n = total - start;
+            var entry = new double[n + 1];
+            var exit = new double[n + 1];
+            var px = new float[n + 1];
+            var py = new float[n + 1];
+            if (!Iridium.Native.IridiumNative.RemakePathPinned(
+                angles, start, Ones(n), n, startAngle, tileSize, fromAnchor, originX, originY,
+                entry, exit, px, py))
+                return false;
+
+            var anchor = floors[start];
+            ResetFloorState(anchor, new Vector3(px[0], py[0], 0f));
+            anchor.entryangle = entry[0];
+            if (start == 0)
+            {
+                anchor.seqID = 0;
+                anchor.hasLit = true;
+                anchor.prevfloor = null;
+            }
+
+            for (int k = 0; k < n; k++)
+            {
+                int i = start + k;
+                var floor = floors[i];
+                var nextFloor = floors[i + 1];
+                float ang = angles[i];
+
+                floor.entryangle = entry[k];
+                floor.exitangle = exit[k];
+                floor.midSpin = ang == SentinelNoAngle;
+                floor.seqID = i;
+                floor.prevfloor = i > 0 ? floors[i - 1] : null;
+                floor.nextfloor = nextFloor;
+                floor.speed = 1f;
+                floor.isCCW = false;
+
+                var pos = new Vector3(px[k + 1], py[k + 1], 0f);
+                ResetFloorState(nextFloor, pos);
+                nextFloor.entryangle = entry[k + 1];
+                nextFloor.seqID = i + 1;
+                nextFloor.transform.position = pos;
+                nextFloor.floatDirection = ang;
+                nextFloor.prevfloor = floor;
+            }
+
+            if (floors.Count > 1)
+            {
+                var lastFloor = floors[floors.Count - 1];
+                lastFloor.exitangle = lastFloor.entryangle + Math.PI;
+                lastFloor.nextfloor = null;
+
+                if (scrController.instance?.gameworld == true)
+                {
+                    lastFloor.isportal = true;
+                    lastFloor.levelnumber = Portal.EndOfLevel;
+                }
+            }
+            return true;
+        }
+
+        private static float[] _ones = new float[0];
+
+        /// <summary>Shared all-ones length-multiplier buffer (no tile scaling).</summary>
+        private static float[] Ones(int n)
+        {
+            if (_ones.Length < n)
+            {
+                _ones = new float[Math.Max(n, _ones.Length * 2)];
+                for (int i = 0; i < _ones.Length; i++) _ones[i] = 1f;
+            }
+            return _ones;
         }
 
         #endregion
@@ -406,12 +511,10 @@ namespace Iridium.Patches
             [HarmonyTranspiler]
             public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
             {
-                // Always replace RemakePath() call with our version.
-                // Settings check happens at runtime in LightweightDeleteRemakePath.
+                // Always replace the RemakePath() call; the settings check happens at
+                // runtime in LightweightDeleteRemakePath.
                 var list = instructions.ToList();
 
-                // Find pattern: call instance void scnEditor::RemakePath(bool, bool)
-                // and replace with our method that has the same signature (editor, bool, bool)
                 for (int i = 0; i < list.Count; i++)
                 {
                     if (list[i].opcode == OpCodes.Call &&
@@ -427,9 +530,8 @@ namespace Iridium.Patches
                 return list;
             }
 
-            // Lightweight replacement for RemakePath(bool, bool) in DeleteFloor
-            // Signature matches RemakePath(bool applyEventsToFloors, bool remakeLevel)
-            // so the stack is balanced (editor, bool, bool -> void)
+            // Signature must match RemakePath(bool applyEventsToFloors, bool remakeLevel)
+            // or the IL stack is unbalanced
             public static void LightweightDeleteRemakePath(scnEditor editor, bool applyEventsToFloors, bool remakeLevel)
             {
                 if (!Main.Settings.optimizer.enableEditorFloorOptimization ||
@@ -449,10 +551,8 @@ namespace Iridium.Patches
                         return;
                     }
 
-                    // Data already removed by DeleteFloor. Let RemakePath run the full
-                    // chain (scnGame.RemakePath → MakeLevel → post-process → draws).
-                    // InstantiateFloatFloors is intercepted to reuse existing floors.
-                    // 删除序号由 DeleteFloorOptimizationPatch.Prefix 记录，这里不要覆盖。
+                    // Data already removed by DeleteFloor; the deleted index is recorded by
+                    // DeleteFloorOptimizationPatch.Prefix and must not be overwritten.
                     _incrementalMode = true;
                     _incrementalIsInsert = false;
 
@@ -464,7 +564,7 @@ namespace Iridium.Patches
                 {
                     Main.Logger?.Error($"[EditorFloorOptimization] LightweightDeleteRemakePath failed: {e}");
                     _incrementalMode = false;
-                    editor.RemakePath(); // Fallback
+                    editor.RemakePath();
                 }
             }
         }
@@ -483,10 +583,8 @@ namespace Iridium.Patches
                 if (!Main.Settings.optimizer.enableEditorFloorOptimization) return true;
                 if (!Main.Settings.optimizer.skipRedundantRemakePath) return true;
 
-                // Visual-only refresh (e.g. ToggleFloorNums calls RemakePath(false, false))
-                // scnGame.RemakePath(false, false) does nothing meaningful
-                // scnEditor.RemakePath then calls DrawFloorOffsetLines + DrawHolds + DrawFloorNums + DrawMultiPlanet
-                // We skip the scnGame call and do only the minimum editor-level draws.
+                // Visual-only refresh (e.g. ToggleFloorNums): the scnGame call does nothing
+                // meaningful, so only the minimum editor-level draws run.
                 if (!applyEventsToFloors && !remakeLevel)
                 {
                     DrawFloorNums(__instance);
@@ -514,7 +612,6 @@ namespace Iridium.Patches
 
                 if (!remakeLevel && !applyEventsToFloors)
                 {
-                    // Visual-only: just setup conductor
                     ADOBase.conductor.SetupConductorWithLevelData(__instance.levelData);
                     return false;
                 }
@@ -539,8 +636,7 @@ namespace Iridium.Patches
                 if (floors == null) return false;
 
                 bool showNums = __instance.showFloorNums && !__instance.playMode;
-                // 增量插入/删除只会改变插入点之后的编号；前缀砖块的显示状态没变，
-                // 没必要每次编辑都对 15 万块砖调一遍 SetActive。
+                // Incremental insert/delete only renumbers floors after the insertion point
                 int first = _incrementalMode ? Math.Max(0, _incrementalSeqID - 1) : 0;
                 for (int i = first; i < floors.Count; i++)
                 {
@@ -566,7 +662,7 @@ namespace Iridium.Patches
                 if (!Main.Settings.optimizer.skipRedundantRemakePath) return true;
 
                 if (!AnyEventsHavePositionTrack(__instance.events))
-                    return false; // no offset lines to draw
+                    return false;
 
                 return true;
             }
@@ -606,11 +702,7 @@ namespace Iridium.Patches
 
         #region Patch: Skip ApplyEventsToFloors during incremental insert
 
-        /// <summary>
-        /// 增量插入砖块时跳过全量 ApplyEventsToFloors。
-        /// OffsetFloorIDsInEvents 已经处理了事件 floor ID 偏移，
-        /// 全量重新应用事件对百万砖块是灾难性的。
-        /// </summary>
+        /// <summary>Skip the full ApplyEventsToFloors on incremental insert; OffsetFloorIDsInEvents already offset the event floor IDs.</summary>
         [HarmonyPatch(typeof(scnGame), "ApplyEventsToFloors",
             new[] { typeof(List<scrFloor>) })]
         public static class SkipApplyEventsOnInsertPatch
@@ -622,8 +714,6 @@ namespace Iridium.Patches
                 if (!_incrementalMode) return true;
                 if (!Main.Settings.optimizer.skipApplyEventsOnInsert) return true;
 
-                // Events already offset by OffsetFloorIDsInEvents / FloorWasCreatedOrDeleted.
-                // Skip the full re-application for massive level performance.
                 return false;
             }
         }
@@ -640,8 +730,8 @@ namespace Iridium.Patches
             {
                 if (!Main.Settings.optimizer.enableEditorFloorOptimization) return true;
                 if (!Main.Settings.optimizer.incrementalFloorInsert) return true;
-                // scnGame.RemakePath 里已经调用过 levelMaker.DrawHolds(false)，
-                // scnEditor.RemakePath 紧接着的这一遍是重复的整表重建。
+                // scnGame.RemakePath already called levelMaker.DrawHolds(false); this second
+                // pass is a redundant full rebuild
                 return !_incrementalMode;
             }
         }
@@ -654,7 +744,7 @@ namespace Iridium.Patches
             {
                 if (!Main.Settings.optimizer.enableEditorFloorOptimization) return true;
                 if (!Main.Settings.optimizer.incrementalFloorInsert) return true;
-                // 同上：DrawMultiPlanet 在 scnGame.RemakePath 里已经整表扫描过一次。
+                // Same: DrawMultiPlanet already scanned everything in scnGame.RemakePath
                 return !_incrementalMode;
             }
         }
@@ -672,12 +762,12 @@ namespace Iridium.Patches
                 var floors = __instance.listFloors;
                 if (floors == null) return true;
 
-                // 还有旧的 hold 对象时必须走原版清理流程
+                // Old hold objects are still present: the original cleanup must run
                 _holdGOsRef ??= AccessTools.FieldRefAccess<scrLevelMaker, List<GameObject>>("holdGOs");
                 var holdGOs = _holdGOsRef(__instance);
                 if (holdGOs != null && holdGOs.Count > 0) return true;
 
-                // 没有任何 hold 砖块时重建 Hold 容器是空操作，跳过整表扫描。
+                // Rebuilding the Hold container is a no-op when no floor has a hold
                 if (AnyFloorsHaveHolds(floors)) return true;
                 return false;
             }

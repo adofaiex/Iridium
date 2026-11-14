@@ -31,11 +31,11 @@ namespace Iridium.Config
         public bool optimizeGameplayAllocations = false;
         public bool optimizeMoveDecorations = false;
         public bool optimizeFloorMesh = false;
-        public bool optimizeFfxDecorations = false; // 新增：优化 ffx 装饰物更新
+        public bool optimizeFfxDecorations = false;
         public bool optimizeDecorationShaderCache = false; // 装饰物渲染脏检查缓存
         public bool enableStaticDecorationBatching = false; // 静态装饰物合批渲染（实验性，需缓速引擎）
 
-        // Particle Optimization Patches (粒子优化)
+        // Particle Optimization Patches
         public bool optimizeParticle = false;             // 主开关
         public bool optimizeParticleInactive = false;     // 跳过非活跃粒子 + 对象池
         public bool optimizeParticleCulling = false;      // 离屏暂停模拟
@@ -57,11 +57,11 @@ namespace Iridium.Config
         public bool dotweenDefaultRecyclable = true;
         public bool dotweenDisableSafeMode = false;
 
-        // Extreme Optimization Patches (极端情况优化)
+        // Extreme-case optimizations
         public bool enableExtremeOptimization = false; // 启用极端优化（分帧处理）
         public int maxTweensPerFrame = 100; // 每帧最多创建的Tween数量
 
-        // Frame-Spread Loading (分帧加载)
+        // Frame-Spread Loading
         public bool frameSpreadDecorationLoading = false; // 启用装饰物分帧加载
         public int decorationsPerFrame = 50; // 每帧加载的装饰物数量
 
@@ -70,7 +70,6 @@ namespace Iridium.Config
 
         public bool enableCustomEasingEngine = false; // 自定义缓速引擎（替代 DOTween）
 
-        // --- Editor Floor Performance Optimizations ---
         public bool enableEditorFloorOptimization = false; // 主开关
         public bool incrementalFloorInsert = false;        // 增量式砖块插入/删除
         public bool rangeBasedRedraw = false;              // 范围式重绘(Holds/Planets/Nums)
@@ -83,7 +82,6 @@ namespace Iridium.Config
         // 大谱面加载优化 B：分帧激活砖块（实验性；关闭则退回一次性激活）
         public bool chunkedFloorSpawn = true;
 
-        // --- 2.1.0 新增热路径优化 ---
         // 编辑器交互优化：SaveState 冗余全谱拷贝、备份编码、装饰/事件查找索引与搜索
         public bool optimizeEditorInteractions = false;
         // 死亡重开复位优化：跳过未变化砖块的 ResetToLevelStart、复用 Hold/Planet 对象
@@ -117,8 +115,7 @@ namespace Iridium.Config
         public bool forceDifficultyUI = false;
         public bool enableCircleArc = false;
         // Turn-angle band (degrees) where CircleArcPatch applies the big arc.
-        // Defaults keep old configs (missing these fields) behaving as a
-        // right-angle-only feature.
+        // Defaults keep old configs right-angle-only.
         public float circleArcMinAngle = 90f;
         public float circleArcMaxAngle = 105f;
         public bool alwaysCountdown = false;
@@ -155,8 +152,7 @@ namespace Iridium.Config
         public bool vmTrimOnLevelLoad = false;
         public bool vmTrimOnEditorEnter = false;
 
-        // Legacy: pre-rework master switch, kept only to migrate old
-        // Settings.xml files. No longer shown in the UI.
+        // Legacy master switch, kept only to migrate old Settings.xml files.
         public bool enableFerriteCore = false;
     }
 
@@ -334,45 +330,31 @@ namespace Iridium.Config
 	{
 		public bool enableEditorShortcuts = false;
 
-		// --- Decoration shortcuts ---
-		// NOTE: key codes must be UnityEngine.KeyCode values, NOT ASCII.
-		// Unity letter keys start at A=97 (lowercase ASCII); 65..90 are
-		// undefined holes that Input.GetKeyDown can never match.
+		// Key codes must be UnityEngine.KeyCode values, NOT ASCII: Unity letter keys
+		// start at A=97, so 65..90 are holes Input.GetKeyDown can never match.
 
-		// Select All Decorations (default: Ctrl+Shift+A)
 		public int selectAllKey = 97; // KeyCode.A
 		public int selectAllModifiers = 5; // Ctrl+Shift
 
-		// Deselect All (default: Ctrl+Shift+D)
 		public int deselectAllKey = 100; // KeyCode.D
 		public int deselectAllModifiers = 5; // Ctrl+Shift
 
-		// Toggle Visibility (default: Ctrl+E)
 		public int toggleVisibilityKey = 101; // KeyCode.E
 		public int toggleVisibilityModifiers = 1; // Ctrl
 
-		// Focus Decoration (default: Ctrl+G)
 		public int focusDecorationKey = 103; // KeyCode.G
 		public int focusDecorationModifiers = 1; // Ctrl
 
-		// --- Navigation shortcuts ---
-
-		// Go To Selected Floor (default: Ctrl+Shift+N)
 		public int goToFloorKey = 110; // KeyCode.N
 		public int goToFloorModifiers = 5; // Ctrl+Shift
 		public bool cameraFollowOnFloorSelect = true; // SelectFloor 附带镜头跟随
 
-		// Select All Floors (default: Ctrl+Shift+W)
 		public int selectAllFloorsKey = 119; // KeyCode.W
 		public int selectAllFloorsModifiers = 5; // Ctrl+Shift
 
-		// --- Popup shortcuts ---
-
-		// Popup Save (default: Return)
 		public int popupSaveKey = 13; // KeyCode.Return
 		public int popupSaveModifiers = 0;
 
-		// Popup Discard (default: D)
 		public int popupDiscardKey = 100; // KeyCode.D
 		public int popupDiscardModifiers = 0;
 

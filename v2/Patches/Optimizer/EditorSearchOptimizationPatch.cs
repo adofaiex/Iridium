@@ -9,20 +9,12 @@ using UnityEngine;
 namespace Iridium.Patches
 {
 	/// <summary>
-	/// 编辑器事件查找 / 搜索的全表扫描消除（自 v3 移植，2.9.8 适配）。
-	///
-	/// 与 v3 版差异：
-	/// - 2.9.8 的 SearchByComment 用 e.data["comment"]（3.x 是 e["comment"]）；
-	/// - ShowTabsForFloor / ShowPanelOfEvent 结构与 3.x 一致（已核对反编译源）。
-	///
-	/// 实现：
-	/// - ShowTabsForFloor/ShowPanelOfEvent 用帧级 floor→events 索引；
-	/// - SearchByComment 重写为手写循环 + 按 LevelEvent 缓存小写 comment
-	///   （CWT，评论字符串引用变化时重算），Distinct + orderby 语义等价复刻。
-	/// </summary>
+/// Replaces the editor's full-table event scans with a per-frame floor→events index.
+/// Note 2.9.8's SearchByComment reads e.data["comment"] (3.x uses e["comment"]).
+/// </summary>
 	public static class EditorSearchOptimizationPatch
 	{
-		// ---- 帧级 floor→events 索引 ----
+		// 帧级 floor→events 索引
 
 		private static int _indexFrame = -1;
 		private static int _indexCount = -1;
@@ -55,7 +47,7 @@ namespace Iridium.Patches
 			return _byFloor;
 		}
 
-		// ShowTabsForFloor 复刻需要的私有成员：缓存反射访问器
+		// ShowTabsForFloor 复刻需要的私有成员
 		private static readonly Func<InspectorPanel, string, bool, bool> _modifyMessageText =
 			FastDelegate.Open<Func<InspectorPanel, string, bool, bool>>(
 				AccessTools.Method(typeof(InspectorPanel), "ModifyMessageText",
@@ -67,7 +59,7 @@ namespace Iridium.Patches
 
 		private static LevelEventType GetCacheSelected()
 		{
-			// cacheSelectedEventType 是 private static 字段，直接反射读取
+			// cacheSelectedEventType 是 private static 字段
 			var f = _cacheSelectedField ??= AccessTools.Field(typeof(InspectorPanel), "cacheSelectedEventType");
 			return (LevelEventType)f.GetValue(null);
 		}
@@ -91,7 +83,7 @@ namespace Iridium.Patches
 						for (int i = 0; i < floorEvents.Count; i++)
 							list.Add(floorEvents[i].eventType);
 
-					// ── 以下为原版逻辑的忠实复刻（仅事件收集走索引） ──
+					// 以下为原版逻辑的忠实复刻，仅事件收集走索引
 					__instance.titleCanvas.SetActive(list.Count > 0);
 					_modifyMessageText(__instance, "", false);
 					if (list.Count == 0)
@@ -141,7 +133,7 @@ namespace Iridium.Patches
 						__instance.ShowInspector(show: true);
 					}
 
-					// ── tab 可见性与布局（原版尾部逻辑） ──
+					// tab 可见性与布局（原版尾部逻辑）
 					var names = new List<string>();
 					foreach (var t in list)
 					{
@@ -217,7 +209,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		// ---- SearchByComment ----
+		// SearchByComment
 
 		private sealed class CommentLowerState
 		{
@@ -227,7 +219,7 @@ namespace Iridium.Patches
 
 		private static readonly ConditionalWeakTable<LevelEvent, CommentLowerState> _commentCache = new();
 
-		// 2.9.8 的 comment 存在 e.data["comment"]（3.x 是 e["comment"]）
+		// 2.9.8 的 comment 存在 e.data["comment"]，3.x 是 e["comment"]
 		private static string GetLowerComment(LevelEvent e)
 		{
 			string raw = e.data != null ? e.data["comment"] as string : null;

@@ -5,9 +5,6 @@ using System.Threading;
 
 namespace Iridium.Patches
 {
-	/// <summary>
-	/// 异步 Patch 管理器 - 完全异步执行 Patch 操作，完成后通知 UI
-	/// </summary>
 	public static class AsyncPatchManager
 	{
 		private static Thread? _workerThread;
@@ -24,14 +21,9 @@ namespace Iridium.Patches
 		private static long _lastUpdateTimeMs = 0;
 		private const int DEBOUNCE_MS = 100; // 防抖延迟100毫秒
 
-		/// <summary>
-		/// 是否正在处理 Patch 操作
-		/// </summary>
 		public static bool IsProcessing => _isProcessing;
 
-		/// <summary>
-		/// 启动异步 Patch 处理线程
-		/// </summary>
+		/// <summary>启动异步 Patch 处理线程</summary>
 		public static void Start()
 		{
 			if (_isRunning) return;
@@ -53,9 +45,7 @@ namespace Iridium.Patches
 			Main.Logger?.Log(Localization.Get("AsyncPatchWorkerStarted"));
 		}
 
-		/// <summary>
-		/// 停止异步 Patch 处理线程
-		/// </summary>
+		/// <summary>停止异步 Patch 处理线程</summary>
 		public static void Stop()
 		{
 			if (!_isRunning) return;
@@ -83,9 +73,7 @@ namespace Iridium.Patches
 			Main.Logger?.Log(Localization.Get("AsyncPatchWorkerStopped"));
 		}
 
-		/// <summary>
-		/// 异步更新单个 Patch（带防抖）
-		/// </summary>
+		/// <summary>异步更新单个 Patch（带防抖）</summary>
 		public static void UpdatePatchByTypeAsync(Type patchType)
 		{
 			lock (_queueLock)
@@ -96,9 +84,7 @@ namespace Iridium.Patches
 			_taskEvent.Set();
 		}
 
-		/// <summary>
-		/// 异步更新所有优化器 Patch（带防抖）
-		/// </summary>
+		/// <summary>异步更新所有优化器 Patch（带防抖）</summary>
 		public static void UpdateOptimizerPatchesAsync()
 		{
 			lock (_queueLock)
@@ -109,9 +95,7 @@ namespace Iridium.Patches
 			_taskEvent.Set();
 		}
 
-		/// <summary>
-		/// 异步更新所有 Patch
-		/// </summary>
+		/// <summary>异步更新所有 Patch</summary>
 		public static void UpdateAllPatchesAsync()
 		{
 			lock (_queueLock)
@@ -122,9 +106,7 @@ namespace Iridium.Patches
 			_taskEvent.Set();
 		}
 
-		/// <summary>
-		/// Rebuilds all patches when the backend mode changes.
-		/// </summary>
+		/// <summary>Rebuilds all patches when the backend mode changes.</summary>
 		public static void ReapplyAllPatchesAsync()
 		{
 			lock (_queueLock)
@@ -135,9 +117,6 @@ namespace Iridium.Patches
 			_taskEvent.Set();
 		}
 
-		/// <summary>
-		/// 工作线程循环
-		/// </summary>
 		private static void WorkerLoop()
 		{
 			while (_isRunning)
@@ -146,7 +125,6 @@ namespace Iridium.Patches
 
 				if (!_isRunning) break;
 
-				// 检查是否需要执行（防抖）
 				bool shouldExecute = false;
 				lock (_queueLock)
 				{
@@ -161,7 +139,6 @@ namespace Iridium.Patches
 
 				if (!shouldExecute) continue;
 
-				// 获取待处理的任务
 				bool doAllUpdate = false;
 				bool doOptimizerUpdate = false;
 				List<Type> patchTypes = new();
@@ -177,13 +154,10 @@ namespace Iridium.Patches
 					_pendingPatchTypes.Clear();
 				}
 
-				// 标记为正在处理
+				// Harmony must run on Unity's main thread; this worker only coalesces requests.
 				_isProcessing = true;
 				int generation;
 
-				// The worker only coalesces requests. Harmony must run on Unity's
-				// main thread because target resolution and patch initialization may
-				// touch Unity or game state.
 				lock (_queueLock)
 				{
 					generation = _runGeneration;
@@ -197,7 +171,7 @@ namespace Iridium.Patches
 						_mainThreadTaskQueued = false;
 					}
 
-					// Disable may happen while this action is waiting in the queue.
+					// A disable may land while this action sits in the queue.
 					if (!_isRunning || generation != _runGeneration)
 					{
 						_isProcessing = false;
@@ -240,9 +214,6 @@ namespace Iridium.Patches
 			}
 		}
 
-		/// <summary>
-		/// 获取当前队列中的任务数量
-		/// </summary>
 		public static int GetPendingTaskCount()
 		{
 			lock (_queueLock)

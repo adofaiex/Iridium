@@ -6,32 +6,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 死亡重开时的砖块复位跳过。
-	///
-	/// 每次死亡 scrGame.ResetScene(false) 对**全部砖块**调用
-	/// scrFloor.ResetToLevelStart()：写 transform.position/eulerAngles/
-	/// localScale、opacity、tapsSoFar=0，并 SetTrackStyle(initialTrackStyle)
-	/// （约 4 次 SetTexture + 3 次 SetFloat + SetColor + mesh 置脏）。
-	/// 15 万砖 ≈ 每次重开百万级原生调用，表现为重开卡顿数百 ms~秒级。
-	///
-	/// 实现原则：**只在所有写入都是幂等重复时跳过**（跳过与否不改变任何
-	/// 可见状态）。两层判定：
-	/// 1. 幂等写入检查（覆盖 ResetToLevelStart 的全部直接写入目标）：
-	///    position == startPos、eulerAngles/tweenRot == startRot+z 偏移、
-	///    localScale == startScale（freeroamGenerated 时原版不写，跳过比较）、
-	///    opacity == opacityVal、tapsSoFar == 0。
-	/// 2. 样式输入快照：SetTrackStyle 的副作用链复杂（材质/贴图/边缘宽度由
-	///    initialTrackStyle、customTexture、customTextureScale、lengthMult、
-	///    widthMult、tapsNeeded、tileSize 等输入推导），无法廉价穷举。因此用
-	///    Postfix 在每次**完整**复位后记录这些输入的快照（CWT 挂在砖块上），
-	///    Prefix 仅当当前输入与快照完全一致时才允许跳过——样式相关输入被
-	///    事件改过的砖块一律交还原版复位。
-	///
-	/// freeroam 且未生成（递归复位子砖）直接放行。
-	/// 回退方式：关闭 optimizeDeathReset 开关。
-	/// 3.3.0 与 3.4.0 的 ResetToLevelStart / SetTrackStyle 结构一致（已核对两版反编译源）。
-	/// </summary>
+	/// <summary>Skips scrFloor.ResetToLevelStart on death reset only when every write it would perform is already in effect, including an unchanged SetTrackStyle input snapshot.</summary>
 	[IriPatch(Path = "optimizer/deathReset", Pre = typeof(OptimizerSettings), Condition = "optimizeDeathReset")]
 	[HarmonyPatch(typeof(scrFloor), nameof(scrFloor.ResetToLevelStart))]
 	public static class DeathResetFloorPatch

@@ -11,15 +11,12 @@ namespace Iridium.Patches
     {
         private static Harmony _harmony => Main.Harmony!;
 
-        // Status
         private static readonly Dictionary<Type, bool> _activePatches = new();
-        // Optimization: Cache exact patch bindings for each patch class to speed up and isolate unpatching
+        // Cache exact patch bindings per class to isolate unpatching
         private static readonly Dictionary<Type, List<(MethodBase Original, MethodInfo PatchMethod)>> _patchedBindings = new();
 
-        // Instance-based patches (BasePatchMethod subclasses)
         private static readonly List<BasePatchMethod> _methodPatches = new();
 
-        // Patch Declaration
         private class PatchDef
         {
             public Type Type;
@@ -86,22 +83,18 @@ namespace Iridium.Patches
         {
             _definitions.Clear();
 
-            // --- Optimizer ---
             var optCond = () => Main.Settings.optimizer.enableOptimizer;
             RegisterNestedPatches(typeof(OptimizerPatches), optCond);
             RegisterNestedPatches(typeof(TrackOptimizationPatches), optCond);
 
-            // --- Render Scale (帧缓冲降分辨率) ---
+            // Render scale (framebuffer downscale)
             var renderScaleCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.enableRenderScale;
             RegisterNestedPatches(typeof(RenderScalePatches), renderScaleCond);
 
-            // --- Ffx Optimization Patches ---
             RegisterNestedPatches(typeof(FfxOptimizationPatches), optCond);
 
-            // --- Decoration Shader / Filter Cache (v3 移植) ---
             RegisterNestedPatches(typeof(DecorationFilterCachePatches), optCond);
 
-            // --- Gameplay / Input Allocation Optimizations (v3 移植) ---
             _definitions.Add(new PatchDef(
                 typeof(GameplayAllocationOptimizationPatches.PlanetOverlapAllocPatch),
                 () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeGameplayAllocations));
@@ -115,14 +108,11 @@ namespace Iridium.Patches
                 typeof(PlayerInputOptimizationPatches.SimulatedPlayerControlUpdatePatch),
                 () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizePlayerInputAllocations));
 
-            // --- Scene Optimization Patches ---
             RegisterNestedPatches(typeof(SceneOptimizationPatches), optCond);
 
-            // --- Loading Optimization Patches ---
-            // 排除 FrameSpreadDecorationLoadingPatch，因为它有独立的子开关条件
+            // FrameSpreadDecorationLoadingPatch 有独立子开关，需排除后单独注册
             RegisterNestedPatches(typeof(LoadingOptimizationPatches), optCond,
                 new HashSet<Type> { typeof(LoadingOptimizationPatches.FrameSpreadDecorationLoadingPatch) });
-            // 分帧加载需要额外检查 frameSpreadDecorationLoading 子开关
             _definitions.Add(new PatchDef(typeof(LoadingOptimizationPatches.FrameSpreadDecorationLoadingPatch),
                 () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.frameSpreadDecorationLoading));
             _definitions.Add(new PatchDef(typeof(LoadingOptimizationPatches.FrameSpreadDecorationLoadingPatch.ResetDecorations_Patch),
@@ -130,29 +120,24 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(LoadingOptimizationPatches.FrameSpreadDecorationLoadingPatch.Play_Patch),
                 () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.frameSpreadDecorationLoading));
 
-            // --- DOTween Optimization Patches ---
-            // 注意：DOTween优化现在不使用任何HarmonyPatch，只使用运行时配置
+            // DOTween optimization uses no HarmonyPatch, only runtime config
 
-            // --- Extreme Optimization Patches ---
             RegisterNestedPatches(typeof(ExtremeOptimizationPatches),
                 () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.enableExtremeOptimization);
 
-            // --- Tween Safety Patches ---
             var tweenSafetyCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.dotweenDefaultRecyclable;
             RegisterNestedPatches(typeof(TweenSafetyPatches), tweenSafetyCond);
 
-            // --- Event Tween Optimization Patches ---
             var eventTweenCond = () => Main.Settings.optimizer.optimizeEventProcessing;
             _definitions.Add(new PatchDef(typeof(EventTweenOptimizationPatches.FfxMoveFloorPlusEventTweensPatch), eventTweenCond));
             _definitions.Add(new PatchDef(typeof(EventTweenOptimizationPatches.FfxMoveDecorationsPlusEventTweensPatch), eventTweenCond));
             _definitions.Add(new PatchDef(typeof(EventTweenOptimizationPatches.FfxRecolorFloorPlusEventTweensPatch), eventTweenCond));
             _definitions.Add(new PatchDef(typeof(EventTweenOptimizationPatches.FfxPlusBaseKillCacheInvalidationPatch), eventTweenCond));
 
-            // --- JSON Deserialize Optimization ---
             var jsonOptCond = () => Main.Settings.optimizer.customLevelReadOptimization;
             _definitions.Add(new PatchDef(typeof(JsonPatches.PatchLevelDataCLSLoadLevel), jsonOptCond));
 
-            // --- Editor Floor Optimization Patches (each with its own sub-condition) ---
+            // Editor floor optimization, each patch with its own sub-condition
             var editorMaster = () => Main.Settings.optimizer.enableEditorFloorOptimization;
             _definitions.Add(new PatchDef(typeof(EditorFloorOptimizationPatches.InsertCharFloorOptimizationPatch),
                 () => editorMaster() && Main.Settings.optimizer.incrementalFloorInsert));
@@ -181,7 +166,7 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(EditorFloorOptimizationPatches.LevelMakerDrawHoldsNoHoldsSkipPatch),
                 () => editorMaster() && Main.Settings.optimizer.incrementalFloorInsert));
 
-            // --- Editor event index (选中/切换砖块卡顿) ---
+            // Event index (selecting/switching tiles is slow)
             _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.GetFloorEventsIndexPatch), editorMaster));
             _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.ShowEventIndicatorsIndexPatch), editorMaster));
             _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.DestroyEventIndicatorsFastPatch), editorMaster));
@@ -190,8 +175,7 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.LevelDecodeDirtyPatch), editorMaster));
             _definitions.Add(new PatchDef(typeof(EditorEventIndexPatch.OffsetFloorIdsDirtyPatch), editorMaster));
 
-            // --- Ffx 组件扫描快速路径 & 加载计时（大谱面加载优化） ---
-            // 只挂「大谱面加载优化」开关，不依赖优化器总开关（这是独立功能）。
+            // Gated on the large-level loading switch only, not the optimizer master
             var largeLoadCond = () => Main.Settings.optimizer.optimizeLargeLevelLoading;
             _definitions.Add(new PatchDef(typeof(FfxGetComponentsFastPatch.ApplyEventsFfxScanPatch), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.LoadLevelProfiler), largeLoadCond));
@@ -199,7 +183,10 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.JsonParseProfiler), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.FloatFloorsProfiler), largeLoadCond));
 
-            // --- 2.1.0 新增热路径优化（自 v3 移植） ---
+            // Native JSON parsing (Rust, batched)
+            _definitions.Add(new PatchDef(typeof(JsonNativeParsePatch.DeserializePatch), largeLoadCond));
+            _definitions.Add(new PatchDef(typeof(JsonNativeParsePatch.DeserializePartiallyPatch), largeLoadCond));
+
             var editorInteractionsCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeEditorInteractions;
             _definitions.Add(new PatchDef(typeof(EditorSaveStateCopyPatch.SaveStateSuppressPatch), editorInteractionsCond));
             _definitions.Add(new PatchDef(typeof(EditorSaveStateCopyPatch.LevelDataCopySuppressPatch), editorInteractionsCond));
@@ -220,7 +207,7 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(HoldRendererDirtyCheckPatch), holdRendererCond));
             _definitions.Add(new PatchDef(typeof(LoadProfilerPatch.ApplyEventsProfiler), largeLoadCond));
 
-            // --- 惰性 topGlow（大谱面加载优化 A） ---
+            // Lazy top glow
             _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.AwakePatch), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.ResetPatch), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.StartPatch), largeLoadCond));
@@ -229,17 +216,17 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.FinishLoadingPatch), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LazyTopGlowPatch.ObjectDecorationGlowPatch), largeLoadCond));
 
-            // --- 线号文本按需生成（大谱面加载优化 A2） ---
+            // Floor number text generated on demand
             _definitions.Add(new PatchDef(typeof(LazyFloorNumberPatch.StrippedPrefabPatch), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LazyFloorNumberPatch.OnBecameVisiblePatch), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LazyFloorNumberPatch.DrawFloorNumsPatch), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(LazyFloorNumberPatch.PlayPatch), largeLoadCond));
 
-            // --- 解码/事件分组分配削减（大谱面加载优化） ---
+            // Decode/event grouping allocation cuts
             _definitions.Add(new PatchDef(typeof(DecodeAllocationPatch.DecodeDictionaryCapacityPatch), largeLoadCond));
             _definitions.Add(new PatchDef(typeof(DecodeAllocationPatch.EventListCapacityPatch), largeLoadCond));
 
-            // --- B：分帧激活砖块（大谱面加载优化，实验性） ---
+            // Chunked floor spawn (experimental)
             var chunkedSpawnCond = () => Main.Settings.optimizer.optimizeLargeLevelLoading
                 && Main.Settings.optimizer.chunkedFloorSpawn;
             _definitions.Add(new PatchDef(typeof(ChunkedFloorSpawnPatch.InstantiateFloorsChunkedPatch), chunkedSpawnCond));
@@ -248,10 +235,9 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(ChunkedFloorSpawnPatch.EditorPlayFlushPatch), chunkedSpawnCond));
             _definitions.Add(new PatchDef(typeof(ChunkedFloorSpawnPatch.FinishLoadingFlushPatch), chunkedSpawnCond));
 
-            // --- 大谱面撤销历史深度上限（内存保护） ---
+            // Undo history depth cap (memory guard)
             _definitions.Add(new PatchDef(typeof(UndoMemoryCapPatch.SaveStateCapPatch), largeLoadCond));
 
-            // --- UI / Misc ---
             _definitions.Add(new PatchDef(typeof(MiscPatches.RemoveNewsPatch), () => Main.Settings.ui.removeNews));
             _definitions.Add(new PatchDef(typeof(MiscPatches.HideBetaWatermarkPatch), () => Main.Settings.ui.hideBetaWatermark));
             _definitions.Add(new PatchDef(typeof(MiscPatches.ForceDifficultyUIPatch), () => Main.Settings.ui.forceDifficultyUI));
@@ -261,20 +247,17 @@ namespace Iridium.Patches
             _definitions.Add(new PatchDef(typeof(MiscPatches.AlwaysCountdownPatch), () => Main.Settings.ui.alwaysCountdown));
             _definitions.Add(new PatchDef(typeof(MiscPatches.PausePlanetTrailPatch), () => Main.Settings.ui.enablePausePlanetTrail));
 
-            // Lobby music
             _definitions.Add(new PatchDef(typeof(MiscPatches.LobbyMusicPatch), () => Main.Settings.lobbyMusic.enableLobbyMusicPatch));
 
-            // Memory
             var memCond = () => Main.Settings.memory.enableMemoryOptimization;
             _definitions.Add(new PatchDef(typeof(MiscPatches.SmartGCPatch), () => memCond() && Main.Settings.memory.enableSmartGC));
 
-            // Compatibility
             var pauseFixCond = () => Main.Settings.compatibility.enableLegacyPauseFix;
             _definitions.Add(new PatchDef(typeof(CompatibilityPatches.LegacyPauseFixPatch_Play), pauseFixCond));
 _definitions.Add(new PatchDef(typeof(CompatibilityPatches.LegacyPauseFixPatch_Apply), pauseFixCond));
             _definitions.Add(new PatchDef(typeof(CompatibilityPatches.NoFailTooEarlyPatch), () => Main.Settings.compatibility.enableNoFailTooEarly));
 
-            // v3 谱面兼容（ADOFAI 3.x 谱面 version 16~19 的加载/播放/编辑 polyfill）
+            // v3 chart compat (load/play/edit polyfill for level versions 16~19)
             var v3LevelCompatCond = () => Main.Settings.compatibility.enableV3LevelCompat;
             RegisterNestedPatches(typeof(V3LevelCompatPatches), v3LevelCompatCond);
             _definitions.Add(new PatchDef(typeof(CompatibilityPatches.ScaleFilterSpeedWithPitchPatch), () => Main.Settings.compatibility.scaleFilterSpeedWithPitch));
@@ -284,18 +267,15 @@ _definitions.Add(new PatchDef(typeof(CompatibilityPatches.LegacyPauseFixPatch_Ap
                 Main.Settings.compatibility.legacyFlashMode != LegacyBehaviorMode.Default ||
                 Main.Settings.compatibility.legacyCamRelativeToMode != LegacyBehaviorMode.Default));
 
-            // Required third-party mods handling (behavior is runtime-gated by compatibility.ignoreRequiredMods)
-            // Required third-party mods handling (applied on demand via ignoreRequiredMods)
+            // requiredMods clearing, mounted on demand via ignoreRequiredMods
             var requiredModsCond = () => Main.Settings.compatibility.ignoreRequiredMods;
             _definitions.Add(new PatchDef(typeof(RequiredModsClearPatches.LevelDataClearPatch), requiredModsCond));
             _definitions.Add(new PatchDef(typeof(RequiredModsClearPatches.LevelDataCLSClearPatch), requiredModsCond));
             _definitions.Add(new PatchDef(typeof(RequiredModsClearPatches.EncodeRestorePatch), requiredModsCond));
             _definitions.Add(new PatchDef(typeof(RequiredModsClearPatches.LevelLoadNotifyPatch), requiredModsCond));
 
-            // Third-party custom events (fake event registration, read-only panels).
-            // Also used by the v3 level compatibility layer: unknown v3 event types
-            // must load read-only instead of crashing (registration is additionally
-            // gated on the chart's version inside CustomEventsPatches).
+            // Third-party custom events (fake event registration, read-only panels);
+            // also covers unknown event types in v3 charts
             var customEventsCond = () => Main.Settings.compatibility.ignoreRequiredMods
                                          || Main.Settings.compatibility.enableV3LevelCompat;
 _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), customEventsCond));
@@ -311,26 +291,18 @@ _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), cus
             _definitions.Add(new PatchDef(typeof(CustomEventsPatches.FakeTabSetSelectedPatch), customEventsCond));
             _definitions.Add(new PatchDef(typeof(CustomEventsPatches.FakeTabClickPatch), customEventsCond));
 
-            // Hit Sound
             _definitions.Add(new PatchDef(typeof(HitSoundPatch), () => Main.Settings.hitSound.enableHitSoundPitch));
 
-            // Judge Text
-            // InitPatch: Handles custom text mode
             _definitions.Add(new PatchDef(typeof(JudgeTextPatches.HitTextMeshInitPatch), () => Main.Settings.judgeText.enableJudgeTextCustomization));
-            // ShowPatch: Handles offset mode
             _definitions.Add(new PatchDef(typeof(JudgeTextPatches.HitTextMeshShowPatch), () => Main.Settings.judgeText.enableJudgeTextCustomization && Main.Settings.judgeText.showAsOffset));
-            // Rewind: Reset
             _definitions.Add(new PatchDef(typeof(JudgeTextPatches.ResetTimingOnRewindPatch), () => Main.Settings.judgeText.enableJudgeTextCustomization));
 
-            // Editor Shortcuts
             _definitions.Add(new PatchDef(typeof(EditorShortcutPatches.EditorShortcutUpdatePatch), () => Main.Settings.editorShortcuts.enableEditorShortcuts));
             _definitions.Add(new PatchDef(typeof(EditorShortcutPatches.FloorSelectCameraJumpPatch), () => Main.Settings.editorShortcuts.enableEditorShortcuts));
 
-            // --- Custom Easing Engine (替代 DOTween) ---
             var easingCond = () => Main.Settings.optimizer.enableCustomEasingEngine;
             RegisterNestedPatches(typeof(CustomEasingPatches), easingCond);
 
-            // --- Async Input Optimize ---
             var aioCond = () => Main.Settings.asyncInput.enableAIO;
             _definitions.Add(new PatchDef(typeof(Modules.AsyncInputOptimize.Patch.UnityEngine__SceneManagement__SceneManager), aioCond));
             _definitions.Add(new PatchDef(typeof(Modules.AsyncInputOptimize.Patch.__scnGame), aioCond));
@@ -350,7 +322,6 @@ _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), cus
                 UpdateSinglePatch(def);
             }
 
-            // 同步实例化补丁的 IL 模式
             BasePatchMethod.SyncILModeFromSettings();
         }
 
@@ -375,7 +346,6 @@ _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), cus
         {
             if (_harmony == null) return;
 
-            // 优化器相关的 patch 类型
             var optimizerParentTypes = new HashSet<Type>
             {
                 typeof(OptimizerPatches),
@@ -397,7 +367,6 @@ _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), cus
 
             foreach (var def in _definitions)
             {
-                // 检查是否是优化器相关的 patch
                 bool isOptimizerPatch = optimizerParentTypes.Contains(def.Type) ||
                     (def.Type.DeclaringType != null && optimizerParentTypes.Contains(def.Type.DeclaringType));
 
@@ -444,10 +413,8 @@ _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), cus
 
         private static bool CalculateEffectiveStatus(PatchDef def)
         {
-            // Condition
             if (!def.Condition()) return false;
 
-            // Check Parent
             if (def.Parent != null)
             {
                 _activePatches.TryGetValue(def.Parent, out bool parentActive);
@@ -456,8 +423,6 @@ _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), cus
 
             return true;
         }
-
-        // 移除不再使用的 IsActuallyPatched 辅助方法
 
         private static void ApplyPatch(Type type)
         {
@@ -581,7 +546,6 @@ _definitions.Add(new PatchDef(typeof(CustomEventsPatches.ScanRegisterPatch), cus
             _activePatches.Clear();
             _patchedBindings.Clear();
 
-            // 停止所有实例化补丁
             lock (_methodPatches)
             {
                 foreach (var mp in _methodPatches)

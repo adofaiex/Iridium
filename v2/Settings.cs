@@ -340,7 +340,7 @@ namespace Iridium
             rendering.Add(Separator());
             rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.fastLoading, v => optimizer.fastLoading = v, "FastLoading"));
 
-            // --- 2.1.0 新增热路径优化（自 v3 移植） ---
+            // 2.1.0 新增热路径优化（自 v3 移植）
             rendering.Add(Separator());
             rendering.Add(IridiumPreset.SwitchOption(sizes, optimizer.optimizeHoldRenderer, v =>
             {

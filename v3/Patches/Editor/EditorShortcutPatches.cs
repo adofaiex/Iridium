@@ -7,9 +7,7 @@ using Iridium;
 
 namespace Iridium.Patches.Editor
 {
-	/// <summary>
-	/// Editor keyboard shortcuts — ported from ADOFAI.EditorTweaks with additions.
-	/// </summary>
+	/// <summary>Editor keyboard shortcuts, ported from ADOFAI.EditorTweaks.</summary>
 	public static class EditorShortcutPatches
 	{
 		[HarmonyPatch(typeof(scnEditor), "Update")]
@@ -47,9 +45,7 @@ namespace Iridium.Patches.Editor
 				HandleEditorShortcuts(__instance, s);
 			}
 
-			// Diagnostics: whenever one of the configured keys registers a press,
-			// dump the raw key plus modifier state so a failed binding can be
-			// told apart from a blocked one (input field / popup gating).
+			// Dump raw key + modifier state on every configured press, to tell an unbound key from a gated one.
 			private static void ProbeConfiguredKeys(Config.EditorShortcutSettings s)
 			{
 				ProbeKey("selectAll", s.selectAllKey, s.selectAllModifiers);
@@ -115,9 +111,7 @@ namespace Iridium.Patches.Editor
 			return true;
 		}
 
-		// ============================================================
 		//  Actions
-		// ============================================================
 
 		private static void SelectAllDecorations(scnEditor editor)
 		{
@@ -217,9 +211,7 @@ namespace Iridium.Patches.Editor
 			}
 		}
 
-		/// <summary>
-		/// 阻止 SelectFloor 的附带镜头跟随。不影响 GoToDecoration 等其他路径。
-		/// </summary>
+		/// <summary>阻止 SelectFloor 的附带镜头跟随。不影响 GoToDecoration 等其他路径。</summary>
 		[HarmonyPatch(typeof(scnEditor), "SelectFloor")]
 		[IriPatch(Path = "editor/shortcuts", Pre = typeof(EditorShortcutSettings), Condition = "enableEditorShortcuts,cameraFollowOnFloorSelect")]
 		public static class FloorSelectCameraJumpPatch
@@ -241,9 +233,7 @@ namespace Iridium.Patches.Editor
 			}
 		}
 
-		// ============================================================
 		//  Modifier helpers
-		// ============================================================
 
 		public const int MOD_CTRL = 1;
 		public const int MOD_SHIFT = 4;

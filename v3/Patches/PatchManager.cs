@@ -37,10 +37,6 @@ namespace Iridium.Patches
 			DiscoverPatches();
 		}
 
-		// ─────────────────────────────────────────────
-		//  Public API (preserved from old PatchManager)
-		// ─────────────────────────────────────────────
-
 		public static void RegisterPatch(string id, object definition, Func<bool> condition)
 		{
 			if (definition == null) throw new ArgumentNullException(nameof(definition));
@@ -132,11 +128,6 @@ namespace Iridium.Patches
 			Main.Logger?.Log(Localization.Get("PatchManagerUnpatchedAll"));
 		}
 
-		// ─────────────────────────────────────────────
-		//  Auto-Discovery (two-pass)
-		// ─────────────────────────────────────────────
-
-		/// <summary>Collected patch info from first pass.</summary>
 		private sealed class PatchInfo
 		{
 			public Type Type;
@@ -192,27 +183,11 @@ namespace Iridium.Patches
 			}
 		}
 
-		// ─────────────────────────────────────────────
-		//  Condition Building
-		// ─────────────────────────────────────────────
-
-		/// <summary>
-		/// Build effective condition: ancestor conditions (from patches at ancestor paths)
-		/// AND own condition (from this patch's Pre+Condition).
-		/// <para>
-		/// Rules:<br/>
-		/// - AlwaysOn → always true<br/>
-		/// - No path + no own condition → always true<br/>
-		/// - Has own condition only → own condition<br/>
-		/// - Has ancestor conditions + own → all AND<br/>
-		/// - Has ancestor conditions, no own → ancestors AND<br/>
-		/// </para>
-		/// </summary>
+		/// <summary>Ancestor path conditions AND the patch's own Pre/Condition; nothing collected means always on.</summary>
 		private static Func<bool> BuildCondition(IriPatchAttribute attr, Dictionary<string, List<PatchInfo>> pathLookup)
 		{
 			if (attr.AlwaysOn) return () => true;
 
-			// Runtime method existence check
 			if (!string.IsNullOrEmpty(attr.RequireMethod))
 			{
 				var parts = attr.RequireMethod.Split('.');
@@ -226,9 +201,7 @@ namespace Iridium.Patches
 
 			var conditions = new List<Func<bool>>();
 
-			// 1) Walk up path hierarchy, collect conditions from ancestor patches.
-			//    For each ancestor level, take the first patch with Pre+Condition.
-			//    If none found at a level, skip it and continue upward.
+			// Ancestors: first patch with Pre+Condition at each parent level, others skipped.
 			string path = attr.Path ?? "";
 			if (!string.IsNullOrEmpty(path))
 			{
@@ -252,7 +225,7 @@ namespace Iridium.Patches
 				}
 			}
 
-			// 2) Add own condition from Pre + Condition
+			// Own condition from Pre + Condition
 			string? ownCondition = ResolveOwnCondition(attr);
 			if (!string.IsNullOrEmpty(ownCondition))
 			{
@@ -271,16 +244,7 @@ namespace Iridium.Patches
 			};
 		}
 
-		/// <summary>
-		/// Resolve Pre + Condition into dot-separated setting paths.
-		/// Supports comma-separated Condition for AND, and PreTypes array for cross-class conditions.
-		/// <para>
-		/// Examples:<br/>
-		/// Pre=typeof(A), Condition="x" → "groupA.x"<br/>
-		/// Pre=typeof(A), Condition="x,y" → "groupA.x,groupA.y"<br/>
-		/// PreTypes=[A,B], Condition="x,y" → "groupA.x,groupB.y"<br/>
-		/// </para>
-		/// </summary>
+		/// <summary>Pre + Condition → "group.property" paths; PreTypes pairs each name with its own group.</summary>
 		private static string? ResolveOwnCondition(IriPatchAttribute attr)
 		{
 			if (attr.Pre == null && attr.PreTypes == null) return null;
@@ -320,10 +284,6 @@ namespace Iridium.Patches
 			var attr = type.GetCustomAttribute<IriPatchAttribute>(false);
 			return attr?.Path;
 		}
-
-		// ─────────────────────────────────────────────
-		//  Patch Lifecycle
-		// ─────────────────────────────────────────────
 
 		private sealed class FailureDetail
 		{

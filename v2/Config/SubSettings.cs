@@ -76,7 +76,7 @@ namespace Iridium.Config
         // 大谱面加载优化 B：分帧激活砖块（实验性；关闭则退回一次性激活）
         public bool chunkedFloorSpawn = true;
 
-        // --- Editor Floor Performance Optimizations ---
+        // Editor Floor Performance Optimizations
         public bool enableEditorFloorOptimization = false; // 主开关
         public bool incrementalFloorInsert = false;        // 增量式砖块插入/删除
         public bool rangeBasedRedraw = false;              // 范围式重绘(Holds/Planets/Nums)
@@ -84,7 +84,7 @@ namespace Iridium.Config
         public bool optimizeOffsetFloorEvents = false;     // 优化 OffsetFloorIDsInEvents
         public bool skipApplyEventsOnInsert = false;       // 增量插入时跳过 ApplyEventsToFloors
 
-        // --- 2.1.0 新增热路径优化（自 v3 移植，适用 2.9.8 的部分） ---
+        // 2.1.0 新增热路径优化（自 v3 移植，适用 2.9.8 的部分）
         // 编辑器交互优化：SaveState 冗余全谱拷贝、装饰/事件查找索引与搜索
         public bool optimizeEditorInteractions = false;
         // 死亡重开复位优化：跳过未变化砖块的 ResetToLevelStart、复用 Hold 对象
@@ -264,7 +264,7 @@ namespace Iridium.Config
     {
         public bool enableEditorShortcuts = false;
 
-        // --- Decoration shortcuts ---
+        // Decoration shortcuts
         // NOTE: key codes must be UnityEngine.KeyCode values, NOT ASCII.
         // Unity letter keys start at A=97 (lowercase ASCII); 65..90 are
         // undefined holes that Input.GetKeyDown can never match.
@@ -285,7 +285,7 @@ namespace Iridium.Config
         public int focusDecorationKey = 103; // KeyCode.G
         public int focusDecorationModifiers = 1; // Ctrl
 
-        // --- Navigation shortcuts ---
+        // Navigation shortcuts
 
         // Go To Selected Floor (default: Ctrl+Shift+N)
         public int goToFloorKey = 110; // KeyCode.N
@@ -296,7 +296,7 @@ namespace Iridium.Config
         public int selectAllFloorsKey = 119; // KeyCode.W
         public int selectAllFloorsModifiers = 5; // Ctrl+Shift
 
-        // --- Popup shortcuts ---
+        // Popup shortcuts
 
         // Popup Save (default: Return)
         public int popupSaveKey = 13; // KeyCode.Return

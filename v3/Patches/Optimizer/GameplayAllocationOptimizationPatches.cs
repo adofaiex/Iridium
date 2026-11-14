@@ -10,33 +10,16 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-    /// <summary>
-    /// 消除原版游戏逻辑热路径中的每帧堆分配 —— 游戏内最大的持续性 GC 压力源。
-    ///
-    /// 1. scrPlanet.Update: 每帧每星球调用 Physics2D.OverlapCircleAll，
-    ///    分配一个新的 Collider2D[]。改为复用静态缓冲区做 NonAlloc 检测，
-    ///    仅有命中结果时才分配精确大小的结果数组。
-    /// 2. scrFloor.Update (Volume 轨迹颜色): pulse 为 None 时原版仍每帧
-    ///    创建一个立即废弃的空 DOTween.Sequence。改为返回 null（该路径
-    ///    创建后从未使用，语义完全不变）；pulse 不为 None 时保持原版行为。
-    /// 3. scrVisualDecoration.UpdateShader: 对 CameraFilterPack 滤镜每帧
-    ///    走 MethodInfo.Invoke 反射调用（参数校验 + 装箱）。改为按
-    ///    MethodInfo 缓存编译委托后直接调用，反射失败时回退原版。
-    ///
-    /// 注意：每个嵌套补丁类各自带 [IriPatch]，由 PatchManager 逐个注册。
-    /// （只在外层类标注的话 Harmony 容器不会递归到这里，整组补丁会 NotFound。）
-    /// </summary>
+    /// <summary>Kills the per-frame allocations in the gameplay hot paths (planet overlap, dead tween sequence, reflection filter invoke).</summary>
     public static class GameplayAllocationOptimizationPatches
     {
-        // ── 1. scrPlanet.Update: non-alloc hitbox overlap ──────────────────
+        // Each nested patch class carries its own [IriPatch]: annotating only the outer class makes the
+        // Harmony container skip them and the whole group reports NotFound.
 
         private static readonly Collider2D[] _overlapBuffer = new Collider2D[64];
         private static readonly Collider2D[] _emptyColliders = new Collider2D[0];
 
-        /// <summary>
-        /// OverlapCircleAll 的零分配等价物：常态（无命中）返回共享空数组，
-        /// 命中时才分配精确长度的结果。缓冲区溢出时回退原版调用。
-        /// </summary>
+        /// <summary>Zero-allocation OverlapCircleAll: shared empty array when there is no hit, exact-size array otherwise, vanilla call on buffer overflow.</summary>
         public static Collider2D[] OverlapCircleAllTrimmed(Vector2 pos, float radius, int layerMask)
         {
             // 双保险：补丁应用状态下设置被外部改动时仍回退原版
@@ -95,13 +78,7 @@ namespace Iridium.Patches.Optimizer
             }
         }
 
-        // ── 2. scrFloor.Update: abandon the dead Sequence for Volume+None ──
-
-        /// <summary>
-        /// 替换 Volume 分支开头的 DOTween.Sequence()。pulse == None 时原版
-        /// 创建后从未使用该 Sequence（下一行直接 break），返回 null 完全等价；
-        /// 其他 pulse 仍返回真实的 Sequence 以保持原版调度语义。
-        /// </summary>
+        /// <summary>pulse == None means vanilla creates the Sequence and immediately breaks without using it, so null is equivalent.</summary>
         public static Sequence? VolumeSequenceOrNull(scrFloor floor)
         {
             if (Main.Settings?.optimizer.optimizeGameplayAllocations != true)
@@ -143,16 +120,10 @@ namespace Iridium.Patches.Optimizer
             }
         }
 
-        // ── 3. scrVisualDecoration.UpdateShader: reflection-free invoke ────
-
         private static readonly Dictionary<MethodInfo, Action<object, RenderTexture, RenderTexture>?> _invokeCache
             = new Dictionary<MethodInfo, Action<object, RenderTexture, RenderTexture>?>();
 
-        /// <summary>
-        /// MethodInfo.Invoke 的委托化替代。OnRenderImage(RenderTexture, RenderTexture)
-        /// 的开实例委托按 MethodInfo 缓存一次，之后零反射开销；
-        /// 签名不符或委托创建失败的滤镜自动回退原版 Invoke。
-        /// </summary>
+        /// <summary>Delegate-cached stand-in for MethodInfo.Invoke; wrong signatures fall back to the reflective call.</summary>
         public static void FastInvoke(MethodInfo? mi, object target, object[] args)
         {
             if (mi == null) return;

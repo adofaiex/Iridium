@@ -10,23 +10,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-    /// <summary>
-    /// 静态装饰物合批渲染器（M2/M3）。
-    ///
-    /// 接管"无滤镜、无遮罩、非平铺、普通混合、当前无活跃 tween"的 scrVisualDecoration：
-    /// 每个批次的四角烘焙进共享 Mesh，按 (主贴图, 层, sortingOrder) 分组 ——
-    /// 每组一个 MeshRenderer（Sprites/Default + 图集页 RT），一个 draw call。
-    /// 组间按 sortingOrder 正确排序，组内按 depth 排序的顶点顺序绘制。
-    ///
-    /// 每帧仅做位置遍历：W(t) = base + (cam - base) * parallaxMult + offK + cornerOffset，
-    /// 与原版 scrParallax.SetTrans 逐项一致（base = 实时 pivotPosVec）。旋转/缩放/pivot
-    /// 几何烘焙进四角偏移，经 SetRotation/SetScale 脏检查钩子在变化时重捕获。
-    /// 结构变化（装饰物增删/可见性/深度变化）为增量操作：与最后一个 quad 换位后截断，
-    /// 不做全量重建。装饰物被引擎 tween 接管时自动退出批次并还原原版渲染器，
-    /// tween 结束后自动回收。
-    ///
-    /// 依赖：需与自定义缓速引擎同时开启（tween 感知来自引擎事件）。
-    /// </summary>
+    /// <summary>Batches eligible scrVisualDecoration; per frame it only recomputes W(t) = base + (cam - base) * parallaxMult + offK + cornerOffset, term by term identical to scrParallax.SetTrans.</summary>
     public static class StaticDecorationBatcher
     {
         private static bool _enabled;
@@ -37,8 +21,6 @@ namespace Iridium.Patches.Optimizer
         private const int MaxRegionDim = 1024;
         private const int RegionPadding = 2;
 
-        // ---------------- 条目状态 ----------------
-
         private sealed class Item
         {
             public scrVisualDecoration Deco = null!;
@@ -48,6 +30,10 @@ namespace Iridium.Patches.Optimizer
             public int VertexIndex = -1;
             public int IdleFrames;                          // 在 slot.Items 中的位置
             public Vector3[] CornerOffsets = new Vector3[4];  // 世界顶点 - 视差根位置（含 z）
+            /// <summary>Bumped by every RefreshCapture; tells the SoA gather whether Corners need a recopy.</summary>
+            public int CaptureVersion;
+            /// <summary>CaptureVersion already staged into the SoA corner buffer (index independent, so reordering cannot misattribute corners).</summary>
+            public int StagedVersion = -1;
             public Color32 VColor;
         }
 
@@ -109,29 +95,21 @@ namespace Iridium.Patches.Optimizer
         private static readonly AccessTools.FieldRef<scrVisualDecoration, DecorationBlendMode>? _blendModeRef =
             AccessTools.FieldRefAccess<scrVisualDecoration, DecorationBlendMode>("blendMode");
 
-        // 3.4.0 新增裁剪枢轴（croppedPivotOffset，定义在基类 scrDecoration）；
-        // 3.3.x 无此字段。FieldRefAccess 在字段缺失时会抛异常，必须先取 FieldInfo
-        // 判空——否则旧版本会在静态初始化时 TypeInitializationException。
-        // 非零裁剪枢轴的装饰物在 MoveDecorations tween 下位置基准会变化，
-        // 合批只在旋转/缩放时重捕获四角，因此直接排除。
+        // croppedPivotOffset exists only on 3.4.0+. FieldRefAccess throws when the field is
+        // missing, which would TypeInitializationException on 3.3.x, so probe FieldInfo first.
         private static readonly FieldInfo? _croppedPivotField =
             AccessTools.Field(typeof(scrVisualDecoration), "croppedPivotOffset");
 
         private static readonly AccessTools.FieldRef<scrVisualDecoration, Vector2>? _croppedPivotOffsetRef =
             _croppedPivotField == null ? null : AccessTools.FieldRefAccess<scrVisualDecoration, Vector2>(_croppedPivotField);
 
-        // ---------------- 开关生命周期 ----------------
-
         public static bool Enabled => _enabled;
 
-        /// <summary>
-        /// 该装饰物当前是否由合批渲染器接管。接管后其位置/材质由顶点遍历负责，
-        /// 原版每帧的 UpdatePosition/UpdateShader 应被跳过（见 FfxOptimizationPatches）。
-        /// </summary>
+        /// <summary>Batched => callers must skip the vanilla per-frame position/shader update.</summary>
         public static bool IsBatched(scrDecoration dec)
             => _enabled && _items.TryGetValue(dec, out var item) && item.Managed;
 
-        /// <summary>当前已合批（实际由批次渲染）的装饰物数量，用于性能悬浮窗。</summary>
+        /// <summary>Batched decoration count, for the perf overlay.</summary>
         public static int BatchedCount
         {
             get
@@ -147,6 +125,8 @@ namespace Iridium.Patches.Optimizer
         {
             if (value == _enabled) return;
             _enabled = value;
+            // 重置原生降级标记：开关切换可能发生在原生库刚被替换之后。
+            _nativeKnownBad = false;
             if (value)
             {
                 if (!_hooked)
@@ -178,13 +158,10 @@ namespace Iridium.Patches.Optimizer
             }
         }
 
-        // ---------------- 资格判定 ----------------
-
         private static bool IsEligible(scrVisualDecoration dec)
         {
             if (Main.Settings?.optimizer.enableStaticDecorationBatching != true) return false;
-            // 编辑器（非试玩）态完全让位原版：合批是为游玩态烘焙的静态快照，
-            // 编辑器里改装饰物需要原版 LogicUpdate 的实时刷新。
+            // Editor mode always yields to vanilla: batching bakes a play-mode snapshot.
             if (ADOBase.isEditingLevel) return false;
             if (dec.cfpCache != null && dec.cfpCache.Length > 0) return false;   // 滤镜走 RT 管线
             if (dec.isMask()) return false;
@@ -194,7 +171,7 @@ namespace Iridium.Patches.Optimizer
             if (dec.parallax.dontAlterX || dec.parallax.dontAlterY || dec.parallax.clampToScreen) return false;
             if (dec.lockScale) return false;                                     // 顶点随相机缩放变化
             if (_blendModeRef == null || _blendModeRef(dec) != DecorationBlendMode.None) return false;
-            if (_croppedPivotOffsetRef != null && _croppedPivotOffsetRef(dec) != Vector2.zero) return false;
+            if (_croppedPivotOffsetRef != null && _croppedPivotOffsetRef(dec) != Vector2.zero) return false; // shifts the position base; corners are only recaptured on rotate/scale
 
             var mat = dec.meshRenderer != null && dec.meshRenderer.sharedMaterial != null
                 ? dec.meshRenderer.sharedMaterial.mainTexture as Texture2D : null;
@@ -207,7 +184,7 @@ namespace Iridium.Patches.Optimizer
             return true;
         }
 
-        /// <summary>捕获当前世界四角偏移（旋转/缩放/pivot 变化后重新调用）。</summary>
+        /// <summary>Recapture world corner offsets (world vertex - parallax root position).</summary>
         private static void RefreshCapture(scrVisualDecoration vis, Item item)
         {
             var mf = vis.meshRenderer != null ? vis.meshRenderer.GetComponent<MeshFilter>() : null;
@@ -219,9 +196,8 @@ namespace Iridium.Patches.Optimizer
             var p0 = vis.parallax.transform.position;
             for (int i = 0; i < 4; i++)
                 item.CornerOffsets[i] = l2w.MultiplyPoint3x4(verts[i]) - p0;
+            item.CaptureVersion++; // wraparound is fine, only "changed" is read
         }
-
-        // ---------------- 增量进出批次 ----------------
 
         private static void TryManage(scrVisualDecoration vis)
         {
@@ -307,7 +283,7 @@ namespace Iridium.Patches.Optimizer
             AddQuad(slot, item);
         }
 
-        /// <summary>从批次摘除并还原原版渲染器。</summary>
+        /// <summary>Drop from its batch and restore the vanilla renderer.</summary>
         private static void Unmanage(Item item, bool restoreVanilla)
         {
             if (item.Managed && item.Slot != null)
@@ -339,8 +315,6 @@ namespace Iridium.Patches.Optimizer
             if (target is scrVisualDecoration vis && !_items.ContainsKey(vis))
                 _pending[vis] = 0;
         }
-
-        // ---------------- 增量 quad 增删 ----------------
 
         private static void AddQuad(AtlasSlot slot, Item item)
         {
@@ -392,9 +366,7 @@ namespace Iridium.Patches.Optimizer
             slot.StructuralDirty = true;
         }
 
-        // ---------------- 全量重扫 ----------------
-
-        /// <summary>全量重扫（装饰物重建 / 复位后调用）。图集与槽位跨重建复用。</summary>
+        /// <summary>Full rescan; the atlas and its slots survive a rebuild.</summary>
         public static void RebuildAll()
         {
             if (!_enabled) return;
@@ -427,9 +399,7 @@ namespace Iridium.Patches.Optimizer
             }
         }
 
-        // ---------------- 每帧：位置遍历 ----------------
-
-        /// <summary>tween 结束后的静置阈值：连续这么多帧无 tween 才纳入批次。</summary>
+        /// <summary>Frames a decoration must stay tween-free before it may rejoin a batch.</summary>
         private const int BatchIdleThreshold = 15;
 
         public static void FrameRender()
@@ -461,37 +431,10 @@ namespace Iridium.Patches.Optimizer
             if (_items.Count == 0) return;
             var cam = controller.camy.transform.position;
 
-            foreach (var item in _items.Values)
-            {
-                if (!item.Managed || item.Slot == null) continue;
-
-                var dec = item.Deco;
-                if (!dec.GetVisible())
-                {
-                    Unmanage(item, restoreVanilla: true);
-                    continue;
-                }
-
-                var b0 = dec.pivotPosVec;                                    // 实时读取
-                var mult = dec.parallax!.multiplier;
-                var offK = dec.parallaxOffset * dec.scaleMultiplier;
-
-                var slot = item.Slot;
-                int vi = item.VertexIndex;
-                for (int c = 0; c < 4; c++)
-                {
-                    var corner = item.CornerOffsets[c];
-                    var nv = new Vector3(
-                        b0.x + (cam.x - b0.x) * mult.x + offK.x + corner.x,
-                        b0.y + (cam.y - b0.y) * mult.y + offK.y + corner.y,
-                        corner.z);
-                    if (slot.Verts[vi + c] != nv)
-                    {
-                        slot.Verts[vi + c] = nv;
-                        slot.PositionDirty = true;
-                    }
-                }
-            }
+            // Unity-side inputs are read field-wise (no virtual calls), then the native kernel
+            // computes the 4 corners; when it is unavailable an equivalent managed loop runs.
+            if (!ComputePositionsNative(cam))
+                ComputePositionsManaged(cam);
 
             // 脏页上传：结构变化 → 全量；仅位置变化 → 只传顶点
             foreach (var slot in _slots.Values)
@@ -516,7 +459,185 @@ namespace Iridium.Patches.Optimizer
             }
         }
 
-        // ---------------- 图集 ----------------
+        /// <summary>Flat grow-only SoA scratch shared by the native kernel and the managed fallback.</summary>
+        private sealed class ParallelScratch
+        {
+            /// <summary>当帧有效的装饰物（已剔除不可见/未受管）。</summary>
+            public readonly List<Item> Items = new();
+
+            /// <summary>结果顶点，12 浮点/项（4 角 × xyz），摊平存放。</summary>
+            public float[] Verts = Array.Empty<float>();
+            /// <summary>逐项脏标记：内核置 1 表示该项四角发生变化。</summary>
+            public uint[] Dirty = Array.Empty<uint>();
+            public float[] BaseXy = Array.Empty<float>();
+            public float[] MultXy = Array.Empty<float>();
+            public float[] OffsetXy = Array.Empty<float>();
+            /// <summary>四角偏移，12 浮点/项，内核只读；跨帧持久。</summary>
+            public float[] Corners = Array.Empty<float>();
+            /// <summary>每项在 Verts 中的起始下标（= i * 12）。</summary>
+            public int[] VertexStart = Array.Empty<int>();
+
+            public void Ensure(int n)
+            {
+                if (n <= 0) return;
+                if (Verts.Length < n * 12) Verts = new float[n * 12];
+                if (Corners.Length < n * 12) Corners = new float[n * 12];
+                if (Dirty.Length < n) Dirty = new uint[n];
+                if (BaseXy.Length < n * 2) BaseXy = new float[n * 2];
+                if (MultXy.Length < n * 2) MultXy = new float[n * 2];
+                if (OffsetXy.Length < n * 2) OffsetXy = new float[n * 2];
+                if (VertexStart.Length < n) VertexStart = new int[n];
+                if (Items.Capacity < n) Items.Capacity = n;
+            }
+        }
+
+        private static readonly ParallelScratch _scratch = new();
+        /// <summary>Stop retrying once the native export is missing or a call failed; every retry is wasted FFI.</summary>
+        private static bool _nativeKnownBad;
+
+        /// <summary>Flatten managed decorations into the SoA arrays and mirror the current slot verts so the kernel can backfill only changed items.</summary>
+        private static int GatherPositions(Vector3 cam)
+        {
+            var pos = _scratch;
+            pos.Items.Clear();
+            pos.Ensure(_items.Count);
+
+            int n = 0;
+            foreach (var item in _items.Values)
+            {
+                if (!item.Managed || item.Slot == null) continue;
+
+                var dec = item.Deco;
+                if (!dec.GetVisible())
+                {
+                    Unmanage(item, restoreVanilla: true);
+                    continue;
+                }
+
+                var slot = item.Slot;
+                int vi = item.VertexIndex;
+                // 结构脏时顶点区可能还没填（首次入批 / 换位后），跳过本帧由托管兜底。
+                if (vi < 0 || vi + 4 > slot.Verts.Count)
+                    continue;
+
+                var b0 = dec.pivotPosVec;                                    // 实时读取
+                var mult = dec.parallax!.multiplier;
+                var offK = dec.parallaxOffset * dec.scaleMultiplier;
+
+                int vo = n * 12;
+                pos.BaseXy[n * 2] = b0.x;
+                pos.BaseXy[n * 2 + 1] = b0.y;
+                pos.MultXy[n * 2] = mult.x;
+                pos.MultXy[n * 2 + 1] = mult.y;
+                pos.OffsetXy[n * 2] = offK.x;
+                pos.OffsetXy[n * 2 + 1] = offK.y;
+
+                // 四角偏移只在捕获版本变化时重拷（旋转/缩放/pivot 才是罕见事件）。
+                if (item.StagedVersion != item.CaptureVersion)
+                {
+                    for (int c = 0; c < 4; c++)
+                    {
+                        var corner = item.CornerOffsets[c];
+                        pos.Corners[vo + c * 3] = corner.x;
+                        pos.Corners[vo + c * 3 + 1] = corner.y;
+                        pos.Corners[vo + c * 3 + 2] = corner.z;
+                    }
+                    item.StagedVersion = item.CaptureVersion;
+                }
+
+                // 顶点镜像：让内核能只回填真正变化的项。
+                for (int c = 0; c < 4; c++)
+                {
+                    var v = slot.Verts[vi + c];
+                    pos.Verts[vo + c * 3] = v.x;
+                    pos.Verts[vo + c * 3 + 1] = v.y;
+                    pos.Verts[vo + c * 3 + 2] = v.z;
+                }
+                pos.Dirty[n] = 0;
+                pos.VertexStart[n] = vo;
+                pos.Items.Add(item);
+                n++;
+            }
+            return n;
+        }
+
+        /// <summary>One FFI call computes every corner; false means the caller must use the managed fallback.</summary>
+        private static bool ComputePositionsNative(Vector3 cam)
+        {
+            if (_nativeKnownBad || !Iridium.Native.IridiumNative.HasParallaxCompute) return false;
+
+            int n = GatherPositions(cam);
+            if (n == 0) return true;
+            var pos = _scratch;
+
+            if (!Iridium.Native.IridiumNative.ParallaxCompute(
+                    n, cam.x, cam.y,
+                    pos.BaseXy, pos.MultXy, pos.OffsetXy, pos.Corners,
+                    pos.Verts, pos.Dirty))
+            {
+                _nativeKnownBad = true;
+                return false;
+            }
+
+            // 逐项回填：仅回填原生标记为脏的装饰物，未变的不动 slot.Verts。
+            var items = pos.Items;
+            for (int i = 0; i < n; i++)
+            {
+                if (pos.Dirty[i] == 0) continue;
+                var item = items[i];
+                var slot = item.Slot!;
+                int vi = item.VertexIndex;
+                int vo = pos.VertexStart[i];
+                for (int c = 0; c < 4; c++)
+                {
+                    slot.Verts[vi + c] = new Vector3(pos.Verts[vo + c * 3], pos.Verts[vo + c * 3 + 1], pos.Verts[vo + c * 3 + 2]);
+                }
+                slot.PositionDirty = true;
+            }
+            return true;
+        }
+
+        /// <summary>Managed fallback, bit-for-bit equivalent to the native kernel and using the same dirty rule so both paths agree on which slots upload.</summary>
+        private static void ComputePositionsManaged(Vector3 cam)
+        {
+            int n = GatherPositions(cam);
+            var pos = _scratch;
+            var items = pos.Items;
+
+            for (int i = 0; i < n; i++)
+            {
+                int vo = pos.VertexStart[i];
+                float b0x = pos.BaseXy[i * 2], b0y = pos.BaseXy[i * 2 + 1];
+                float mx = pos.MultXy[i * 2], my = pos.MultXy[i * 2 + 1];
+                float kx = pos.OffsetXy[i * 2], ky = pos.OffsetXy[i * 2 + 1];
+                float dxc = cam.x - b0x, dyc = cam.y - b0y;
+                bool moved = false;
+                for (int c = 0; c < 4; c++)
+                {
+                    int co = vo + c * 3;
+                    float x = b0x + dxc * mx + kx + pos.Corners[co];
+                    float y = b0y + dyc * my + ky + pos.Corners[co + 1];
+                    float z = pos.Corners[co + 2];
+                    if (pos.Verts[co] != x || pos.Verts[co + 1] != y || pos.Verts[co + 2] != z)
+                    {
+                        pos.Verts[co] = x;
+                        pos.Verts[co + 1] = y;
+                        pos.Verts[co + 2] = z;
+                        moved = true;
+                    }
+                }
+                if (!moved) continue;
+
+                var slot = items[i].Slot!;
+                int vi = items[i].VertexIndex;
+                for (int c = 0; c < 4; c++)
+                {
+                    int co = vo + c * 3;
+                    slot.Verts[vi + c] = new Vector3(pos.Verts[co], pos.Verts[co + 1], pos.Verts[co + 2]);
+                }
+                slot.PositionDirty = true;
+            }
+        }
 
         private static Page? AcquirePageFor(Texture2D tex)
         {
@@ -561,8 +682,6 @@ namespace Iridium.Patches.Optimizer
                 (rx + w) / (float)PageSize, (ry + h) / (float)PageSize);
         }
 
-        // ---------------- 清理 ----------------
-
         private static void UnmanageAll()
         {
             foreach (var item in _items.Values)
@@ -590,8 +709,6 @@ namespace Iridium.Patches.Optimizer
             ClearBatchesAndAtlas();
         }
 
-        // ---------------- Harmony 钩子 ----------------
-
         [HarmonyPatch(typeof(scrDecorationManager), "FinishUpdateDecorations")]
         private static class FinishUpdateDecorationsHook
         {
@@ -613,11 +730,7 @@ namespace Iridium.Patches.Optimizer
             public static void Postfix() => ClearBatchesAndAtlas();
         }
 
-        /// <summary>
-        /// 已被合批接管的装饰物：位置/材质由顶点遍历负责，跳过原版 LogicUpdate
-        /// （避免每帧重复的视差重算与 transform 写入）。判定盒仍需更新。
-        /// 独立于 Ffx 优化开关，保证任何配置下都不做重复劳动。
-        /// </summary>
+        /// <summary>Batched decorations skip vanilla LogicUpdate; the hitbox still needs updating.</summary>
         [HarmonyPatch(typeof(scrDecoration), nameof(scrDecoration.LogicUpdate))]
         private static class LogicUpdateSkipHook
         {

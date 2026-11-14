@@ -5,18 +5,7 @@ using UnityEngine;
 
 namespace Iridium.Patches.Optimizer
 {
-	/// <summary>
-	/// 帧缓冲降分辨率（Render Scale）运行时。
-	///
-	/// 复用游戏原生的 RT 相机管线（scrCamera.SetupRTCam）：
-	///   世界相机(Bgcamstatic/BGcam/camobj) → camRT → quad → Overlaycam → 屏幕
-	/// 原版在关卡开始（scnGame.Play）时就会开启该管线，但 camRT 始终是全屏尺寸。
-	/// 这里只把 camRT 缩放到 Screen * scale：世界画面以较低分辨率渲染，再由 quad 双线性放大回全屏，
-	/// 从而降低 GPU 填充开销——不需要任何自定义 Shader / AssetBundle。
-	///
-	/// 因为世界相机渲染到的不是屏幕尺寸的 RT，Camera.pixelWidth / ScreenToWorldPoint 等
-	/// 依赖屏幕像素的 API 需要一并修正（见 <see cref="RenderScaleCameraPatches"/>）。
-	/// </summary>
+	/// <summary>Renders the world through the game's own camRT pipeline at a reduced size, bilinearly upscaled by the quad.</summary>
 	public static class RenderScaleRuntime
 	{
 		public const int MinPercent = 30;
@@ -29,10 +18,10 @@ namespace Iridium.Patches.Optimizer
 		private static readonly AccessTools.FieldRef<scrCamera, MeshRenderer> CamQuadMeshRef =
 			AccessTools.FieldRefAccess<scrCamera, MeshRenderer>("camQuadMesh");
 
-		/// <summary>最近一次创建的缩放 RT；坐标补丁据此识别「缩放相机」。</summary>
+		/// <summary>The scaled RT the coordinate patches recognise a "scaled camera" by.</summary>
 		internal static RenderTexture CurrentRT = null!;
 
-		/// <summary>功能已开启（设置层面：总开关 + 自身开关）。</summary>
+		/// <summary>Master switch and the feature's own switch.</summary>
 		public static bool Configured
 		{
 			get
@@ -51,7 +40,7 @@ namespace Iridium.Patches.Optimizer
 			}
 		}
 
-		/// <summary>该相机是否正在渲染到我们的缩放 RT（需要坐标修正）。</summary>
+		/// <summary>Is this camera rendering into our scaled RT (and so needs coordinate fixes)?</summary>
 		public static bool IsScaledCamera(Camera cam)
 		{
 			if (cam == null || !Configured) return false;
@@ -62,11 +51,7 @@ namespace Iridium.Patches.Optimizer
 
 		private static bool _errorLogged;
 
-		/// <summary>
-		/// 让 camRT 保持缩放尺寸。仅在游戏已启用 RT 管线（useRTCam）时介入，
-		/// 菜单 / 编辑器等未启用 RT 的场景保持原版行为。
-		/// <para>前缀异常会导致游戏 Update 被跳过，因此这里整体兜底。</para>
-		/// </summary>
+		/// <summary>Keep camRT at the scaled size; only engages when the game already uses the RT pipeline, and the whole body is guarded because a prefix throw would skip scrCamera.Update.</summary>
 		public static void EnsureScaledRT(scrCamera cam)
 		{
 			if (cam == null || !Configured) return;
@@ -97,7 +82,7 @@ namespace Iridium.Patches.Optimizer
 
 			var oldRT = CamRTRef(cam);
 			bool sized = oldRT != null && oldRT.width == w && oldRT.height == h;
-			// sized 但接线不完整（例如上一次尝试中途异常）时，仍走下面的幂等重接流程。
+			// Sized but not wired (e.g. an earlier attempt threw halfway) still re-runs the idempotent wiring below.
 			bool wired = sized && cam.camobj != null && ReferenceEquals(cam.camobj.targetTexture, oldRT);
 			if (wired)
 			{
@@ -175,11 +160,7 @@ namespace Iridium.Patches.Optimizer
 		}
 	}
 
-	/// <summary>
-	/// 屏幕坐标修正：世界相机渲染到缩放 RT 后，pixelWidth / ScreenToWorldPoint 等
-	/// 需要表现得与「全屏 RT」一致（原版 camRT 就是全屏，游戏逻辑按屏幕像素书写），
-	/// 否则输入、视差、编辑器拾取等会整体偏移。
-	/// </summary>
+	/// <summary>Scaled world cameras must still report screen-pixel coordinates, or input, parallax and editor picking all shift.</summary>
 	[IriPatch(Path = "optimizer/renderscale", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer,enableRenderScale")]
 	[HarmonyPatch(typeof(Camera))]
 	public static class RenderScaleCameraPatches

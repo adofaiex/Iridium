@@ -10,7 +10,7 @@ namespace Iridium
 	{
 		private static readonly Dictionary<string, string[]> _options = new()
 		{
-			// ── 通用：用户直接感知的画质/资源项 ──
+			// 通用：用户直接感知的画质/资源项
 			["basics"] = new[]
 			{
 				"EnableOptimizer", "RenderScale", "RenderScalePercent",
@@ -18,7 +18,7 @@ namespace Iridium
 				"MultipleOf4", "DivideImageBy", "DontResizeCollider", "DisableShadows",
 				"ShowVRAMNotification",
 			},
-			// ── 游戏性能：Update 热路径与玩法相关 ──
+			// 游戏性能：Update 热路径与玩法相关
 			["gameplay"] = new[]
 			{
 				"OptimizeDecorationUpdate", "OptimizeHitboxDetection", "OptimizeTileUpdate",
@@ -28,7 +28,7 @@ namespace Iridium
 				"OptimizeScnGameUpdate", "OptimizePlayerInputAllocations", "OptimizeRDInputAllocations",
 				"OptimizeGameplayAllocations", "SkipEventIfPaused",
 			},
-			// ── 特效与动画：缓动/DOTween/粒子 ──
+			// 特效与动画：缓动/DOTween/粒子
 			["fx"] = new[]
 			{
 				"EnableCustomEasingEngine", "OptimizeFilters",
@@ -36,7 +36,7 @@ namespace Iridium
 				"DOTweenDefaultRecyclable", "DOTweenDisableSafeMode",
 				"OptimizeParticle", "OptimizeParticleInactive", "OptimizeParticleCulling", "OptimizeParticleLod",
 			},
-			// ── 高级 / 实验性 ──
+			// 高级 / 实验性
 			["advanced"] = new[]
 			{
 				"OptimizeLargeLevelLoading", "ChunkedFloorSpawn",

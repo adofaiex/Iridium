@@ -10,20 +10,10 @@ using UnityEngine;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// 装饰物渲染脏检查 + 滤镜结果缓存（v3 移植，适配 ADOFAI 2.9.8）。
-    ///
-    /// 原版 scrVisualDecoration.UpdateShader 对每个可见装饰物每帧无条件执行：
-    /// 材质 SetColor/SetFloat/SetVector、localScale 写入、主纹理赋值，以及
-    /// （带滤镜时）整条 RT blit 链。装饰物数量成百上千的谱面上是一笔稳定的
-    /// 每帧开销。
-    ///
-    /// - optimizeDecorationShaderCache：无滤镜装饰物在颜色/透明度/平铺/贴图/
-    ///   可见性全部未变化时跳过整个 UpdateShader。
-    /// - optimizeFilters：只有"输出仅由源贴图与公开字段决定"的滤镜参与缓存
-    ///   （白名单来自 OpenGL Core GLSL 里 _Time/_TimeX 的实际引用分析）；
-    ///   自带时间动画的滤镜（VHS/噪点/雨雪/故障等）永远走原版每帧重绘。
-    ///   滤镜字段变化通过事件打脏 + DOTween 参数动画检测来失效。
-    /// </summary>
+/// Dirty-checks scrVisualDecoration.UpdateShader and caches filter output. Only
+/// filters whose result depends solely on the source texture and public fields
+/// are cached; time-animated ones (VHS, noise, rain, glitch) always redraw.
+/// </summary>
     public static class DecorationFilterCachePatches
     {
         private sealed class CacheState

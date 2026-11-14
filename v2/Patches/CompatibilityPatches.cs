@@ -81,16 +81,10 @@ namespace Iridium.Patches
         }
 
         /// <summary>
-        /// 缩放CameraFilterPack着色器内部动画速度以适应音高变化
-        /// 所有CameraFilterPack组件的OnRenderImage中都有 TimeX += Time.deltaTime 驱动内部动画，
-        /// 该patch将其替换为 TimeX += Time.deltaTime * pitch，
-        /// 使录制降pitch视频后期加速后滤镜着色器动画速度与原始一致
-        /// === 与旧方案的区别 ===
-        /// 旧方案错误地只修正了tween的duration (通过adjustDurationForHardbake)，
-        /// 但滤镜着色器内部的TimeX仍然使用未缩放的Time.deltaTime，
-        /// 导致录制降pitch后着色器动画以原速运行，后期加速后显得更快
-        /// 新方案直接修改着色器的时间推进速度，从根源解决
-        /// </summary>
+/// Scales CameraFilterPack's internal shader animation with pitch: their OnRenderImage
+/// does TimeX += Time.deltaTime, so speeding the video up after a low-pitch recording
+/// would otherwise run the shaders faster than the original.
+/// </summary>
         [HarmonyPatch]
         public static class ScaleFilterSpeedWithPitchPatch
         {

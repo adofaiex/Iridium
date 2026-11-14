@@ -9,9 +9,6 @@ using ADOFAI;
 
 namespace Iridium.Patches
 {
-    /// <summary>
-    /// 专门针对 scnGame 和 scnEditor 的性能优化 Patch
-    /// </summary>
     public static class SceneOptimizationPatches
     {
         #region Shared Caches
@@ -36,9 +33,6 @@ namespace Iridium.Patches
 
         #region scnGame Optimizations
 
-        /// <summary>
-        /// 缓存 scnGame 中频繁使用的 GameObject.Find 结果
-        /// </summary>
         [HarmonyPatch(typeof(scnGame), "Awake")]
         public static class ScnGameCacheReferencesPatch
         {
@@ -68,9 +62,6 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// 优化 scnGame.Update - 只在相机参数变化时更新
-        /// </summary>
         [HarmonyPatch(typeof(scnGame), "Update")]
         public static class ScnGameUpdateOptimizationPatch
         {
@@ -127,7 +118,6 @@ namespace Iridium.Patches
                     return false;
                 }
 
-                // 更新缓存
                 _lastOrthoSize = orthoSize;
                 _lastAspect = aspect;
 
@@ -135,7 +125,6 @@ namespace Iridium.Patches
                 float width = height * aspect;
                 _cachedScreenSize = new Vector2(width, height);
 
-                // 手动执行更新逻辑，避免重复计算
                 var camInstance = scrCamera.instance;
                 if (camInstance != null)
                 {
@@ -153,9 +142,6 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// 优化 ApplyEventsToFloors - 预先分类事件避免多次 FindAll
-        /// </summary>
         [HarmonyPatch(typeof(scnGame), "ApplyEventsToFloors",
             typeof(List<scrFloor>), typeof(LevelData), typeof(scrLevelMaker), typeof(List<LevelEvent>))]
         public static class ApplyEventsOptimizationPatch
@@ -193,9 +179,6 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// 清理缓存 - 在场景销毁时
-        /// </summary>
         [HarmonyPatch(typeof(scnGame), "OnDestroy")]
         public static class ScnGameCleanupPatch
         {
@@ -218,9 +201,6 @@ namespace Iridium.Patches
 
         #region scnEditor Optimizations
 
-        /// <summary>
-        /// 优化 scnEditor.ObjectsAtMouse - 重用 List 避免 GC
-        /// </summary>
         [HarmonyPatch(typeof(scnEditor), "ObjectsAtMouse")]
         public static class ObjectsAtMouseOptimizationPatch
         {
@@ -243,15 +223,12 @@ namespace Iridium.Patches
 
                     _lastFrameUpdated = Time.frameCount;
 
-                    // 重用 List
                     _reusableColliderList.Clear();
                     _reusableGameObjectList.Clear();
 
-                    // 获取鼠标位置
                     Vector2 mousePos = __instance.camera.ScreenToWorldPoint(Input.mousePosition);
                     float magnitude = __instance.camera.orthographicSize * 2f;
 
-                    // 遍历 floors
                     var floors = __instance.floors;
                     if (floors == null)
                     {
@@ -286,7 +263,6 @@ namespace Iridium.Patches
                         }
                     }
 
-                    // 执行物理检测
                     var hits = Physics2D.OverlapPointAll(mousePos);
                     var resultList = new List<GameObject>();
 
@@ -296,8 +272,8 @@ namespace Iridium.Patches
                             resultList.Add(hit.gameObject);
                     }
 
-                    // Match original: return null when nothing hit so caller can
-                    // DeselectFloors() + DeselectAllDecorations() on empty clicks
+                    // Match original: null on no hit, so empty clicks still reach
+                    // DeselectFloors() + DeselectAllDecorations()
                     __result = resultList.Count > 0 ? resultList.ToArray() : null!;
                     _cachedResult = __result;
 
@@ -311,9 +287,6 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// 优化 scnEditor.DestroyEventIndicators - 维护列表而不是每次 Find
-        /// </summary>
         [HarmonyPatch(typeof(scnEditor), "DestroyEventIndicators")]
         public static class DestroyEventIndicatorsPatch
         {
@@ -324,11 +297,9 @@ namespace Iridium.Patches
 
                 try
                 {
-                    // 禁用 EventCircle
                     if (__instance.EventCircle != null)
                         __instance.EventCircle.gameObject.SetActive(false);
 
-                    // 使用 FindGameObjectsWithTag 但只调用一次
                     var indicators = GameObject.FindGameObjectsWithTag("EventIndicator");
                     foreach (var indicator in indicators)
                     {
@@ -346,15 +317,11 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// 优化 scnEditor.Update 中的 ScrollRect 查找
-        /// </summary>
         [HarmonyPatch(typeof(scnEditor), "Update")]
         public static class EditorUpdateScrollRectCachePatch
         {
             private static readonly ConditionalWeakTable<GameObject, ScrollRect> _scrollRectCache = new();
 
-            // 提供缓存查找方法
             public static ScrollRect? FindScrollRect(GameObject obj)
             {
                 if (obj == null) return null;
@@ -377,10 +344,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// ToggleFloorNumsEditorAction 不再调用 RemakePath()（重建整个路径很慢），
-        /// 改为只调 DrawFloorNums() 刷新编号标签的可见性。
-        /// </summary>
+        /// <summary>DrawFloorNums() instead of RemakePath(), which rebuilds the whole path and is very slow.</summary>
         [HarmonyPatch(typeof(ToggleFloorNumsEditorAction), "Execute")]
         public static class ToggleFloorNumsActionPatch
         {

@@ -6,10 +6,7 @@ using UnityEngine;
 
 namespace Iridium.Patches
 {
-    /// <summary>
-    /// Patches that resolve their Harmony target at runtime so they work
-    /// across game versions (3.2.0, 3.3.0) without compile-time coupling.
-    /// </summary>
+    /// <summary>Harmony targets resolved at runtime, so no compile-time coupling to a game version.</summary>
     internal static class AdaptivePatches
     {
         [IriPatch(Path = "optimizer/texture", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer")]

@@ -65,9 +65,8 @@ namespace Iridium.Patches.Sound
 			}
 		}
 
-		// 3.4.0 起 scrHitTextMesh.Show 会自己写 text（customText/ToLocalized），
-		// 因此必须用 Postfix 在游戏赋值之后覆盖；3.3.x 的 Show 不写 text，
-		// Postfix 覆盖也与旧 Prefix 行为等价。
+		// 3.4.0 起 scrHitTextMesh.Show 会自己写 text（customText/ToLocalized），必须用
+		// Postfix 在游戏赋值之后覆盖；3.3.x 的 Show 不写 text，行为等价。
 		[HarmonyPatch(typeof(scrHitTextMesh), "Show")]
 		[IriPatch(Path = "sound/judgeText", Pre = typeof(JudgeTextSettings), Condition = "enableJudgeTextCustomization")]
 		public static class HitTextMeshShowPatch
@@ -79,8 +78,7 @@ namespace Iridium.Patches.Sound
 
 				string template = Settings.GetTextForHitMarginName(__instance.hitMargin.ToString());
 
-				// 空模板 = 隐藏该判定文本（与 3.3.x 的 Prefix 行为一致）。
-				// 3.4.0 的 Show 会先写入原生文本，所以这里要主动清空。
+				// 空模板 = 隐藏该判定文本。3.4.0 的 Show 会先写入原生文本，所以这里要主动清空。
 				if (string.IsNullOrEmpty(template))
 				{
 					___text.text = "";

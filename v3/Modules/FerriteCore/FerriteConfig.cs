@@ -1,14 +1,10 @@
 namespace Iridium.Modules.FerriteCore
 {
     /// <summary>
-    /// FerriteCore-style configuration, loaded from the standalone
-    /// <c>Config/FerriteCore.json</c> file. This file is
-    /// deliberately kept OUT of Settings.xml — Settings.xml only carries
-    /// the 基础优化 master switch (<see cref="Config.MemorySettings.enableBasicOptimization"/>).
-    ///
-    /// The defaults below ARE the “basic profile” applied by that switch:
-    /// safe, low-risk tuning only. Framerate / vsync / audio / L1 renderer
-    /// sleep stay opt-in via this file for advanced users.
+    /// Loaded from the standalone Config/FerriteCore.json, deliberately outside
+    /// Settings.xml (which only carries the 基础优化 master switch).
+    /// The defaults below ARE that switch's basic profile: safe tuning only.
+    /// Framerate / vsync / audio / L1 renderer sleep stay opt-in here.
     /// </summary>
     public class FerriteConfig
     {

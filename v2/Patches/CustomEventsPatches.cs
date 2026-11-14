@@ -8,23 +8,11 @@ using ADOFAI;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// Third-party custom events (CustomEvent) support.
-    ///
-    /// Charts made for third-party mods can contain events whose eventType is
-    /// unknown to the game (e.g. "MyMod.CustomEvent"). The game's LevelEvent.Decode
-    /// returns NoTypeFound for them, leaving info == null, and LevelData.Decode then
-    /// crashes on levelEvent.info.taroDLCCheck → the chart fails to load.
-    ///
-    /// Iridium temporarily registers fake LevelEventInfo entries for every unknown
-    /// event type found in the chart's actions/decorations, so decoding succeeds and
-    /// the events survive save/load untouched. In the editor inspector these events
-    /// are read-only (disable / delete only), since their real behavior comes from
-    /// the third-party mod that is not installed.
-    ///
-    /// The same machinery also covers unknown event types in v3 (version &gt; 15)
-    /// charts when the "v3 level compatibility" option is on: they must not break
-    /// loading, but there is no need to backport their behavior.
-    /// </summary>
+/// Unknown event types (third-party mods, or v3 charts) make LevelEvent.Decode leave
+/// info == null and LevelData.Decode crash on levelEvent.info.taroDLCCheck. Register a
+/// fake LevelEventInfo per unknown type so the chart loads and round-trips untouched;
+/// the editor treats them as read-only since the real mod isn't installed.
+/// </summary>
     public static class CustomEventsPatches
     {
         private static readonly HashSet<string> FakeEventNames = new();
@@ -33,12 +21,8 @@ namespace Iridium.Patches
         private static bool IsFakeEventName(string? name) => name != null && FakeEventNames.Contains(name);
         private static bool IsFakeInfo(LevelEventInfo? info) => info != null && info.name != null && FakeInfos.ContainsKey(info.name);
 
-        /// <summary>
-        /// uGUI 会把点击过的 Button 留在 EventSystem.currentSelectedGameObject 上：
-        /// 第三方事件的 Tab 会一直保持「选中 / 聚焦」高亮，之后按 Enter/Space
-        /// 还会再次触发它。处理完 fake tab 点击后主动释放焦点。
-        /// （与隔壁 Litematica 的 ReleaseUiFocus 同思路）
-        /// </summary>
+        // uGUI keeps a clicked Button in EventSystem.currentSelectedGameObject, so
+// Enter/Space would re-trigger it until focus is released
         private static void ReleaseUiFocus()
         {
             var eventSystem = UnityEngine.EventSystems.EventSystem.current;
@@ -53,18 +37,14 @@ namespace Iridium.Patches
                 foreach (var p in panel.panelsList)
                     if (p != null)
                         p.gameObject.SetActive(false);
-            // The original ShowPanel is skipped when we intercept, so its
-            // title/message cleanup never runs; clear them here too.
+            // The original ShowPanel is skipped, so its title/message cleanup never runs
             var titleCanvas = HarmonyLib.AccessTools.Field(typeof(InspectorPanel), "titleCanvas")?.GetValue(panel) as UnityEngine.GameObject;
             titleCanvas?.SetActive(false);
             var msgCanvas = HarmonyLib.AccessTools.Field(typeof(InspectorPanel), "messageCanvas")?.GetValue(panel) as UnityEngine.GameObject;
             msgCanvas?.SetActive(false);
         }
 
-        /// <summary>
-        /// Build a fake LevelEventInfo whose propertiesInfo mirrors every key found
-        /// in the event data, so LevelEvent.Encode round-trips the event untouched.
-        /// </summary>
+        /// <summary>propertiesInfo mirrors every key in the event data so Encode round-trips it untouched.</summary>
         private static LevelEventInfo BuildFakeInfo(string eventName, Dictionary<string, object> eventDict)
         {
             if (FakeInfos.TryGetValue(eventName, out var cached)) return cached;
@@ -106,10 +86,7 @@ namespace Iridium.Patches
             return info;
         }
 
-        /// <summary>
-        /// 为未知事件类型准备（必要时注册）一个只读 fake LevelEventInfo。
-        /// v3 谱面兼容的兜底路径（事件解码失败 / 未知事件漏注册）会用到。
-        /// </summary>
+        /// <summary>Read-only fake LevelEventInfo for an unknown event type, registered on demand.</summary>
         internal static LevelEventInfo? EnsureFakeInfo(string? eventName, Dictionary<string, object>? eventDict)
         {
             if (string.IsNullOrEmpty(eventName) || GCS.levelEventsInfo == null) return null;
@@ -176,8 +153,8 @@ namespace Iridium.Patches
                     continue;
                 }
 
-                // Same custom type may appear with different key sets; merge new
-                // keys into the cached fake info so every instance round-trips.
+                // The same custom type may appear with different key sets; merge new keys so
+// every instance round-trips.
                 if (IsFakeEventName(name)) MergeFakeInfoKeys(existing, ev);
             }
         }
@@ -202,10 +179,6 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Before a chart decodes: drop previously registered fake events and
-        /// register fake infos for every unknown event type in this chart.
-        /// </summary>
         [HarmonyPatch(typeof(LevelData), nameof(LevelData.Decode))]
         public static class ScanRegisterPatch
         {
@@ -224,10 +197,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Same as ScanRegisterPatch but for the level select path
-        /// (LevelDataCLS.Decode is used by scnCLS, pause, practice and portals).
-        /// </summary>
+        /// <summary>Level select path (scnCLS, pause, practice and portals all use LevelDataCLS.Decode).</summary>
         [HarmonyPatch(typeof(LevelDataCLS), nameof(LevelDataCLS.Decode))]
         public static class ScanRegisterCLSPatch
         {
@@ -246,10 +216,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Decode fake events manually so info/data are fully populated and the
-        /// chart loads without crashing on levelEvent.info.taroDLCCheck.
-        /// </summary>
+        /// <summary>Decode fake events by hand so info/data are populated and the chart does not crash on info.taroDLCCheck.</summary>
         [HarmonyPatch(typeof(LevelEvent), nameof(LevelEvent.Decode))]
         public static class FakeEventDecodePatch
         {
@@ -303,15 +270,8 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Encode fake (custom / unknown) events by hand.
-        ///
-        /// The 2.9.8 Encode() builds its output from info.propertiesInfo (whose
-        /// mirrored keys are all typed as String), casts every value to string and
-        /// would both crash on non-string values and write eventType "None" —
-        /// so fake events could never round-trip. Emit the original eventType
-        /// name plus each stored raw value instead.
-        /// </summary>
+        // The 2.9.8 Encode casts every value to string and writes eventType "None", so
+// fake events could never round-trip; emit the original name and raw values.
         [HarmonyPatch(typeof(LevelEvent), nameof(LevelEvent.Encode))]
         public static class FakeEventEncodePatch
         {
@@ -362,8 +322,7 @@ namespace Iridium.Patches
                             case "locked":
                                 continue;
                         }
-                        // Keys absent from the original JSON decode as disabled
-                        // defaults; keep them out of the encoded output.
+                        // Keys absent from the original JSON decode as disabled defaults; keep them out.
                         if (ev.disabled != null && ev.disabled.TryGetValue(kv.Key, out bool disabled) && disabled)
                             continue;
                         Field(kv.Key, Json.Serialize(kv.Value));
@@ -373,9 +332,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// The fake event's property panel is read-only: disable every control.
-        /// </summary>
+        /// <summary>The fake event's property panel is read-only: disable every control.</summary>
         [HarmonyPatch(typeof(PropertiesPanel), nameof(PropertiesPanel.Init))]
         public static class ReadOnlyPanelPatch
         {
@@ -395,10 +352,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Event list items: fake events show their original name instead of "None"
-        /// and a generic icon instead of the Flash/fallback icon.
-        /// </summary>
+        /// <summary>List items show the original name and a generic icon instead of "None" / the fallback icon.</summary>
         [HarmonyPatch(typeof(ListItem_Event), nameof(ListItem_Event.SetEvent))]
         public static class ListItemEventPatch
         {
@@ -435,10 +389,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Floor event indicators: fake events use the generic icon instead of
-        /// levelEventIcons[None] (which would crash or show a wrong sprite).
-        /// </summary>
+        /// <summary>levelEventIcons[None] would crash or show a wrong sprite; use the generic icon.</summary>
         [HarmonyPatch(typeof(EventIndicator), nameof(EventIndicator.Init))]
         public static class EventIndicatorPatch
         {
@@ -463,10 +414,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// Hook the inspector's ShowPanel: when a fake event is selected, render its
-        /// own property panel with the original event name and the read-only notice.
-        /// </summary>
+        /// <summary>Render the fake event's own panel with its original name and the read-only notice.</summary>
         [HarmonyPatch(typeof(InspectorPanel), nameof(InspectorPanel.ShowPanel))]
         public static class ShowPanelFakeEventPatch
         {
@@ -485,8 +433,8 @@ namespace Iridium.Patches
                 if (eventType != LevelEventType.None) return true;
                 try
                 {
-                    // Switching to a floor without events clears the selection first;
-                    // GetSelectedFloorEvents would then crash on selectedFloors[0].
+                    // Switching to a floor without events clears the selection first, then
+// GetSelectedFloorEvents would crash on selectedFloors[0]
                     if (ADOBase.editor == null || ADOBase.editor.selectedFloors == null || ADOBase.editor.selectedFloors.Count == 0)
                     {
                         HideFakePanels(__instance);
@@ -495,8 +443,7 @@ namespace Iridium.Patches
                     var floorEvents = ADOBase.editor.GetSelectedFloorEvents(eventType);
                     if (floorEvents == null || eventIndex < 0 || eventIndex >= floorEvents.Count || floorEvents[eventIndex] == null || !IsFakeInfo(floorEvents[eventIndex].info))
                     {
-                        // No fake event to show: hide every fake panel so the original
-                        // ShowPanel(None) logic cannot re-activate them (panel leakage).
+                        // No fake event to show: hide all, else the original ShowPanel(None) re-activates them
                         HideFakePanels(__instance);
                         return false;
                     }
@@ -541,8 +488,7 @@ namespace Iridium.Patches
                     var fakeTab = EnsureFakeTab(__instance, ev.info.name);
                     fakeTab.gameObject.SetActive(true);
                     fakeTab.eventIndex = eventIndex;
-                    // Sync selection of every tab (the original ShowPanel tab loop
-                    // is skipped by this prefix, so official tabs would keep focus).
+                    // Sync every tab: this prefix skips the original selection loop
                     foreach (UnityEngine.Transform t in __instance.tabs)
                     {
                         var tab = t.GetComponent<ADOFAI.InspectorTab>();
@@ -570,12 +516,8 @@ namespace Iridium.Patches
         }
 
 
-        /// <summary>
-        /// Find or create the inspector tab for fake (third-party) events. The
-        /// tab is levelEventType.None with the DefaultNullDecoration icon; its
-        /// click lands in ShowPanel(None, eventIndex), which ShowPanelFakeEventPatch
-        /// routes to the correct fake event.
-        /// </summary>
+        // A fake tab's click lands in ShowPanel(None, eventIndex), which
+// ShowPanelFakeEventPatch routes to the right event
         private static ADOFAI.InspectorTab EnsureFakeTab(ADOFAI.InspectorPanel panel, string eventName)
         {
             foreach (UnityEngine.Transform t in panel.tabs)
@@ -594,8 +536,7 @@ namespace Iridium.Patches
             fakeTab.icon.sprite = UnityEngine.Resources.Load<UnityEngine.Sprite>("LevelEditor/LevelEvents/DefaultNullDecoration");
             fakeTab.button.name = eventName;
             fakeTab.GetComponent<UnityEngine.RectTransform>().AnchorPosY(-68f * panel.tabs.childCount);
-            // Official event tabs are flipped (FlipTab: ScaleX(-1)); mirror that so
-            // the tab background/icon face the same way.
+            // Official tabs are flipped (FlipTab: ScaleX(-1)); mirror it
             fakeTab.button.transform.localScale = new UnityEngine.Vector3(-1f, 1f, 1f);
             fakeTab.icon.transform.localScale = new UnityEngine.Vector3(-1f, 1f, 1f);
             if (fakeTab.cycleButtons != null)
@@ -604,11 +545,7 @@ namespace Iridium.Patches
             return fakeTab;
         }
 
-        /// <summary>
-        /// ShowTabsForFloor only toggles tabs created at Init time, so fake events
-        /// never get a tab and cannot be switched to while official events exist.
-        /// Create/show the fake event tab when the floor has fake events.
-        /// </summary>
+        // ShowTabsForFloor only toggles tabs created at Init time, so fake events never get one
         [HarmonyPatch(typeof(InspectorPanel), nameof(InspectorPanel.ShowTabsForFloor))]
         public static class ShowTabsForFloorPatch
         {
@@ -620,8 +557,7 @@ namespace Iridium.Patches
                     var floorEvents = scnEditor.instance?.GetFloorEvents(floorID, LevelEventType.None);
                     if (floorEvents == null) return;
 
-                    // Distinct fake event names on this floor, with their index in
-                    // the floor's None-event list (used as the tab's eventIndex).
+                    // Distinct fake names on this floor plus their index in the None-event list
                     var order = new List<string>();
                     var indexByName = new Dictionary<string, int>();
                     for (int i = 0; i < floorEvents.Count; i++)
@@ -635,7 +571,7 @@ namespace Iridium.Patches
                     }
                     if (order.Count == 0) return;
 
-                    // Hide fake tabs whose event is no longer on this floor.
+                    // Hide fake tabs whose event is no longer on this floor
                     foreach (UnityEngine.Transform t in __instance.tabs)
                     {
                         var tab = t.GetComponent<ADOFAI.InspectorTab>();
@@ -654,10 +590,8 @@ namespace Iridium.Patches
                         tab.SetSelected(selected);
                     }
 
-                    // The original ShowTabsForFloor repositions every tab by visible
-                    // order, but our fake tabs never match its name lookup, so they
-                    // end up stacked on the previous tab. Re-pack all visible tabs
-                    // (official + fake) exactly like the game does.
+                    // The original repositions tabs by visible order but never matches fake tabs by
+// name, so they stack on the previous tab; re-pack all visible tabs like the game.
                     int visible = 0;
                     foreach (UnityEngine.Transform t in __instance.tabs)
                     {
@@ -674,11 +608,8 @@ namespace Iridium.Patches
         }
 
 
-        /// <summary>
-        /// Fake event tabs all share levelEventType.None, so the original
-        /// SetSelected would show cycleButtons when the floor has >1 fake events
-        /// ("ghost counter"). Each fake event has its own tab, so hide it always.
-        /// </summary>
+        // All fake tabs share levelEventType.None, so the original SetSelected counts
+// them as one type and shows cycleButtons ("ghost counter"); each has its own tab
         [HarmonyPatch(typeof(InspectorTab), nameof(InspectorTab.SetSelected))]
         public static class FakeTabSetSelectedPatch
         {
@@ -688,8 +619,7 @@ namespace Iridium.Patches
                 if (__instance.levelEventType != LevelEventType.None) return;
                 if (__instance.cycleButtons != null)
                     __instance.cycleButtons.gameObject.SetActive(false);
-                // The original SetSelected sized the tab to 120px (cycleButtons
-                // space) because it counts all fake events as one type. Shrink it.
+                // The original sized the tab to 120px for cycleButtons; shrink it
                 var rt = __instance.GetComponent<UnityEngine.RectTransform>();
                 DG.Tweening.DOTween.Kill(rt);
                 var size = rt.sizeDelta;
@@ -697,11 +627,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// The original OnPointerClick treats two fake tabs as the same type
-        /// (both are None) and toggles the inspector instead of switching events.
-        /// Route fake tab clicks directly to ShowPanel(None, eventIndex).
-        /// </summary>
+        // The original OnPointerClick treats two fake tabs as one type and toggles the inspector
         [HarmonyPatch(typeof(InspectorTab), nameof(InspectorTab.OnPointerClick))]
         public static class FakeTabClickPatch
         {
@@ -757,10 +683,7 @@ namespace Iridium.Patches
             }
         }
 
-        /// <summary>
-        /// scnEditor.RemoveEventAtSelected returns early for LevelEventType.None,
-        /// which would make fake events undeletable. Handle the deletion ourselves.
-        /// </summary>
+        /// <summary>RemoveEventAtSelected returns early for None, which would make fake events undeletable.</summary>
         [HarmonyPatch(typeof(scnEditor), "RemoveEventAtSelected")]
         public static class RemoveEventAtSelectedPatch
         {
@@ -779,13 +702,12 @@ namespace Iridium.Patches
                     var remaining = __instance.GetSelectedFloorEvents(LevelEventType.None);
                     if (remaining != null && remaining.Count > 0)
                     {
-                        // Still have fake events on the floor: force the inspector to
-                        // reload and show the next one.
+                        // Still fake events left: force the inspector to show the next one
                         __instance.levelEventsPanel.ShowPanel(LevelEventType.None, 0);
                     }
                     else
                     {
-                        // All fake events gone: force the inspector to close.
+                        // All fake events gone: force the inspector to close
                         __instance.levelEventsPanel.HideAllInspectorTabs();
                     }
                     __instance.ApplyEventsToFloors();

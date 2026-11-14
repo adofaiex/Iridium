@@ -165,6 +165,21 @@ namespace Iridium.Patches.Optimizer
 				int sourceW = source.width;
 				int sourceH = source.height;
 
+				if (sourceW < 2 || sourceH < 2 || targetW <= 0 || targetH <= 0)
+				{
+					// The loop below indexes (yFloor+1)*sourceW and xFloor+1 unconditionally, so a source under 2px would read past the array.
+					Main.Logger?.Log($"[Optimizer] ResizeTextureCPU: bad size {sourceW}x{sourceH} -> {targetW}x{targetH}");
+					return null;
+				}
+
+				// Bit-exact with the managed loop below (same int-then-float delta, truncating u8 cast, byte quantization between the lerp stages).
+				if (Iridium.Native.IridiumNative.HasResizeBilinear &&
+					Iridium.Native.IridiumNative.ResizeBilinearPinned(
+						sourcePixels, sourceW, sourceH, targetPixels, targetW, targetH))
+				{
+					return FinishResize(source, targetPixels, targetW, targetH);
+				}
+
 				float xRatio = (float)(sourceW - 1) / targetW;
 				float yRatio = (float)(sourceH - 1) / targetH;
 
@@ -195,6 +210,24 @@ namespace Iridium.Patches.Optimizer
 					}
 				}
 
+				Texture2D result = new(targetW, targetH, source.format, source.mipmapCount > 1);
+				result.SetPixels32(targetPixels);
+				result.Apply(false, false);
+				result.name = source.name;
+				return result;
+			}
+			catch (Exception e)
+			{
+				Main.Logger?.Log($"[Optimizer] CPU Resize Error: {e.Message}");
+				return null;
+			}
+		}
+
+		/// <summary>Wrap an already-resampled buffer into a Texture2D; shared so both resize paths produce identical textures.</summary>
+		private static Texture2D? FinishResize(Texture2D source, Color32[] targetPixels, int targetW, int targetH)
+		{
+			try
+			{
 				Texture2D result = new(targetW, targetH, source.format, source.mipmapCount > 1);
 				result.SetPixels32(targetPixels);
 				result.Apply(false, false);

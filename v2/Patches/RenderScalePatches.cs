@@ -5,17 +5,10 @@ using UnityEngine;
 namespace Iridium.Patches
 {
 	/// <summary>
-	/// 帧缓冲降分辨率（Render Scale）运行时（v2 / ADOFAI 2.9.8 移植版）。
-	///
-	/// 复用游戏原生的 RT 相机管线（scrCamera.SetupRTCam）：
-	///   世界相机(Bgcamstatic/BGcam/camobj) → camRT → quad → Overlaycam → 屏幕
-	/// 原版在关卡开始（scnGame.Play）时就会开启该管线，但 camRT 始终是全屏尺寸。
-	/// 这里只把 camRT 缩放到 Screen * scale：世界画面以较低分辨率渲染，再由 quad 双线性放大回全屏，
-	/// 从而降低 GPU 填充开销——不需要任何自定义 Shader / AssetBundle。
-	///
-	/// 因为世界相机渲染到的不是屏幕尺寸的 RT，Camera.pixelWidth / ScreenToWorldPoint 等
-	/// 依赖屏幕像素的 API 需要一并修正（见 <see cref="RenderScalePatches.CameraCoordPatch"/>）。
-	/// </summary>
+/// Reuses the game's own RT camera pipeline and only shrinks camRT to Screen * scale,
+/// so the world renders at lower resolution and the quad upscales it. Screen-pixel
+/// dependent APIs (pixelWidth, ScreenToWorldPoint) are corrected in CameraCoordPatch.
+/// </summary>
 	public static class RenderScaleRuntime
 	{
 		public const int MinPercent = 30;
@@ -61,11 +54,7 @@ namespace Iridium.Patches
 
 		private static bool _errorLogged;
 
-		/// <summary>
-		/// 让 camRT 保持缩放尺寸。仅在游戏已启用 RT 管线（useRTCam）时介入，
-		/// 菜单 / 编辑器等未启用 RT 的场景保持原版行为。
-		/// <para>前缀异常会导致游戏 Update 被跳过，因此这里整体兜底。</para>
-		/// </summary>
+		/// <summary>仅在游戏已启用 RT 管线（useRTCam）时介入；前缀异常会跳过整个 Update，故整体兜底。</summary>
 		public static void EnsureScaledRT(scrCamera cam)
 		{
 			if (cam == null || !Configured) return;
@@ -107,7 +96,7 @@ namespace Iridium.Patches
 			var target = oldRT;
 			if (!sized)
 			{
-				// 与原版保持一致：默认格式、24 位深度；额外指定双线性放大。
+				// 与原版一致：默认格式、24 位深度；额外指定双线性放大
 				target = new RenderTexture(w, h, 24)
 				{
 					name = "IridiumRenderScaleRT",
@@ -120,17 +109,17 @@ namespace Iridium.Patches
 				CamRTRef(cam) = target;
 			}
 
-			// 重新指定三台世界相机的 targetTexture，并确保 Overlaycam / quad 处于激活状态。
+			// 重新指定三台世界相机的 targetTexture，并确保 Overlaycam / quad 激活
 			cam.SetupRTCam(true);
 
-			// 原版逻辑：自定义帧率模式下 quad 纹理由该功能自行管理，这里不接管。
+			// 自定义帧率模式下 quad 纹理由该功能自行管理，这里不接管
 			if (!cam.enableCustomFPS)
 			{
 				var quadMesh = CamQuadMeshRef(cam);
 				if (quadMesh != null) quadMesh.material.mainTexture = target;
 			}
 
-			// 复刻原版创建 RT 时对 quad 的尺寸设置，保证铺满 Overlaycam 视野。
+			// 复刻原版对 quad 的尺寸设置，保证铺满 Overlaycam 视野
 			if (cam.quad != null && cam.Overlaycam != null)
 			{
 				float num = cam.Overlaycam.orthographicSize * 2f;
@@ -152,10 +141,7 @@ namespace Iridium.Patches
 		}
 	}
 
-	/// <summary>
-	/// 嵌套补丁容器：由 PatchManager.RegisterNestedPatches(typeof(RenderScalePatches), ...) 注册，
-	/// 条件为 enableOptimizer && enableRenderScale。
-	/// </summary>
+	/// <summary>嵌套补丁容器，条件为 enableOptimizer && enableRenderScale。</summary>
 	public static class RenderScalePatches
 	{
 		[HarmonyPatch(typeof(scrCamera))]
@@ -172,18 +158,14 @@ namespace Iridium.Patches
 			[HarmonyPatch("get_camRTNeedsRecreation"), HarmonyPrefix]
 			public static bool NeedsRecreationPrefix(ref bool __result)
 			{
-				// 关闭时交还原版：它会发现 camRT 尺寸不等于 Screen 并重建为全分辨率，从而自动还原。
+				// 关闭时交还原版：它会发现 camRT 尺寸不等于 Screen 并重建为全分辨率，自动还原
 				if (!RenderScaleRuntime.Configured) return true;
 				__result = false;
 				return false;
 			}
 		}
 
-		/// <summary>
-		/// 屏幕坐标修正：世界相机渲染到缩放 RT 后，pixelWidth / ScreenToWorldPoint 等
-		/// 需要表现得与「全屏 RT」一致（原版 camRT 就是全屏，游戏逻辑按屏幕像素书写），
-		/// 否则输入、视差、编辑器拾取等会整体偏移。
-		/// </summary>
+		/// <summary>缩放 RT 下 pixelWidth / ScreenToWorldPoint 等仍需表现得像全屏 RT，否则输入与拾取会整体偏移。</summary>
 		[HarmonyPatch(typeof(Camera))]
 		public static class CameraCoordPatch
 		{

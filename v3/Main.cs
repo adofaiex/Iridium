@@ -23,8 +23,8 @@ namespace Iridium
             Logger = new Logger();
             Settings = handler.LoadSettings<Settings>();
             Localization.Load();
-            // Migrate pre-rework memory settings: the old FerriteCore master
-            // switch folds into the unified basic-optimization switch.
+            // Pre-rework builds stored the FerriteCore master switch; it folds into the
+            // unified basic-optimization switch.
             if (Settings.memory.enableFerriteCore)
             {
                 Settings.memory.enableBasicOptimization = true;
@@ -58,6 +58,9 @@ namespace Iridium
 
             // 初始化自定义缓速引擎
             Iridium.Core.CustomEasingEngine.Initialize();
+
+            // Probe the optional native library; absence or ABI mismatch falls back to C#.
+            Iridium.Native.IridiumNative.Probe();
 
             Logger?.Log(Localization.Get("ModLoaded", Settings.language));
             return true;
@@ -153,7 +156,6 @@ namespace Iridium
                 }
 
                 // 静态装饰物合批：依赖缓速引擎，二者都开启时随启动激活
-                // （默认存档里已开启的配置，之前只在设置回调里生效 → 启动后从不激活）
                 if (Main.Settings.optimizer.enableStaticDecorationBatching
                     && Main.Settings.optimizer.enableCustomEasingEngine)
                     Patches.Optimizer.StaticDecorationBatcher.SetEnabled(true);

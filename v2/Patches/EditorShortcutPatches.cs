@@ -92,9 +92,7 @@ namespace Iridium.Patches
             return true;
         }
 
-        // ============================================================
-        //  Actions
-        // ============================================================
+        // Actions
 
         private static void SelectAllDecorations(scnEditor editor)
         {
@@ -217,9 +215,7 @@ namespace Iridium.Patches
             }
         }
 
-        // ============================================================
-        //  Modifier helpers
-        // ============================================================
+        // Modifier helpers
 
         public const int MOD_CTRL = 1;
         public const int MOD_SHIFT = 4;

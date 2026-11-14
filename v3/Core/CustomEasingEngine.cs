@@ -6,27 +6,15 @@ using UnityEngine;
 namespace Iridium.Core
 {
     /// <summary>
-    /// 自定义缓速引擎 — 完全脱离 DOTween 的轻量级动画系统。
-    ///
-    /// 设计要点（相对旧版的根本性修正）：
-    /// 1. IrTween 为 class（引用句柄），由引擎以 (Target, TweenType) 为键统一管理，
-    ///    同键自动 Kill(complete) 再创建 —— 与原版 moveTweens 的覆盖语义一致，
-    ///    修复了旧版"占位 null 导致重叠事件互相打架"的问题。
-    /// 2. 属性的读/写直接以 typed switch 实现（无 delegate、无闭包、无装箱），
-    ///    创建与每帧更新的托管分配为零。
-    /// 3. 支持 Goto（时间轴 scrub）与按事件（owner）批量 Kill，
-    ///    对接原版 ScrubToTime / ffxPlusBase.Kill 的语义。
+    /// Custom easing engine — a lightweight animation system fully detached from DOTween.
+    /// IrTween is a reference handle; the engine keys them by (Target, TweenType) and
+    /// Kill(complete)s an existing tween with the same key before creating a new one.
     /// </summary>
     public static class CustomEasingEngine
     {
-        // ==================== 缓速函数计算 ====================
-
-        private const float PiOver2 = (float)Math.PI / 2f;
-
         /// <summary>
-        /// 计算指定 Ease 类型在 time/duration 时刻的插值值 [0, 1]。
-        /// 移植自 DOTween EaseManager.Evaluate（含 Flash/Elastic/Bounce 完整表，
-        /// 参数取 DOTween SetEase 默认值：amplitude=1.70158, period=0）。
+        /// Evaluate an Ease at time/duration, amplitude=1.70158 and period=0 by default.
+        /// The math lives in iridium_core (Rust); without it the engine is inert.
         /// </summary>
         public static float Evaluate(Ease ease, float time, float duration)
         {
@@ -35,260 +23,9 @@ namespace Iridium.Core
 
         public static float Evaluate(Ease ease, float time, float duration, float amplitude, float period)
         {
-            if (duration <= 0f) return time >= 0f ? 1f : 0f;
-
-            switch (ease)
-            {
-                case Ease.Linear: return time / duration;
-                case Ease.InSine: return -(float)Math.Cos(time / duration * PiOver2) + 1f;
-                case Ease.OutSine: return (float)Math.Sin(time / duration * PiOver2);
-                case Ease.InOutSine: return -0.5f * ((float)Math.Cos((float)Math.PI * time / duration) - 1f);
-                case Ease.InQuad: { var t = time / duration; return t * t; }
-                case Ease.OutQuad: { var t = time / duration; return -t * (t - 2f); }
-                case Ease.InOutQuad:
-                {
-                    var t = time / (duration * 0.5f);
-                    return t < 1f ? 0.5f * t * t : -0.5f * ((t -= 1f) * (t - 2f) - 1f);
-                }
-                case Ease.InCubic: { var t = time / duration; return t * t * t; }
-                case Ease.OutCubic: { var t = time / duration - 1f; return t * t * t + 1f; }
-                case Ease.InOutCubic:
-                {
-                    var t = time / (duration * 0.5f);
-                    return t < 1f ? 0.5f * t * t * t : 0.5f * ((t -= 2f) * t * t + 2f);
-                }
-                case Ease.InQuart: { var t = time / duration; return t * t * t * t; }
-                case Ease.OutQuart: { var t = time / duration - 1f; return -(t * t * t * t - 1f); }
-                case Ease.InOutQuart:
-                {
-                    var t = time / (duration * 0.5f);
-                    return t < 1f ? 0.5f * t * t * t * t : -0.5f * ((t -= 2f) * t * t * t - 2f);
-                }
-                case Ease.InQuint: { var t = time / duration; return t * t * t * t * t; }
-                case Ease.OutQuint: { var t = time / duration - 1f; return t * t * t * t * t + 1f; }
-                case Ease.InOutQuint:
-                {
-                    var t = time / (duration * 0.5f);
-                    return t < 1f ? 0.5f * t * t * t * t * t : 0.5f * ((t -= 2f) * t * t * t * t + 2f);
-                }
-                case Ease.InExpo: return time == 0f ? 0f : (float)Math.Pow(2f, 10f * (time / duration - 1f));
-                case Ease.OutExpo: return time == duration ? 1f : -(float)Math.Pow(2f, -10f * time / duration) + 1f;
-                case Ease.InOutExpo:
-                {
-                    if (time == 0f) return 0f;
-                    if (time == duration) return 1f;
-                    var t = time / (duration * 0.5f);
-                    return t < 1f ? 0.5f * (float)Math.Pow(2f, 10f * (t - 1f))
-                                      : 0.5f * (-(float)Math.Pow(2f, -10f * (t -= 1f)) + 2f);
-                }
-                case Ease.InCirc: return -(float)Math.Sqrt(1f - (time /= duration) * time) + 1f;
-                case Ease.OutCirc: return (float)Math.Sqrt(1f - (time = time / duration - 1f) * time);
-                case Ease.InOutCirc:
-                {
-                    var t = time / (duration * 0.5f);
-                    return t < 1f ? -0.5f * ((float)Math.Sqrt(1f - t * t) - 1f)
-                                     : 0.5f * ((float)Math.Sqrt(1f - (t -= 2f) * t) + 1f);
-                }
-                case Ease.InBack:
-                {
-                    var t = time / duration;
-                    return t * t * ((amplitude + 1f) * t - amplitude);
-                }
-                case Ease.OutBack:
-                {
-                    var t = time / duration - 1f;
-                    return t * t * ((amplitude + 1f) * t + amplitude) + 1f;
-                }
-                case Ease.InOutBack:
-                {
-                    var s = amplitude * 1.525f;
-                    var t = time / (duration * 0.5f);
-                    return t < 1f ? 0.5f * (t * t * ((s + 1f) * t - s))
-                                     : 0.5f * ((t -= 2f) * t * ((s + 1f) * t + s) + 2f);
-                }
-                case Ease.InBounce: return BounceEaseIn(time, duration);
-                case Ease.OutBounce: return BounceEaseOut(time, duration);
-                case Ease.InOutBounce: return BounceEaseInOut(time, duration);
-                case Ease.InElastic: return ElasticEaseIn(time, duration, amplitude, ref period);
-                case Ease.OutElastic: return ElasticEaseOut(time, duration, amplitude, ref period);
-                case Ease.InOutElastic: return ElasticEaseInOut(time, duration, amplitude, ref period);
-                case Ease.Flash: return FlashEase(time, duration, amplitude, period);
-                case Ease.InFlash: return FlashEaseIn(time, duration, amplitude, period);
-                case Ease.OutFlash: return FlashEaseOut(time, duration, amplitude, period);
-                case Ease.InOutFlash: return FlashEaseInOut(time, duration, amplitude, period);
-                default: // OutQuad
-                {
-                    var t = time / duration;
-                    return -t * (t - 2f);
-                }
-            }
+            // Easing math is hard-bound to iridium_core: without the library the engine is inert.
+            return Iridium.Native.IridiumNative.Evaluate((int)ease, time, duration, amplitude, period);
         }
-
-        // ---- Bounce（逐行移植自 DOTween Bounce 类） ----
-
-        private static float BounceEaseOut(float time, float duration)
-        {
-            if ((time /= duration) < 0.36363637f) return 7.5625f * time * time;
-            if (time < 0.72727275f) return 7.5625f * (time -= 0.54545456f) * time + 0.75f;
-            if (time < 0.90909094f) return 7.5625f * (time -= 0.8181818f) * time + 0.9375f;
-            return 7.5625f * (time -= 21f / 22f) * time + 63f / 64f;
-        }
-
-        private static float BounceEaseIn(float time, float duration)
-        {
-            return 1f - BounceEaseOut(duration - time, duration);
-        }
-
-        private static float BounceEaseInOut(float time, float duration)
-        {
-            if (time < duration * 0.5f) return BounceEaseIn(time * 2f, duration) * 0.5f;
-            return BounceEaseOut(time * 2f - duration, duration) * 0.5f + 0.5f;
-        }
-
-        // ---- Elastic（逐行移植自 DOTween EaseManager，period=0 时取默认周期） ----
-
-        private static float ElasticEaseIn(float time, float duration, float amplitude, ref float period)
-        {
-            if (time == 0f) return 0f;
-            if ((time /= duration) == 1f) return 1f;
-            if (period == 0f) period = duration * 0.3f;
-            float s;
-            if (amplitude < 1f)
-            {
-                amplitude = 1f;
-                s = period / 4f;
-            }
-            else
-            {
-                s = period / ((float)Math.PI * 2f) * (float)Math.Asin(1f / amplitude);
-            }
-            return -(amplitude * (float)Math.Pow(2.0, 10f * (time -= 1f)) *
-                     (float)Math.Sin((time * duration - s) * ((float)Math.PI * 2f) / period));
-        }
-
-        private static float ElasticEaseOut(float time, float duration, float amplitude, ref float period)
-        {
-            if (time == 0f) return 0f;
-            if ((time /= duration) == 1f) return 1f;
-            if (period == 0f) period = duration * 0.3f;
-            float s;
-            if (amplitude < 1f)
-            {
-                amplitude = 1f;
-                s = period / 4f;
-            }
-            else
-            {
-                s = period / ((float)Math.PI * 2f) * (float)Math.Asin(1f / amplitude);
-            }
-            return amplitude * (float)Math.Pow(2.0, -10f * time) *
-                   (float)Math.Sin((time * duration - s) * ((float)Math.PI * 2f) / period) + 1f;
-        }
-
-        private static float ElasticEaseInOut(float time, float duration, float amplitude, ref float period)
-        {
-            if (time == 0f) return 0f;
-            if ((time /= duration * 0.5f) == 2f) return 1f;
-            if (period == 0f) period = duration * 0.45000002f;
-            float s;
-            if (amplitude < 1f)
-            {
-                amplitude = 1f;
-                s = period / 4f;
-            }
-            else
-            {
-                s = period / ((float)Math.PI * 2f) * (float)Math.Asin(1f / amplitude);
-            }
-            if (time < 1f)
-            {
-                return -0.5f * (amplitude * (float)Math.Pow(2.0, 10f * (time -= 1f)) *
-                                (float)Math.Sin((time * duration - s) * ((float)Math.PI * 2f) / period));
-            }
-            return amplitude * (float)Math.Pow(2.0, -10f * (time -= 1f)) *
-                   (float)Math.Sin((time * duration - s) * ((float)Math.PI * 2f) / period) * 0.5f + 1f;
-        }
-
-        // ---- Flash（逐行移植自 DOTween Flash 类 + WeightedEase） ----
-
-        private static float FlashWeighted(float amplitude, float period, int stepIndex, float stepDuration, float dir, float res)
-        {
-            float delta = 0f;
-            float extra = 0f;
-            if (dir > 0f && (int)amplitude % 2 == 0)
-                stepIndex++;
-            else if (dir < 0f && (int)amplitude % 2 != 0)
-                stepIndex++;
-            if (period > 0f)
-            {
-                float whole = (float)Math.Truncate(amplitude);
-                extra = amplitude - whole;
-                if (whole % 2f > 0f)
-                    extra = 1f - extra;
-                extra = extra * stepIndex / amplitude;
-                delta = res * (amplitude - stepIndex) / amplitude;
-            }
-            else if (period < 0f)
-            {
-                period = -period;
-                delta = res * stepIndex / amplitude;
-            }
-            float diff = delta - res;
-            res += diff * period + extra;
-            if (res > 1f) res = 1f;
-            return res;
-        }
-
-        private static float FlashEase(float time, float duration, float amplitude, float period)
-        {
-            int step = UnityEngine.Mathf.CeilToInt(time / duration * amplitude);
-            float stepDuration = duration / amplitude;
-            time -= stepDuration * (step - 1);
-            float dir = (step % 2 != 0) ? 1f : -1f;
-            if (dir < 0f) time -= stepDuration;
-            float res = time * dir / stepDuration;
-            return FlashWeighted(amplitude, period, step, stepDuration, dir, res);
-        }
-
-        private static float FlashEaseIn(float time, float duration, float amplitude, float period)
-        {
-            int step = UnityEngine.Mathf.CeilToInt(time / duration * amplitude);
-            float stepDuration = duration / amplitude;
-            time -= stepDuration * (step - 1);
-            float dir = (step % 2 != 0) ? 1f : -1f;
-            if (dir < 0f) time -= stepDuration;
-            time *= dir;
-            float res = (time /= stepDuration) * time;
-            return FlashWeighted(amplitude, period, step, stepDuration, dir, res);
-        }
-
-        private static float FlashEaseOut(float time, float duration, float amplitude, float period)
-        {
-            int step = UnityEngine.Mathf.CeilToInt(time / duration * amplitude);
-            float stepDuration = duration / amplitude;
-            time -= stepDuration * (step - 1);
-            float dir = (step % 2 != 0) ? 1f : -1f;
-            if (dir < 0f) time -= stepDuration;
-            time *= dir;
-            float res = -(time /= stepDuration) * (time - 2f);
-            return FlashWeighted(amplitude, period, step, stepDuration, dir, res);
-        }
-
-        private static float FlashEaseInOut(float time, float duration, float amplitude, float period)
-        {
-            int step = UnityEngine.Mathf.CeilToInt(time / duration * amplitude);
-            float stepDuration = duration / amplitude;
-            time -= stepDuration * (step - 1);
-            float dir = (step % 2 != 0) ? 1f : -1f;
-            if (dir < 0f) time -= stepDuration;
-            time *= dir;
-            float res = ((time /= stepDuration * 0.5f) < 1f)
-                ? 0.5f * time * time
-                : -0.5f * ((time -= 1f) * (time - 2f) - 1f);
-            return FlashWeighted(amplitude, period, step, stepDuration, dir, res);
-        }
-
-        // ==================== Tween 句柄 ====================
 
         public enum ValueKind { Float, Vec2, Color }
 
@@ -330,6 +67,21 @@ namespace Iridium.Core
                 ApplyAt(ElapsedTime);
             }
 
+            /// <summary>
+            /// 推进时间但不应用（批处理求值用）：越界时钳位并标记完成。
+            /// </summary>
+            public void Advance(float dt)
+            {
+                if (Dead) return;
+                ElapsedTime += dt;
+                if (ElapsedTime >= Duration)
+                {
+                    ElapsedTime = Duration;
+                    Completed = true;
+                    Dead = true;
+                }
+            }
+
             /// <summary>立即应用当前进度的状态（创建时调用，消除与原版 DOTween 的时序差）。</summary>
             public void ApplyCurrent()
             {
@@ -363,9 +115,9 @@ namespace Iridium.Core
                 Dead = true;
             }
 
-            private void ApplyAt(float time)
+            /// <summary>用已算好的插值进度应用状态（批处理路径）。</summary>
+            public void ApplyProgress(float t)
             {
-                float t = Evaluate(EaseType, time, Duration);
                 switch (Kind)
                 {
                     case ValueKind.Vec2:
@@ -379,10 +131,14 @@ namespace Iridium.Core
                         break;
                 }
             }
+
+            private void ApplyAt(float time)
+            {
+                ApplyProgress(Evaluate(EaseType, time, Duration));
+            }
         }
 
-        // ==================== 属性读/写（typed switch，零分配） ====================
-
+        // Typed switch rather than reflection: this runs every frame per tween.
         private static float GetCurrentFloat(object target, TweenType type)
         {
             if (target is scrFloor floor)
@@ -505,8 +261,6 @@ namespace Iridium.Core
                 floor.SetColor(value);
         }
 
-        // ==================== 全局 Tween 管理 ====================
-
         private static readonly List<IrTween> _active = new List<IrTween>(256);
         private static readonly List<IrTween> _pendingAdd = new List<IrTween>(64);
         private static readonly Dictionary<(object, TweenType), IrTween> _byKey = new Dictionary<(object, TweenType), IrTween>();
@@ -559,8 +313,39 @@ namespace Iridium.Core
             _initialized = true;
         }
 
-        /// <summary>每帧驱动。双指针原地压缩，死亡的 tween 一次性截断。
-        /// frameCount 幂等：同帧多次调用只生效一次。</summary>
+        /// <summary>批量缓冲：位置/时长/进度 SoA，按需扩容。</summary>
+        private static int[] _batchEase = new int[64];
+        private static float[] _batchTime = new float[64];
+        private static float[] _batchDur = new float[64];
+        private static float[] _batchAmp = new float[64];
+        private static float[] _batchPer = new float[64];
+        private static float[] _batchOut = new float[64];
+        private static IrTween[] _batchMap = new IrTween[64];
+
+        /// <summary>低于该数量时逐条求值（FFI 开销大于收益）。</summary>
+        private const int BatchThreshold = 8;
+
+        static CustomEasingEngine()
+        {
+            for (int i = 0; i < _batchAmp.Length; i++) _batchAmp[i] = 1.70158f;
+        }
+
+        private static void EnsureBatchCapacity(int n)
+        {
+            if (_batchEase.Length >= n) return;
+            int cap = _batchEase.Length;
+            while (cap < n) cap *= 2;
+            _batchEase = new int[cap];
+            _batchTime = new float[cap];
+            _batchDur = new float[cap];
+            _batchAmp = new float[cap];
+            _batchPer = new float[cap];
+            _batchOut = new float[cap];
+            _batchMap = new IrTween[cap];
+            for (int i = 0; i < cap; i++) _batchAmp[i] = 1.70158f;
+        }
+
+        /// <summary>Per-frame driver, idempotent per frameCount. Evaluation goes through the native SoA batch when available, else one call per tween.</summary>
         public static void Update(float deltaTime)
         {
             if (!_initialized) return;
@@ -577,29 +362,69 @@ namespace Iridium.Core
             int count = _active.Count;
             if (count == 0) return;
 
-            int write = 0;
-            for (int read = 0; read < count; read++)
+            if (Iridium.Native.IridiumNative.HasEvaluateBatch && count >= BatchThreshold)
             {
-                var tween = _active[read];
-                tween.Tick(deltaTime);
-                if (!tween.Dead)
+                EnsureBatchCapacity(count);
+                int n = 0;
+                for (int read = 0; read < count; read++)
                 {
-                    _active[write] = tween;
-                    write++;
+                    var tween = _active[read];
+                    if (tween.Dead) continue; // 已被 Kill，直接压缩掉
+                    tween.Advance(deltaTime);
+                    _batchEase[n] = (int)tween.EaseType;
+                    _batchTime[n] = tween.ElapsedTime;
+                    _batchDur[n] = tween.Duration;
+                    _batchMap[n] = tween;
+                    n++;
                 }
+
+                bool evaluated = n > 0 && Iridium.Native.IridiumNative.EvaluateBatch(
+                    _batchEase, _batchTime, _batchDur, _batchAmp, _batchPer, _batchOut, n);
+
+                if (!evaluated)
+                {
+                    for (int i = 0; i < n; i++)
+                    {
+                        var tween = _batchMap[i];
+                        _batchOut[i] = Evaluate(tween.EaseType, tween.ElapsedTime, tween.Duration);
+                    }
+                }
+
+                int write = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    var tween = _batchMap[i];
+                    tween.ApplyProgress(_batchOut[i]);
+                    if (!tween.Dead)
+                    {
+                        _active[write] = tween;
+                        write++;
+                    }
+                }
+                if (write < count)
+                    _active.RemoveRange(write, count - write);
             }
-            if (write < count)
-                _active.RemoveRange(write, count - write);
+            else
+            {
+                int write = 0;
+                for (int read = 0; read < count; read++)
+                {
+                    var tween = _active[read];
+                    tween.Tick(deltaTime);
+                    if (!tween.Dead)
+                    {
+                        _active[write] = tween;
+                        write++;
+                    }
+                }
+                if (write < count)
+                    _active.RemoveRange(write, count - write);
+            }
 
             ReconcileDeadTargets();
         }
 
-        // ==================== 创建 API ====================
-
-        /// <summary>
-        /// 启动一个 float tween。若 (target, type) 已有活跃 tween，先 Kill(complete:true)
-        /// ——与原版 moveTweens 覆盖语义一致。当前值已等于目标值时不创建（同原版判定）。
-        /// </summary>
+        /// <summary>Start a float tween. Kills any live tween with the same (target, type) first; skips creation when the current value already equals the target.</summary>
         public static IrTween? Start(object target, TweenType type, float endValue, float duration, Ease ease, object? owner = null)
         {
             KillByKey(target, type, complete: true);
@@ -696,8 +521,6 @@ namespace Iridium.Core
             targetList.Add(tween);
             TargetTweensBecameActive?.Invoke(tween.Target);
         }
-
-        // ==================== Kill / Goto ====================
 
         public static void KillByKey(object target, TweenType type, bool complete)
         {

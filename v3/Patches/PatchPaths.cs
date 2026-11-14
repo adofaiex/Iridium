@@ -1,12 +1,8 @@
 namespace Iridium.Patches
 {
-	/// <summary>
-	/// Hierarchical path tree — pure structure, no conditions.
-	/// Conditions are defined on each patch via <c>[IriPatch(Pre=..., Condition=...)]</c>.
-	/// </summary>
+	/// <summary>Root path nodes; gating lives on <c>[IriPatch(Pre=..., Condition=...)]</c>.</summary>
 	public static class PatchPaths
 	{
-		// ── Optimizer ──
 		public static readonly PatchNode Optimizer = new PatchNode()
 			.WithChild("texture", new PatchNode())
 			.WithChild("decor", new PatchNode())
@@ -35,14 +31,12 @@ namespace Iridium.Patches
 			.WithChild("editorFloor", new PatchNode()
 				.WithChild("insert", new PatchNode()));
 
-		// ── Bugfix ──
 		public static readonly PatchNode Bugfix = new PatchNode()
 			.WithChild("portal", new PatchNode())
 			.WithChild("coopPause", new PatchNode())
 			.WithChild("editorPlayReset", new PatchNode())
 			.WithChild("turnaround", new PatchNode());
 
-		// ── Compatibility ──
 		public static readonly PatchNode Compatibility = new PatchNode()
 			.WithChild("legacyPause", new PatchNode())
 			.WithChild("noFail", new PatchNode())
@@ -53,7 +47,6 @@ namespace Iridium.Patches
 			.WithChild("requiredMods", new PatchNode())
 			.WithChild("customEvents", new PatchNode());
 
-		// ── UI ──
 		public static readonly PatchNode UI = new PatchNode()
 			.WithChild("news", new PatchNode())
 			.WithChild("watermark", new PatchNode())
@@ -65,18 +58,15 @@ namespace Iridium.Patches
 			.WithChild("pauseTrail", new PatchNode())
 			.WithChild("lobbyMusic", new PatchNode());
 
-		// ── Sound ──
 		public static readonly PatchNode Sound = new PatchNode()
 			.WithChild("hitSound", new PatchNode())
 			.WithChild("judgeText", new PatchNode())
 			.WithChild("judgeTextRotation", new PatchNode());
 
-		// ── Editor ──
 		public static readonly PatchNode Editor = new PatchNode()
 			.WithChild("shortcuts", new PatchNode())
 			.WithChild("pause", new PatchNode());
 
-		// ── AsyncInput ──
 		public static readonly PatchNode AsyncInput = new PatchNode();
 	}
 }

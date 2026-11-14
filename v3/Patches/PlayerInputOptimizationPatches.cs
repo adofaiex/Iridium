@@ -9,28 +9,18 @@ using UnityEngine;
 namespace Iridium.Patches
 {
     /// <summary>
-    /// Eliminates per-frame heap allocations in the player input hot path.
+    /// Eliminates per-frame heap allocations in the player input hot path: the
+    /// per-frame lambdas wrapping scrPlayer's hold-check callbacks become delegates
+    /// compiled once via AccessTools.MethodDelegate.
     ///
-    /// Vanilla scrPlayer.Simulated_PlayerControl_Update (called every frame per
-    /// player) wraps hold-check callbacks in AsyncInputUtils.WhileFloorNotChange
-    /// using captured lambdas:
-    ///
-    ///     AsyncInputUtils.WhileFloorNotChange(this, delegate { CheckPostHoldFail(targetTick); });
-    ///     ... (7 total)
-    ///
-    /// This patch replaces the method with an equivalent implementation that
-    /// invokes the hold-check callbacks via compiled delegates (created once
-    /// via AccessTools.MethodDelegate) instead of per-frame lambdas.
-    ///
-    /// 3.4.0 changed the tick parameter type from ulong? to long?. This patch
-    /// resolves the target and its prefix at runtime (MonoAdaptivePatch) so a
-    /// single implementation serves both 3.3.x and 3.4.0.
+    /// 3.4.0 changed the tick parameter from ulong? to long?, so the target and its
+    /// prefix are resolved at runtime (MonoAdaptivePatch) and one implementation
+    /// serves both 3.3.x and 3.4.0.
     /// </summary>
     public static class PlayerInputOptimizationPatches
     {
         private static readonly Dictionary<string, Delegate> _delegates = new();
 
-        // Cached FieldRefs to private scrPlayer fields.
         private static AccessTools.FieldRef<scrPlayer, bool>? _nextTileIsHoldCachedRef;
         private static AccessTools.FieldRef<scrPlayer, bool>? _validInputWasReleasedThisFrameRef;
         private static AccessTools.FieldRef<scrPlayer, Vector2>? _cachedCamyToPosRef;
@@ -93,7 +83,6 @@ namespace Iridium.Patches
 
             private static bool Apply<T>(scrPlayer __instance, T? targetTick) where T : struct
             {
-                // Opt-in optimization — when disabled, fall through to the original.
                 if (!Main.Settings.optimizer.optimizePlayerInputAllocations)
                 {
                     return true;

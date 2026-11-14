@@ -9,15 +9,10 @@ using UnityEngine;
 namespace Iridium.Patches
 {
 	/// <summary>
-	/// 自定义缓速引擎 Patch — 独立于 OptimizerPatches。
-	/// 当 enableCustomEasingEngine 开启时，拦截 MoveTrack/RecolorTrack/MoveDecorations 的 StartEffect，
-	/// 用 CustomEasingEngine（零 DOTween、零分配）替代。
-	///
-	/// 与旧版实现的关键差异：
-	/// - 不再向 moveTweens/eventTweens 写 null 占位（原版 scrDecoration.OnDestroy 遍历
-	///   eventTweens.Values 不判 null，会 NRE）。旧 DOTween tween 直接 Remove。
-	/// - 引擎以 (Target, TweenType) 键控自动 Kill 旧 tween，重叠事件不再互相打架。
-	/// - 补丁 ScrubToTime / ffxPlusBase.Kill，时间轴拖动与事件清理语义与原版一致。
+	/// 自定义缓速引擎：enableCustomEasingEngine 打开后拦截 MoveTrack / RecolorTrack /
+	/// MoveDecorations 的 StartEffect，用 CustomEasingEngine 替代 DOTween。
+	/// 注意不向 moveTweens/eventTweens 写 null 占位 —— 原版 scrDecoration.OnDestroy 遍历
+	/// eventTweens.Values 不判 null，会 NRE；旧的 DOTween tween 直接 Remove。
 	/// </summary>
 	public static class CustomEasingPatches
 	{
@@ -30,8 +25,6 @@ namespace Iridium.Patches
 				tweens.Remove(type);
 			}
 		}
-
-		// ==================== MoveTrack (ffxMoveFloorPlus) ====================
 
 		[IriPatch(Path = "optimizer/customEasing", Pre = typeof(OptimizerSettings), Condition = "enableCustomEasingEngine")]
 		[HarmonyPatch(typeof(ffxMoveFloorPlus), "StartEffect")]
@@ -117,8 +110,6 @@ namespace Iridium.Patches
 			}
 		}
 
-		// ==================== RecolorTrack (ffxRecolorFloorPlus) ====================
-
 		[IriPatch(Path = "optimizer/customEasing", Pre = typeof(OptimizerSettings), Condition = "enableCustomEasingEngine")]
 		[HarmonyPatch(typeof(ffxRecolorFloorPlus), "StartEffect")]
 		public static class RecolorFloorPatch
@@ -163,8 +154,6 @@ namespace Iridium.Patches
 			}
 		}
 
-		// ==================== MoveDecoration (ffxMoveDecorationsPlus) ====================
-
 		[IriPatch(Path = "optimizer/customEasing", Pre = typeof(OptimizerSettings), Condition = "enableCustomEasingEngine")]
 		[HarmonyPatch(typeof(ffxMoveDecorationsPlus), "StartEffect")]
 		public static class MoveDecorationPatch
@@ -202,7 +191,6 @@ namespace Iridium.Patches
 
 					if (!__instance.forceDontTweenMovement)
 					{
-						// --- Position ---
 						if (__instance.positionUsed)
 						{
 							Vector2 startPos = (__instance.movementType == DecPlacementType.LastPosition)
@@ -221,7 +209,6 @@ namespace Iridium.Patches
 							}
 						}
 
-						// --- Parallax Offset ---
 						if (__instance.parallaxOffsetUsed)
 						{
 							if (!float.IsNaN(__instance.targetParallaxOffset.x))
@@ -237,7 +224,6 @@ namespace Iridium.Patches
 							}
 						}
 
-						// --- Pivot ---
 						if (__instance.pivotUsed)
 						{
 							if (!float.IsNaN(__instance.targetPivot.x))
@@ -253,14 +239,13 @@ namespace Iridium.Patches
 							}
 						}
 
-						// --- Rotation ---
 						if (__instance.rotationUsed)
 						{
 							KillVanillaTween(tweens, TweenType.Rotation);
 							CustomEasingEngine.Start(dec, TweenType.Rotation, __instance.targetRot, dur, ease, owner);
 						}
 
-						// --- Scale ---（X/Y 各自独立，回调实时读取另一轴）
+						// X/Y 各自独立，回调实时读取另一轴
 						if (__instance.scaleUsed)
 						{
 							if (!float.IsNaN(endScale.x))
@@ -277,21 +262,19 @@ namespace Iridium.Patches
 						}
 					}
 
-					// --- Color ---
 					if (__instance.colorUsed)
 					{
 						KillVanillaTween(tweens, TweenType.Color);
 						CustomEasingEngine.StartColor(dec, TweenType.Color, __instance.targetColor, dur, ease, owner);
 					}
 
-					// --- Opacity ---
 					if (__instance.opacityUsed)
 					{
 						KillVanillaTween(tweens, TweenType.Opacity);
 						CustomEasingEngine.Start(dec, TweenType.Opacity, __instance.targetOpacity, dur, ease, owner);
 					}
 
-					// --- Parallax ---（原版为 Vector2 插值）
+					// 原版为 Vector2 插值
 					if (__instance.parallaxUsed)
 					{
 						KillVanillaTween(tweens, TweenType.Parallax);
@@ -316,7 +299,7 @@ namespace Iridium.Patches
 						var cs = hasImg ? sprites[__instance.targetImageFilename] : null;
 						((scrVisualDecoration)dec).SetSprite(cs?.sprite);
 					}
-					// --- Masking 属性 (仅 scrVisualDecoration) ---
+					// Masking 属性 (仅 scrVisualDecoration)
 					if (isVisual)
 					{
 						var visDec = (scrVisualDecoration)dec;
@@ -337,14 +320,10 @@ namespace Iridium.Patches
 			}
 		}
 
-		// ==================== 引擎帧驱动 / 复位钩子 ====================
-
 		/// <summary>
-		/// 引擎 tick 与游戏帧同步：紧跟 scrVfxPlus.Update（事件触发点）之后驱动。
-		/// 原版 DOTween 的驱动 MonoBehaviour 创建于早期，其 Update 先于
-		/// scrPlanet.Update 执行；而 Main.OnUpdate（BepInEx 挂钩）时序靠后，
-		/// 会让行星读到滞后一帧的地板位置 —— MoveTrack 抖动的根源。
-		/// Update 内部有 frameCount 幂等守卫，与 Main.OnUpdate 的兜底调用不冲突。
+		/// 引擎 tick 紧跟 scrVfxPlus.Update（事件触发点）之后驱动。原版 DOTween 的驱动
+		/// MonoBehaviour 创建于早期，其 Update 先于 scrPlanet.Update 执行，而 Main.OnUpdate
+		/// 时序靠后 —— 会让行星读到滞后一帧的地板位置，是 MoveTrack 抖动的根源。
 		/// </summary>
 		[IriPatch(Path = "optimizer/customEasing", Pre = typeof(OptimizerSettings), Condition = "enableCustomEasingEngine")]
 		[HarmonyPatch(typeof(scrVfxPlus), "Update")]
@@ -359,9 +338,8 @@ namespace Iridium.Patches
 		}
 
 		/// <summary>
-		/// ResetScene（退出播放/重开）用 DOTween.PlayingTweens() 收集并杀掉所有
-		/// 正在播放的 tween —— 引擎 tween 不在 DOTween 名册里，必须在此同步杀死，
-		/// 否则随后的 ResetToLevelStart/ResetDecorations 复位会被继续写入覆盖。
+		/// ResetScene 用 DOTween.PlayingTweens() 收编所有 tween，引擎 tween 不在 DOTween 名册里，
+		/// 必须在此同步杀死，否则随后的 ResetToLevelStart/ResetDecorations 会被继续写入覆盖。
 		/// </summary>
 		[IriPatch(Path = "optimizer/customEasing", Pre = typeof(OptimizerSettings), Condition = "enableCustomEasingEngine")]
 		[HarmonyPatch(typeof(scnGame), "ResetScene")]
@@ -375,8 +353,8 @@ namespace Iridium.Patches
 		}
 
 		/// <summary>
-		/// ResetDecorations 会以 sourceLevelEvent 重置装饰物内部字段；
-		/// 引擎 tween 若继续写入会覆盖复位结果（对应原版"tween 已死不再写入"）。
+		/// ResetDecorations 会以 sourceLevelEvent 重置装饰物内部字段，引擎 tween 若继续写入
+		/// 会覆盖复位结果（对应原版"tween 已死不再写入"）。
 		/// </summary>
 		[IriPatch(Path = "optimizer/customEasing", Pre = typeof(OptimizerSettings), Condition = "enableCustomEasingEngine")]
 		[HarmonyPatch(typeof(scrDecorationManager), "ResetDecorations")]
@@ -401,13 +379,10 @@ namespace Iridium.Patches
 			}
 		}
 
-		// ==================== 原版 Appear/Disappear 动画冲突修复 ====================
-
 		/// <summary>
-		/// ffxFloorAppearPlus / ffxFloorDisappearPlus 不经我们补丁，直接用 DOTween 在
-		/// moveTweens 的 Position/Scale/Rotation/Opacity 键上建 tween。它们按原版语义
-		/// Kill 旧 tween 时看不到引擎的键控 tween —— 引擎必须先自行让位，否则
-		/// MoveTrack 留下的引擎 tween 会与消失/出现动画互相覆写（轨道淡不掉等）。
+		/// ffxFloorAppearPlus / ffxFloorDisappearPlus 不经我们补丁，直接用 DOTween 在 moveTweens
+		/// 的 Position/Scale/Rotation/Opacity 键上建 tween。它们按原版语义 Kill 旧 tween 时看不到
+		/// 引擎的键控 tween —— 引擎必须先自行让位，否则会与消失/出现动画互相覆写。
 		/// </summary>
 		private static void KillEngineTweenForVanillaKey(scrFloor floor, TweenType vanillaKey)
 		{
@@ -491,12 +466,9 @@ namespace Iridium.Patches
 			}
 		}
 
-		// ==================== 时间轴拖动 / 事件清理 ====================
-
 		/// <summary>
-		/// ScrubToTime 语义对齐：拖动到事件末尾之后 → Kill(complete)；
-		/// 拖动到中间 → Goto(已过时间)。仅覆盖未 override ScrubToTime 的
-		/// ffx 类型（Move/Recolor/MoveDecorations 均未 override）。
+		/// ScrubToTime 语义对齐：拖到事件末尾之后 → Kill(complete)，拖到中间 → Goto(已过时间)。
+		/// 仅覆盖未 override ScrubToTime 的 ffx 类型（Move/Recolor/MoveDecorations 均未 override）。
 		/// </summary>
 		[IriPatch(Path = "optimizer/customEasing", Pre = typeof(OptimizerSettings), Condition = "enableCustomEasingEngine")]
 		[HarmonyPatch(typeof(ffxPlusBase), nameof(ffxPlusBase.ScrubToTime))]
@@ -532,12 +504,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		// ==================== DOTween.KillAll 桥接 ====================
-
-		/// <summary>
-		/// 游戏退出播放/倒带/切关时调用 DOTween.KillAll —— 同步清理引擎全部 tween，
-		/// complete 语义透传。
-		/// </summary>
+		/// <summary>游戏退出播放/倒带/切关时调 DOTween.KillAll —— 同步清理引擎全部 tween，complete 语义透传。</summary>
 		[IriPatch(Path = "optimizer/customEasing", Pre = typeof(OptimizerSettings), Condition = "enableCustomEasingEngine")]
 		[HarmonyPatch(typeof(DOTween), "KillAll", new[] { typeof(bool) })]
 		public static class DotweenKillAllPatch

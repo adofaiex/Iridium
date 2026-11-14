@@ -7,19 +7,13 @@ using HarmonyLib;
 namespace Iridium.Patches
 {
 	/// <summary>
-	/// DOTween 回收安全补丁：
-	/// 当 DOTween.defaultRecyclable = true 时，已完成的 Tween 会回到对象池复用。
-	/// ADOFAI 多处存储/遍历 Tween 引用时未检查 IsActive()，导致对已回收的 Tween 进行操作，
-	/// 造成动画异常、ease 错乱、特效损坏等问题。
-	/// 
-	/// 本文件中包含的所有补丁都通过安全的 IsActive() + null 检查来防止上述问题。
+	/// DOTween 回收安全补丁：defaultRecyclable = true 时已完成的 Tween 会回到对象池，
+	/// 而 ADOFAI 多处存储/遍历 Tween 引用时未检查 IsActive() —— 本文件所有补丁都补上
+	/// IsActive() + null 检查。
 	/// </summary>
 	public static class TweenSafetyPatches
 	{
-		/// <summary>
-		/// scrVfxPlus.Reset() 会清理 filterTween，但未清理 pausedTweens。
-		/// 导致过期的 Tween 引用跨关卡累积，在下一次恢复(Play)时对已回收的 Tween 进行操作。
-		/// </summary>
+		/// <summary>scrVfxPlus.Reset() 清了 filterTween 却漏了 pausedTweens，stale 引用跨关卡累积。</summary>
 		[IriPatch(Path = "optimizer/tweenSafety", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer,dotweenDefaultRecyclable")]
 		[HarmonyPatch(typeof(scrVfxPlus), "Reset")]
 		public static class ClearPausedTweensOnReset
@@ -32,10 +26,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		/// <summary>
-		/// scrDecoration.OnDestroy() 遍历 eventTweens 直接调用 Kill(false)，
-		/// 未对可能已回收/无效的 Tween 做安全检查。
-		/// </summary>
+		/// <summary>原版 scrDecoration.OnDestroy 遍历 eventTweens 直接 Kill(false)，不做安全检查。</summary>
 		[IriPatch(Path = "optimizer/tweenSafety", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer,dotweenDefaultRecyclable")]
 		[HarmonyPatch(typeof(scrDecoration), "OnDestroy")]
 		public static class SafeDecorationOnDestroy
@@ -57,11 +48,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		/// <summary>
-		/// ffxPlusBase.Kill() 遍历 eventTweens 直接调用 Kill(false)，
-		/// 没有 null 检查也没有 IsActive() 检查。
-		/// eventTweens 是 protected 属性，通过 AccessTools 反射读取。
-		/// </summary>
+		/// <summary>原版 ffxPlusBase.Kill 遍历 eventTweens 直接 Kill(false)，null/IsActive 都不检查。</summary>
 		[IriPatch(Path = "optimizer/tweenSafety", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer,dotweenDefaultRecyclable")]
 		[HarmonyPatch(typeof(ffxPlusBase),nameof(ffxPlusBase.Kill))]
 		public static class SafeFfxPlusBaseKill
@@ -86,13 +73,7 @@ namespace Iridium.Patches
 			}
 		}
 
-		/// <summary>
-		/// ffxPlusBase.ScrubToTime() 中的两个问题：
-		/// 1. Goto() / Kill() 操作前没有 IsActive() 检查
-		/// 2. 未检查 tween 活跃性就直接添加到 pausedTweens
-		/// 
-		/// 该补丁完整替换原方法并添加了安全性检查。
-		/// </summary>
+		/// <summary>完整替换原 ScrubToTime，补上 Goto/Kill 前的 IsActive() 检查与 pausedTweens 守卫。</summary>
 		[IriPatch(Path = "optimizer/tweenSafety", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer,dotweenDefaultRecyclable")]
 		[HarmonyPatch(typeof(ffxPlusBase), nameof(ffxPlusBase.ScrubToTime))]
 		public static class SafeFfxPlusBaseScrubToTime
