@@ -1,13 +1,15 @@
+> [!NOTE]
+> Iridium supports multiple mod loaders.See README.md for platform installation.
+
+> [!WARNING]
+> Linux/macOS requires libgdiplus for UI rendering and image compression. See gdi.md to installation.
+
 ## CHANGES
-
-### Performance
-
-1. Some of the heavier calculations now run on a new Rust core. It is open source and contains no code from the game itself. If the native library fails to load, Iridium falls back to the original code path, so compatibility is not a concern.
 
 ### Fixes
 
-2. Fixed the in-game mod list under UMM not showing the Iridium page. After updating, you will see a short in-game hint (including the panel hotkey) instead of wondering where the settings went.
+1. Fixed the settings panel scaling on high-resolution displays. On a fresh install the panel used to default to a near-fullscreen window, which overflowed and covered almost the whole screen on 4K monitors. It now opens at a fixed design size (1280×840) on large screens; smaller screens still fit proportionally.
+2. Fixed a saved window geometry from another resolution or device being restored larger than the screen, leaving both edges cut off. The size is now clamped back into the visible area on restore.
 
-### Languages
-
-3. Merged PR #24, adding Latin American Spanish.
+> [!CAUTION]
+> Disclaimer: Optimization mods are not a silver bullet — do not chase FPS blindly. If issues occur, disable the specific feature and report the bug instead of labeling the entire mod broken.

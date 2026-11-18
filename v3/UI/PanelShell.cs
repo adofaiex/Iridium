@@ -511,6 +511,17 @@ namespace Iridium.UI
         private const float MinHeight = 560f;
 
         /// <summary>
+        /// Default (never-saved) window size in canvas units. The settings content
+        /// (search row + tab bar + list + title bar) is designed around ~1280×840, so the
+        /// fallback geometry takes min(screen share, this design size): small screens keep
+        /// the percentage fit, while on large screens (e.g. 4K fullscreen, where the canvas
+        /// is exactly 1920×1080) the window no longer stretches to 92%×90% of the monitor —
+        /// the root cause of the "first open fills the whole 4K screen" report.
+        /// </summary>
+        private const float DefaultWidth = 1280f;
+        private const float DefaultHeight = 840f;
+
+        /// <summary>
         /// Keeps the window usable: at least <see cref="KeepVisible"/> canvas units of it
         /// stay on screen. Unlike a hard clamp this lets the window overhang the edges
         /// (Windows behaviour) so dragging the chrome does not fight the cursor.
@@ -580,13 +591,19 @@ namespace Iridium.UI
             _panel.pivot = new Vector2(0.5f, 0.5f);
 
             float x = 0f, y = 0f;
-            float w = canvasW * 0.92f, h = canvasH * 0.9f;
+            // min(screen share, design size): percentage wins on small screens, the design
+            // size wins on large ones (see DefaultWidth/DefaultHeight).
+            float w = Mathf.Min(canvasW * 0.92f, DefaultWidth), h = Mathf.Min(canvasH * 0.9f, DefaultHeight);
 
             if (Main.Settings != null && Main.Settings.HasWindowRect)
             {
                 Main.Settings.GetWindowRect(out x, out y, out w, out h);
-                w = Mathf.Max(w, MinWidth);
-                h = Mathf.Max(h, MinHeight);
+                // A save from another resolution/device can exceed the current canvas.
+                // Clamp the SIZE back too: ClampIntoCanvas below only clamps the position,
+                // so an oversized save used to render wider than the screen with both
+                // edges cut off.
+                w = Mathf.Clamp(w, Mathf.Min(MinWidth, canvasW), canvasW);
+                h = Mathf.Clamp(h, Mathf.Min(MinHeight, canvasH), canvasH);
             }
 
             _panel.sizeDelta = new Vector2(w, h);
