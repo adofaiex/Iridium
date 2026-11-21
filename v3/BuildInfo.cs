@@ -4,7 +4,7 @@ public static class BuildInfo
 {
     /// <summary>Hardcoded ADOFAI version this build targets; set by the build script per variant.</summary>
     public const string AdofaiVersion = "v3";
-    public const string ModVersion = "2.1.0";
+    public const string ModVersion = "2.1.1";
     public const string ModName = "Iridium";
     public const string ModAuthor = "Xbodwf";
 }
