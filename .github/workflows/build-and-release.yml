@@ -354,6 +354,27 @@ jobs:
             }
           }
 
+    # Publish both zips to modrift (https://modrift.org). Best effort: any
+    # failure is reported as a warning and never blocks the release. Requires
+    # repository secrets MODRIFT_ID + MODRIFT_PASSWORD (or MODRIFT_TOKEN);
+    # without them this step only prints a warning.
+    - name: Publish to modrift (best effort)
+      continue-on-error: true
+      env:
+        MODRIFT_BASE_URL: https://modrift.org
+        MODRIFT_MOD_SLUG: iridium
+        MODRIFT_ID: ${{ secrets.MODRIFT_ID }}
+        MODRIFT_PASSWORD: ${{ secrets.MODRIFT_PASSWORD }}
+        MODRIFT_TOKEN: ${{ secrets.MODRIFT_TOKEN }}
+        MODRIFT_VERSION: ${{ steps.version_info.outputs.BASE_TAG }}
+      shell: bash
+      run: |
+        v2Tag=$(node scripts/get-version.js v2 v2 | grep '^VERSION_TAG=' | cut -d= -f2)
+        v3Tag=$(node scripts/get-version.js v3 v3 | grep '^VERSION_TAG=' | cut -d= -f2)
+        export MODRIFT_V2_ZIP="Iridium_${v2Tag}.zip"
+        export MODRIFT_V3_ZIP="Iridium_${v3Tag}.zip"
+        node scripts/publish-modrift.js
+
     - name: Update Repository jsons on mod-update repo
       shell: bash
       run: |
