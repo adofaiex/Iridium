@@ -10,10 +10,11 @@
 
 1. Fixed the settings panel scaling on high-resolution displays. On a fresh install the panel used to default to a near-fullscreen window, which overflowed and covered almost the whole screen on 4K monitors. It now opens at a fixed design size (1280×840) on large screens; smaller screens still fit proportionally.
 2. Fixed a saved window geometry from another resolution or device being restored larger than the screen, leaving both edges cut off. The size is now clamped back into the visible area on restore.
+3. Fixed the selected tab losing its highlight on the UMM settings page.
 
-### Optimizations
+### New
 
-3.You can now freely choose how the UI is displayed, either within UMM or in a standalone panel.
+4. You can now freely choose how the UI is displayed, either within UMM or in a standalone panel.
 
 > [!CAUTION]
 > Disclaimer: Optimization mods are not a silver bullet — do not chase FPS blindly. If issues occur, disable the specific feature and report the bug instead of labeling the entire mod broken.
