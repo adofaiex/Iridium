@@ -108,6 +108,11 @@ namespace Iridium.Config
         public float windowY = 0f;
         public float windowWidth = 0f;
         public float windowHeight = 0f;
+        // Where the settings UI is rendered: "panel" = the standalone UGUI panel
+        // (default), "umm" = painted with IMGUI inside UnityModManager's own settings
+        // page. "umm" is only selectable when UMM loaded the mod; on other loaders the
+        // stored value is ignored at runtime (see Settings.EffectiveUiImplementation).
+        public string uiImplementation = "panel";
         public bool hideBetaWatermark = false;
         public bool moveAutoplayText = false;
         public float autoplayTextX = 0f;

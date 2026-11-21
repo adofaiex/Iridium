@@ -37,6 +37,60 @@ namespace Iridium
         // 无内置管理器界面的加载器（MelonLoader / BepInEx）用它打开或关闭设置面板。
         public string panelToggleHotkey = "Ctrl+F9";
 
+        // ---- UI implementation (standalone UGUI panel vs UMM's own IMGUI page) ----
+
+        public const string UiImplementationPanel = "panel";
+        public const string UiImplementationUmm = "umm";
+
+        /// <summary>
+        /// UMM's settings page only exists when UMM itself loaded the mod. Detected from
+        /// the handler type so v3 needs no loader-side API: "UmmHandler" is the only
+        /// loader that owns an IMGUI settings host.
+        /// </summary>
+        public static bool UmmAvailable
+        {
+            get
+            {
+                var handler = Main.Handler;
+                return handler != null && handler.GetType().Name == "UmmHandler";
+            }
+        }
+
+        /// <summary>
+        /// Configured implementation with the loader fallback applied: a stored "umm"
+        /// is ignored (and never written back) when the mod is not loaded by UMM.
+        /// </summary>
+        public string EffectiveUiImplementation =>
+            ui.uiImplementation == UiImplementationUmm && UmmAvailable
+                ? UiImplementationUmm
+                : UiImplementationPanel;
+
+        // What the currently open surface is rendered with. Latched when a surface opens,
+        // so switching the setting never tears down the UI the user is looking at; the
+        // new implementation applies the next time the panel / UMM page is opened.
+        private string _activeUiImplementation = UiImplementationPanel;
+
+        public string ActiveUiImplementation => _activeUiImplementation;
+
+        public void LatchUiImplementation() => _activeUiImplementation = EffectiveUiImplementation;
+
+        // ---- IML-facing view of the setting (expressions read settings.*) ----
+
+        // What the UI should show as selected: the effective value, so a stored "umm" on
+        // a non-UMM loader is displayed as the panel fallback that is actually in use.
+        public string uiImplementation => EffectiveUiImplementation;
+        public bool ummAvailable => UmmAvailable;
+        public bool uiImplementationPending => ActiveUiImplementation != EffectiveUiImplementation;
+
+        // Set every frame UMM's settings page is drawn; OnGUI only fires while its window
+        // is open, so a frame gap means the page was just (re)opened. The sentinel must be
+        // a small negative number, not int.MinValue: the subtraction wraps around and would
+        // report "visible" on the very first frame.
+        private int _ummPageLastFrame = -1000;
+
+        public bool IsUmmPageVisible => Time.frameCount - _ummPageLastFrame <= 1;
+
+
         private string? _defaultLobbyMusicPathCache;
         private string? _fastLobbyMusicPathCache;
 
@@ -255,6 +309,30 @@ namespace Iridium
         private IrisGoRenderer _renderer;
         private bool _rendererInitialized = false;
 
+        /// <summary>IMGUI renderer used when the settings are painted inside UMM's page.</summary>
+        private IrisGuiRenderer? _guiRenderer;
+        private bool _guiRendererInitialized;
+
+        /// <summary>
+        /// Renderer that registration calls go to while the bindings are being built.
+        /// Both backends share the exact same IML bindings (functions, handlers, data
+        /// context), so a second renderer only needs its registrations replayed.
+        /// </summary>
+        private IImlRenderer? _registrationTarget;
+
+        private IImlRenderer Target => _registrationTarget ?? _renderer;
+
+        /// <summary>
+        /// Generic handler registration helper: <see cref="IImlRenderer"/> does not expose
+        /// the typed overload, so dispatch on the concrete backend that is being bound.
+        /// </summary>
+        private void RegisterTargetHandler<T>(string name, Action<T> handler)
+        {
+            if (Target is IrisGoRenderer go) go.RegisterHandler(name, handler);
+            else if (Target is IrisGuiRenderer gui) gui.RegisterHandler(name, handler);
+        }
+
+
         private string[] GetTabDisplayNames()
         {
             if (_cachedLanguage != language || _cachedTabDisplayNames.Length == 0)
@@ -314,24 +392,48 @@ namespace Iridium
             if (_rendererInitialized) return;
 
             _renderer = new IrisGoRenderer();
+            // Bindings are shared with the IMGUI backend; replay them onto this renderer.
+            _registrationTarget = _renderer;
+            try { BindRenderer(); }
+            finally { _registrationTarget = null; }
+            _rendererInitialized = true;
+        }
+
+        private void InitializeGuiRenderer()
+        {
+            if (_guiRendererInitialized) return;
+
+            _guiRenderer = new IrisGuiRenderer();
+            _registrationTarget = _guiRenderer;
+            try { BindRenderer(); }
+            finally { _registrationTarget = null; }
+            // IrisGuiRenderer draws through IridiumLayout's IMGUI engine (same theme
+            // tokens, metrics and textures as the UGUI toolkit).
+            _guiRenderer.SetLayout(new IridiumLayoutAdapter());
+            _guiRendererInitialized = true;
+        }
+
+        /// <summary>Data context, functions and handlers shared by both renderers.</summary>
+        private void BindRenderer()
+        {
             if (Main.Logger != null)
-                _renderer.LogDelegate = msg => Main.Logger.Log(msg);  // 适配签名
-            _renderer.SetHotReload(false);
+                Target.LogDelegate = msg => Main.Logger.Log(msg);  // 适配签名
+            Target.SetHotReload(false);
 
             // DataContext wraps 'this' as 'settings' for IML expressions; set once since 'this' is a reference.
-            _renderer.SetDataContext(new { settings = this });
+            Target.SetDataContext(new { settings = this });
 
-            _renderer.RegisterFunction("localize", args =>
+            Target.RegisterFunction("localize", args =>
             {
                 if (args.Length > 0 && args[0] is string key)
                     return Localization.Get(key);
                 return "";
             });
 
-            _renderer.RegisterFunction("getVersion", args => VersionManager.GetFullVersionString());
-            _renderer.RegisterFunction("getAsyncStatus", args =>
+            Target.RegisterFunction("getVersion", args => VersionManager.GetFullVersionString());
+            Target.RegisterFunction("getAsyncStatus", args =>
                 AsyncPatchManager.IsProcessing ? "⏳ " + Localization.Get("AsyncPatchProcessing") : "");
-            _renderer.RegisterFunction("getLanguages", args =>
+            Target.RegisterFunction("getLanguages", args =>
             {
                 var langs = Localization.AvailableLanguages;
                 var result = new List<object>();
@@ -340,7 +442,7 @@ namespace Iridium
                 return result;
             });
 
-            _renderer.RegisterFunction("getShortcutDisplay", args =>
+            Target.RegisterFunction("getShortcutDisplay", args =>
             {
                 if (args.Length >= 2 && args[0] is int key && args[1] is int mods)
                 {
@@ -353,12 +455,12 @@ namespace Iridium
                 return "";
             });
 
-            _renderer.RegisterHandler<string>("OnTabClick", key => { _currentTab = key; });
-            _renderer.RegisterHandler<string>("OnOptimizerSubTabClick", key => { _optimizerSubTab = key; });
-            _renderer.RegisterHandler<string>("OnSearchChanged", value => SetSearchQuery(value));
-            _renderer.RegisterHandler("OnSearchClear", () => SetSearchQuery(""));
-            _renderer.RegisterHandler<string>("OnSearchResultClick", key => JumpToSearchResult(key));
-            _renderer.RegisterFunction("getSearchResults", args =>
+            RegisterTargetHandler<string>("OnTabClick", key => { _currentTab = key; });
+            RegisterTargetHandler<string>("OnOptimizerSubTabClick", key => { _optimizerSubTab = key; });
+            RegisterTargetHandler<string>("OnSearchChanged", value => SetSearchQuery(value));
+            Target.RegisterHandler("OnSearchClear", () => SetSearchQuery(""));
+            RegisterTargetHandler<string>("OnSearchResultClick", key => JumpToSearchResult(key));
+            Target.RegisterFunction("getSearchResults", args =>
             {
                 var list = new List<object>();
                 string q = _searchQuery.Trim();
@@ -388,13 +490,13 @@ namespace Iridium
                 }
                 return list;
             });
-            _renderer.RegisterHandler<string>("OnSectionToggle", key => ToggleSection(key));
+            RegisterTargetHandler<string>("OnSectionToggle", key => ToggleSection(key));
             // The panel used to be a loader-specific IMGUI window; now that it is UGUI it
             // exists on every loader, so its hotkey is a first-class setting.
-            _renderer.RegisterFunction("getPanelHotkey", args =>
+            Target.RegisterFunction("getPanelHotkey", args =>
                 _isBindingPauseKey && !string.IsNullOrEmpty(_bindingPreview) ? _bindingPreview : panelToggleHotkey);
-            _renderer.RegisterHandler("OnBindPanelHotkey", () => ToggleBinding("panelToggle"));
-            _renderer.RegisterHandler<string>("OnLanguageClick", lang =>
+            Target.RegisterHandler("OnBindPanelHotkey", () => ToggleBinding("panelToggle"));
+            RegisterTargetHandler<string>("OnLanguageClick", lang =>
             {
                 // Guard the cast: a missing ForEach scope used to deliver null here and
                 // silently write a null language (no translation, no highlight).
@@ -402,13 +504,13 @@ namespace Iridium
                 language = lang;
                 Save();
             });
-            _renderer.RegisterHandler<string>("OnInfoToggle", key => ToggleInfo(key));
-            _renderer.RegisterFunction("isInfoExpanded", args =>
+            RegisterTargetHandler<string>("OnInfoToggle", key => ToggleInfo(key));
+            Target.RegisterFunction("isInfoExpanded", args =>
                 args.Length > 0 && args[0] is string key && IsInfoExpanded(key));
-            _renderer.RegisterFunction("isHighlighted", args =>
+            Target.RegisterFunction("isHighlighted", args =>
                 args.Length > 0 && args[0] is string key && IsHighlighted(key));
             // 选项行文本：跳转高亮期间返回主题色富文本，使对应行文字变色定位
-            _renderer.RegisterFunction("optLabel", args =>
+            Target.RegisterFunction("optLabel", args =>
             {
                 if (args.Length < 1 || args[0] is not string key)
                     return "";
@@ -427,13 +529,11 @@ namespace Iridium
             RegisterHitSoundHandlers();
             RegisterEditorShortcutsHandlers();
             RegisterAsyncInputHandlers();
-
-            _rendererInitialized = true;
         }
 
         private void RegisterOptimizerHandlers()
         {
-            _renderer.RegisterHandler("OnOptimizerToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizerToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.enableOptimizer = value;
@@ -450,7 +550,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnCompressToggled", (obj) =>
+            Target.RegisterHandler("OnCompressToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.dontCompress = !value;
@@ -458,14 +558,14 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnShowSavedMemoryToggled", (obj) =>
+            Target.RegisterHandler("OnShowSavedMemoryToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.dontShowSavedMemory = !value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnLossyCompressionToggled", (obj) =>
+            Target.RegisterHandler("OnLossyCompressionToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.useLossyCompression = value;
@@ -473,7 +573,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnLossyQualityChanged", (obj) =>
+            Target.RegisterHandler("OnLossyQualityChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -483,7 +583,7 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnMultipleOf4Toggled", (obj) =>
+            Target.RegisterHandler("OnMultipleOf4Toggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.dontResizeMultipleOf4 = !value;
@@ -491,7 +591,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnDivideByChanged", (obj) =>
+            Target.RegisterHandler("OnDivideByChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -501,14 +601,14 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnDontResizeColliderToggled", (obj) =>
+            Target.RegisterHandler("OnDontResizeColliderToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.dontResizeCollider = !value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnDisableShadowsToggled", (obj) =>
+            Target.RegisterHandler("OnDisableShadowsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.disableShadows = value;
@@ -519,7 +619,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnRenderScaleToggled", (obj) =>
+            Target.RegisterHandler("OnRenderScaleToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.enableRenderScale = value;
@@ -527,7 +627,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnRenderScalePercentChanged", (obj) =>
+            Target.RegisterHandler("OnRenderScalePercentChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -536,14 +636,14 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnOptimizeDecorationUpdateToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeDecorationUpdateToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeDecorationUpdate = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeHitboxDetectionToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeHitboxDetectionToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeHitboxDetection = value;
@@ -551,49 +651,49 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeTileUpdateToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeTileUpdateToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeTileUpdate = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeMoveTrackToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeMoveTrackToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeMoveTrack = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeRecolorTrackToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeRecolorTrackToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeRecolorTrack = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnSkipEventIfPausedToggled", (obj) =>
+            Target.RegisterHandler("OnSkipEventIfPausedToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.skipEventIfPaused = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeEventIconsToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeEventIconsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeEventIcons = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeScnGameUpdateToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeScnGameUpdateToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeScnGameUpdate = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizePlayerInputAllocationsToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizePlayerInputAllocationsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizePlayerInputAllocations = value;
@@ -601,7 +701,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeRDInputAllocationsToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeRDInputAllocationsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeRDInputAllocations = value;
@@ -609,14 +709,14 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeMoveDecorationsToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeMoveDecorationsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeMoveDecorations = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeFfxDecorationsToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeFfxDecorationsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeFfxDecorations = value;
@@ -624,7 +724,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnDecorationShaderCacheToggled", (obj) =>
+            Target.RegisterHandler("OnDecorationShaderCacheToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeDecorationShaderCache = value;
@@ -632,7 +732,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnStaticDecorationBatchingToggled", (obj) =>
+            Target.RegisterHandler("OnStaticDecorationBatchingToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.enableStaticDecorationBatching = value;
@@ -645,14 +745,14 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeFloorMeshToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeFloorMeshToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeFloorMesh = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeFiltersToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeFiltersToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeFilters = value;
@@ -660,14 +760,14 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnFastLoadingToggled", (obj) =>
+            Target.RegisterHandler("OnFastLoadingToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.fastLoading = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnCustomEasingEngineToggled", (obj) =>
+            Target.RegisterHandler("OnCustomEasingEngineToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.enableCustomEasingEngine = value;
@@ -682,70 +782,70 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeParticleToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeParticleToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeParticle = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeParticleInactiveToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeParticleInactiveToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeParticleInactive = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeParticleCullingToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeParticleCullingToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeParticleCulling = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeParticleLodToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeParticleLodToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeParticleLod = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeEventProcessingToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeEventProcessingToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeEventProcessing = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeEditorMouseDetectionToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeEditorMouseDetectionToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeEditorMouseDetection = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeEditorEventIndicatorsToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeEditorEventIndicatorsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeEditorEventIndicators = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeMoveTrackTweensToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeMoveTrackTweensToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeMoveTrackTweens = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnBatchMoveDecorationsToggled", (obj) =>
+            Target.RegisterHandler("OnBatchMoveDecorationsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.batchMoveDecorations = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnCustomLevelReadOptimizationToggled", (obj) =>
+            Target.RegisterHandler("OnCustomLevelReadOptimizationToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.customLevelReadOptimization = value;
@@ -753,7 +853,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnFrameSpreadDecorationLoadingToggled", (obj) =>
+            Target.RegisterHandler("OnFrameSpreadDecorationLoadingToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.frameSpreadDecorationLoading = value;
@@ -761,7 +861,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnLargeLevelLoadingToggled", (obj) =>
+            Target.RegisterHandler("OnLargeLevelLoadingToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 // 关闭前先把未激活砖块补完，避免 A 的 Awake 替换卸载后与 FastInit 重复初始化
@@ -771,7 +871,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnChunkedFloorSpawnToggled", (obj) =>
+            Target.RegisterHandler("OnChunkedFloorSpawnToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 Iridium.Patches.Optimizer.ChunkedFloorSpawnPatch.FlushAll();
@@ -780,7 +880,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeEditorInteractionsToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeEditorInteractionsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeEditorInteractions = value;
@@ -788,7 +888,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeDeathResetToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeDeathResetToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeDeathReset = value;
@@ -796,7 +896,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeDecorationResetToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeDecorationResetToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeDecorationReset = value;
@@ -804,7 +904,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeHoldRendererToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeHoldRendererToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeHoldRenderer = value;
@@ -812,7 +912,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeOnBeatToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeOnBeatToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeOnBeat = value;
@@ -820,7 +920,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeSpectrumToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeSpectrumToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeSpectrum = value;
@@ -828,7 +928,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeHitTextPoolToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeHitTextPoolToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeHitTextPool = value;
@@ -836,7 +936,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnDecorationsPerFrameChanged", (obj) =>
+            Target.RegisterHandler("OnDecorationsPerFrameChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -845,7 +945,7 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnDOTweenGlobalToggled", (obj) =>
+            Target.RegisterHandler("OnDOTweenGlobalToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeDOTweenGlobal = value;
@@ -856,7 +956,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnTweenerCapacityChanged", (obj) =>
+            Target.RegisterHandler("OnTweenerCapacityChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -866,7 +966,7 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnSequenceCapacityChanged", (obj) =>
+            Target.RegisterHandler("OnSequenceCapacityChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -876,7 +976,7 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnDOTweenDefaultRecyclableToggled", (obj) =>
+            Target.RegisterHandler("OnDOTweenDefaultRecyclableToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.dotweenDefaultRecyclable = value;
@@ -885,7 +985,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnDOTweenDisableSafeModeToggled", (obj) =>
+            Target.RegisterHandler("OnDOTweenDisableSafeModeToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.dotweenDisableSafeMode = value;
@@ -893,7 +993,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnExtremeOptimizationToggled", (obj) =>
+            Target.RegisterHandler("OnExtremeOptimizationToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.enableExtremeOptimization = value;
@@ -901,7 +1001,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnMaxTweensPerFrameChanged", (obj) =>
+            Target.RegisterHandler("OnMaxTweensPerFrameChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -910,7 +1010,7 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnBasicMemoryOptimizationToggled", (obj) =>
+            Target.RegisterHandler("OnBasicMemoryOptimizationToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 memory.enableBasicOptimization = value;
@@ -921,7 +1021,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnVirtualMemoryOptimizationToggled", (obj) =>
+            Target.RegisterHandler("OnVirtualMemoryOptimizationToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 memory.enableVirtualMemoryOptimization = value;
@@ -929,21 +1029,21 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnVmTrimOnLevelLoadToggled", (obj) =>
+            Target.RegisterHandler("OnVmTrimOnLevelLoadToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 memory.vmTrimOnLevelLoad = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnVmTrimOnEditorEnterToggled", (obj) =>
+            Target.RegisterHandler("OnVmTrimOnEditorEnterToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 memory.vmTrimOnEditorEnter = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeGameplayAllocationsToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeGameplayAllocationsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeGameplayAllocations = value;
@@ -951,7 +1051,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnEditorFloorOptimizationToggled", (obj) =>
+            Target.RegisterHandler("OnEditorFloorOptimizationToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.enableEditorFloorOptimization = value;
@@ -959,7 +1059,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnIncrementalFloorInsertToggled", (obj) =>
+            Target.RegisterHandler("OnIncrementalFloorInsertToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.incrementalFloorInsert = value;
@@ -967,7 +1067,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnRangeBasedRedrawToggled", (obj) =>
+            Target.RegisterHandler("OnRangeBasedRedrawToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.rangeBasedRedraw = value;
@@ -975,7 +1075,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnSkipRedundantRemakePathToggled", (obj) =>
+            Target.RegisterHandler("OnSkipRedundantRemakePathToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.skipRedundantRemakePath = value;
@@ -983,7 +1083,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnOptimizeOffsetFloorEventsToggled", (obj) =>
+            Target.RegisterHandler("OnOptimizeOffsetFloorEventsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.optimizeOffsetFloorEvents = value;
@@ -991,7 +1091,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnSkipApplyEventsOnInsertToggled", (obj) =>
+            Target.RegisterHandler("OnSkipApplyEventsOnInsertToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.skipApplyEventsOnInsert = value;
@@ -1002,7 +1102,27 @@ namespace Iridium
 
         private void RegisterUIHandlers()
         {
-            _renderer.RegisterHandler("OnRemoveNewsToggled", (obj) =>
+            // UI implementation (panel vs UMM page). The change is only persisted here;
+            // the surface currently on screen keeps its renderer until it is reopened
+            // (see LatchUiImplementation / Settings.OnGUI).
+            RegisterTargetHandler<string>("OnUiImplementationClick", key =>
+            {
+                if (key == UiImplementationUmm && !UmmAvailable) return;
+                if (key != UiImplementationPanel && key != UiImplementationUmm) return;
+                if (ui.uiImplementation == key) return;
+                ui.uiImplementation = key;
+                Save();
+                // UGUI does not redraw by itself; refresh the option row's highlight.
+                _renderer?.MarkDirty();
+            });
+            Target.RegisterFunction("uiImplClass", args =>
+            {
+                if (args.Length < 1 || args[0] is not string key) return "element";
+                if (key == UiImplementationUmm && !UmmAvailable) return "disabledBtn";
+                return EffectiveUiImplementation == key ? "primary" : "element";
+            });
+
+            Target.RegisterHandler("OnRemoveNewsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 ui.removeNews = value;
@@ -1011,7 +1131,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnHideBetaWatermarkToggled", (obj) =>
+            Target.RegisterHandler("OnHideBetaWatermarkToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 ui.hideBetaWatermark = value;
@@ -1020,7 +1140,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnForceDifficultyUIToggled", (obj) =>
+            Target.RegisterHandler("OnForceDifficultyUIToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 ui.forceDifficultyUI = value;
@@ -1028,7 +1148,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnAlwaysCountdownToggled", (obj) =>
+            Target.RegisterHandler("OnAlwaysCountdownToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 ui.alwaysCountdown = value;
@@ -1036,7 +1156,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnEnablePausePlanetTrailToggled", (obj) =>
+            Target.RegisterHandler("OnEnablePausePlanetTrailToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 ui.enablePausePlanetTrail = value;
@@ -1044,7 +1164,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnMoveAutoplayTextToggled", (obj) =>
+            Target.RegisterHandler("OnMoveAutoplayTextToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 ui.moveAutoplayText = value;
@@ -1053,7 +1173,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnAutoplayTextXChanged", (obj) =>
+            Target.RegisterHandler("OnAutoplayTextXChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -1063,7 +1183,7 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnAutoplayTextYChanged", (obj) =>
+            Target.RegisterHandler("OnAutoplayTextYChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -1073,7 +1193,7 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnShowAutoplayHintUIToggled", (obj) =>
+            Target.RegisterHandler("OnShowAutoplayHintUIToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 ui.showAutoplayHintUI = value;
@@ -1081,14 +1201,14 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnCustomAutoplayHintToggled", (obj) =>
+            Target.RegisterHandler("OnCustomAutoplayHintToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 ui.customAutoplayHint = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnAutoplayHintTemplateChanged", (obj) =>
+            Target.RegisterHandler("OnAutoplayHintTemplateChanged", (obj) =>
             {
                 if (obj is string s)
                 {
@@ -1097,7 +1217,7 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnEnableCircleArcToggled", (obj) =>
+            Target.RegisterHandler("OnEnableCircleArcToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 ui.enableCircleArc = value;
@@ -1109,7 +1229,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnCircleArcMinAngleChanged", (obj) =>
+            Target.RegisterHandler("OnCircleArcMinAngleChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -1121,7 +1241,7 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnCircleArcMaxAngleChanged", (obj) =>
+            Target.RegisterHandler("OnCircleArcMaxAngleChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -1155,7 +1275,7 @@ namespace Iridium
 
         private void RegisterLevelSelectHandlers()
         {
-            _renderer.RegisterHandler("OnLobbyMusicPatchToggled", (obj) =>
+            Target.RegisterHandler("OnLobbyMusicPatchToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 lobbyMusic.enableLobbyMusicPatch = value;
@@ -1164,14 +1284,14 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnEnableCustomBpmToggled", (obj) =>
+            Target.RegisterHandler("OnEnableCustomBpmToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 lobbyMusic.enableCustomBpm = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnCustomBpmChanged", (obj) =>
+            Target.RegisterHandler("OnCustomBpmChanged", (obj) =>
             {
                 if (obj is float f)
                 {
@@ -1180,14 +1300,14 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnLobbyFastMusicToggled", (obj) =>
+            Target.RegisterHandler("OnLobbyFastMusicToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 lobbyMusic.fastMusic = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnLobbyCustomMusicToggled", (obj) =>
+            Target.RegisterHandler("OnLobbyCustomMusicToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 lobbyMusic.customMusic = value;
@@ -1195,7 +1315,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnDefaultMusicPathChanged", (obj) =>
+            Target.RegisterHandler("OnDefaultMusicPathChanged", (obj) =>
             {
                 if (obj is string s)
                 {
@@ -1203,14 +1323,14 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnApplyDefaultMusic", () =>
+            Target.RegisterHandler("OnApplyDefaultMusic", () =>
             {
                 lobbyMusic.defaultMusicPath = (_defaultLobbyMusicPathCache ?? string.Empty).Trim();
                 LobbyMusicPatch.StartLoad(true, lobbyMusic.defaultMusicPath);
                 Save();
             });
 
-            _renderer.RegisterHandler("OnFastMusicPathChanged", (obj) =>
+            Target.RegisterHandler("OnFastMusicPathChanged", (obj) =>
             {
                 if (obj is string s)
                 {
@@ -1218,14 +1338,14 @@ namespace Iridium
                 }
             });
 
-            _renderer.RegisterHandler("OnApplyFastMusic", () =>
+            Target.RegisterHandler("OnApplyFastMusic", () =>
             {
                 lobbyMusic.fastMusicPath = (_fastLobbyMusicPathCache ?? string.Empty).Trim();
                 LobbyMusicPatch.StartLoad(false, lobbyMusic.fastMusicPath);
                 Save();
             });
 
-            _renderer.RegisterHandler("OnLobbyReloadMusic", () =>
+            Target.RegisterHandler("OnLobbyReloadMusic", () =>
             {
                 LobbyMusicPatch.ReloadFromSettings();
             });
@@ -1236,7 +1356,7 @@ namespace Iridium
             if (_compatFlashMode < 0) _compatFlashMode = (int)compatibility.legacyFlashMode;
             if (_compatCamRelMode < 0) _compatCamRelMode = (int)compatibility.legacyCamRelativeToMode;
 
-            _renderer.RegisterHandler("OnEnableLegacyPauseFixToggled", (obj) =>
+            Target.RegisterHandler("OnEnableLegacyPauseFixToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.enableLegacyPauseFix = value;
@@ -1244,7 +1364,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnEnableNoFailTooEarlyToggled", (obj) =>
+            Target.RegisterHandler("OnEnableNoFailTooEarlyToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.enableNoFailTooEarly = value;
@@ -1252,7 +1372,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnScaleFilterSpeedWithPitchToggled", (obj) =>
+            Target.RegisterHandler("OnScaleFilterSpeedWithPitchToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.scaleFilterSpeedWithPitch = value;
@@ -1260,21 +1380,21 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnEditorPauseAllowedToggled", (obj) =>
+            Target.RegisterHandler("OnEditorPauseAllowedToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.editorPauseAllowed = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnEditorPauseEnabledToggled", (obj) =>
+            Target.RegisterHandler("OnEditorPauseEnabledToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.editorPauseEnabled = value;
                 Save();
             });
 
-            _renderer.RegisterHandler("OnFixCameraRelativeDragToggled", (obj) =>
+            Target.RegisterHandler("OnFixCameraRelativeDragToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.fixCameraRelativeDrag = value;
@@ -1282,7 +1402,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnPortalTravelFixToggled", (obj) =>
+            Target.RegisterHandler("OnPortalTravelFixToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.portalTravelFix = value;
@@ -1290,7 +1410,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnFixEditorPlayResetMistakesToggled", (obj) =>
+            Target.RegisterHandler("OnFixEditorPlayResetMistakesToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.fixEditorPlayResetMistakes = value;
@@ -1298,7 +1418,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnFixTurnaroundConditionToggled", (obj) =>
+            Target.RegisterHandler("OnFixTurnaroundConditionToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.fixTurnaroundCondition = value;
@@ -1306,7 +1426,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnFixJudgeRotationToggled", (obj) =>
+            Target.RegisterHandler("OnFixJudgeRotationToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.fixJudgeRotation = value;
@@ -1314,7 +1434,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnFixCoopPauseLockToggled", (obj) =>
+            Target.RegisterHandler("OnFixCoopPauseLockToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.fixCoopPauseLock = value;
@@ -1324,7 +1444,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnForceAngleDataToggled", (obj) =>
+            Target.RegisterHandler("OnForceAngleDataToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.forceAngleData = value;
@@ -1332,7 +1452,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnUseILPatchToggled", (obj) =>
+            Target.RegisterHandler("OnUseILPatchToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 patchMode.useILPatch = value;
@@ -1341,7 +1461,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnIgnoreRequiredModsToggled", (obj) =>
+            Target.RegisterHandler("OnIgnoreRequiredModsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 compatibility.ignoreRequiredMods = value;
@@ -1367,7 +1487,7 @@ namespace Iridium
 
         private void RegisterHitSoundHandlers()
         {
-            _renderer.RegisterHandler("OnEnableHitSoundPitchToggled", (obj) =>
+            Target.RegisterHandler("OnEnableHitSoundPitchToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 hitSound.enableHitSoundPitch = value;
@@ -1375,7 +1495,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnJudgeTextCustomizationToggled", (obj) =>
+            Target.RegisterHandler("OnJudgeTextCustomizationToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 judgeText.enableJudgeTextCustomization = value;
@@ -1384,18 +1504,18 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnJudgeTextChanged", (obj) =>
+            Target.RegisterHandler("OnJudgeTextChanged", (obj) =>
             {
                 Save();
             });
 
-            _renderer.RegisterHandler("OnResetJudgeText", () =>
+            Target.RegisterHandler("OnResetJudgeText", () =>
             {
                 judgeText.ResetToDefault();
                 Save();
             });
 
-            _renderer.RegisterHandler("OnConvertJudgeTextToOffset", () =>
+            Target.RegisterHandler("OnConvertJudgeTextToOffset", () =>
             {
                 judgeText.ConvertAllToOffset();
                 Save();
@@ -1404,7 +1524,7 @@ namespace Iridium
 
         private void RegisterEditorShortcutsHandlers()
         {
-            _renderer.RegisterHandler("OnEnableEditorShortcutsToggled", (obj) =>
+            Target.RegisterHandler("OnEnableEditorShortcutsToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 editorShortcuts.enableEditorShortcuts = value;
@@ -1412,7 +1532,7 @@ namespace Iridium
                 Save();
             });
 
-            _renderer.RegisterHandler("OnCameraFollowOnFloorSelectToggled", (obj) =>
+            Target.RegisterHandler("OnCameraFollowOnFloorSelectToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 editorShortcuts.cameraFollowOnFloorSelect = value;
@@ -1422,7 +1542,7 @@ namespace Iridium
 
         private void RegisterAsyncInputHandlers()
         {
-            _renderer.RegisterHandler("OnAsyncInputToggled", (obj) =>
+            Target.RegisterHandler("OnAsyncInputToggled", (obj) =>
             {
                 bool value = obj is bool b ? b : false;
                 asyncInput.enableAIO = value;
@@ -1453,9 +1573,9 @@ namespace Iridium
             foreach (var (name, handler) in keys)
             {
                 var cap = char.ToUpper(name[0]) + name.Substring(1);
-                _renderer.RegisterHandler($"OnBind{cap}Key", (obj) => handler());
+                Target.RegisterHandler($"OnBind{cap}Key", (obj) => handler());
             }
-            _renderer.RegisterHandler("OnBindEditorPauseKey", (obj) => ToggleBinding("editorPause"));
+            Target.RegisterHandler("OnBindEditorPauseKey", (obj) => ToggleBinding("editorPause"));
         }
 
         /// <summary>
@@ -1584,13 +1704,30 @@ namespace Iridium
 
         /// <summary>
         /// IMGUI hook, kept for loaders whose settings page is IMGUI (UMM, MiniModLoader).
-        /// The settings tree itself is UGUI and cannot be embedded here, so this only
-        /// shows which hotkey opens the panel.
+        /// In the default "panel" mode the real settings tree is the standalone UGUI panel
+        /// and this page only explains how to open it. In "umm" mode the very same IML is
+        /// painted into this page through <see cref="IrisGuiRenderer"/> instead.
         /// </summary>
         public void OnGUI()
         {
-            // UMM / MiniModLoader draw their own IMGUI settings page, but the real settings
-            // UI is the standalone UGUI panel. This page only explains how to open it.
+            // UMM calls this only while its settings window is open, so a frame gap means
+            // the page was just reopened: that is when a pending implementation change
+            // takes effect (switching never tears down the surface currently in use).
+            if (!IsUmmPageVisible) LatchUiImplementation();
+            _ummPageLastFrame = Time.frameCount;
+
+            if (ActiveUiImplementation == UiImplementationUmm)
+            {
+                DrawUmmSettingsPage();
+                return;
+            }
+
+            DrawPanelModeHint();
+        }
+
+        /// <summary>Default mode: UMM's page just points at the standalone panel.</summary>
+        private void DrawPanelModeHint()
+        {
             var hotkey = string.IsNullOrEmpty(panelToggleHotkey) ? "Ctrl+F9" : panelToggleHotkey;
             var highlighted = $"[<color=#D973A5><b>{hotkey}</b></color>]";
             // Get(key, args) is the formatting overload: pass the hotkey as {0} (passing
@@ -1602,6 +1739,39 @@ namespace Iridium
 
             if (LinkButton(Localization.Get("PanelHotkeyOpenLink", language)))
                 Iridium.UI.PanelShell.Show();
+        }
+
+        /// <summary>
+        /// "umm" mode: paint the settings IML into UMM's own page. UMM is drawn below the
+        /// UGUI panel canvas, so the two cannot coexist; while the standalone panel is
+        /// still open this page only asks the user to close it first.
+        /// </summary>
+        private void DrawUmmSettingsPage()
+        {
+            if (Iridium.UI.PanelShell.IsVisible)
+            {
+                var noticeStyle = new GUIStyle(IridiumLayout.SecondaryText) { richText = true, wordWrap = true };
+                GUILayout.Label(Localization.Get("UiUmmClosePanelFirst"), noticeStyle);
+                if (GUILayout.Button(Localization.Get("UiUmmClosePanelButton"),
+                        IridiumLayout.PrimaryButton, GUILayout.ExpandWidth(false)))
+                {
+                    Iridium.UI.PanelShell.SetVisible(false);
+                }
+                return;
+            }
+
+            try
+            {
+                IridiumLayout.EnsureTexturesAlive();
+                InitializeGuiRenderer();
+                _guiRenderer!.Render(System.IO.Path.Combine(
+                    Main.Handler?.ModPath ?? "",
+                    "Resources", "ui", "Settings.iml"));
+            }
+            catch (Exception ex)
+            {
+                Main.Logger?.Error($"[Settings] Failed to render UMM settings page: {ex}");
+            }
         }
 
         private static GUIStyle? _linkStyle;
@@ -1965,6 +2135,31 @@ namespace Iridium
             Main.Handler?.SaveSettings(settings);
         }
 
+        /// <summary>
+        /// A stored "umm" implementation is meaningless when the mod was not loaded by
+        /// UnityModManager: there is no IMGUI page to paint into. Fall back at runtime
+        /// (the stored value is deliberately left untouched so the preference survives a
+        /// later run under UMM).
+        /// </summary>
+        public static void ValidateUiImplementation(Settings settings)
+        {
+            // Missing/corrupt values (older saves, hand-edited XML) fall back to the panel.
+            if (settings.ui.uiImplementation != UiImplementationUmm
+                && settings.ui.uiImplementation != UiImplementationPanel)
+            {
+                settings.ui.uiImplementation = UiImplementationPanel;
+                Main.Handler?.SaveSettings(settings);
+            }
+
+            settings.LatchUiImplementation();
+            if (settings.ui.uiImplementation == UiImplementationUmm && !UmmAvailable)
+            {
+                Main.Logger?.Warning(
+                    "[Settings] UI implementation is set to UnityModManager, but the mod was not " +
+                    "loaded by UMM; falling back to the standalone panel for this session.");
+            }
+        }
+
         public static void ValidateCustomEasingConflict(Settings settings)
         {
             if (!settings.optimizer.enableCustomEasingEngine) return;
@@ -1991,6 +2186,48 @@ namespace Iridium
                 if (opt.optimizeMoveDecorations) { opt.optimizeMoveDecorations = false; changed = true; }
                 if (changed) AsyncPatchManager.UpdateOptimizerPatchesAsync();
             }
+        }
+    }
+
+    /// <summary>
+    /// Bridges <see cref="Iris.Iml.IIrrLayout"/> onto the shared IMGUI layout engine in
+    /// <see cref="Iridium.UI.IridiumLayout"/> so the UMM page uses the same theme tokens,
+    /// metrics and textures as every other IMGUI surface.
+    /// </summary>
+    public class IridiumLayoutAdapter : Iris.Iml.IIrrLayout
+    {
+        public void BeginHorizontal(Iris.Iml.IrrContStyle style, GUILayoutOption[] options)
+            => IridiumLayout.Engine.Begin(ContainerDirection.Horizontal, (ContainerStyle)(int)style, null, options);
+
+        public void BeginVertical(Iris.Iml.IrrContStyle style, GUILayoutOption[] options)
+            => IridiumLayout.Engine.Begin(ContainerDirection.Vertical, (ContainerStyle)(int)style, null, options);
+
+        public void End() => IridiumLayout.Engine.End();
+
+        public bool Button(string text, Iris.Iml.IrrButStyle style)
+            => IridiumLayout.Engine.Button(text, (ButtonStyle)(int)style);
+
+        public void Text(string text, Iris.Iml.IrrTextStyle style)
+            => IridiumLayout.Engine.Text(text, (TextStyle)(int)style);
+
+        public bool? Switch(bool on) => IridiumLayout.Engine.Switch(on);
+        public bool? Checkbox(bool on) => IridiumLayout.Engine.Checkbox(on);
+        public void Separator() => IridiumLayout.Engine.Separator();
+        public void Space(double size) => IridiumLayout.Engine.Space(size);
+        public void Fill() => IridiumLayout.Engine.Fill();
+
+        public string? TextField(string content) => IridiumLayout.Engine.TextField(content);
+
+        public string? TextField(string content, string? hint, int? width)
+            => IridiumLayout.Engine.TextField(content, hint, width);
+
+        public bool Icon(Iris.Iml.IrrIconStyle style)
+            => IridiumLayout.Engine.Icon((IconStyle)(int)style);
+
+        public void Link(string text, string url)
+        {
+            if (IridiumLayout.Engine.Link(text))
+                Application.OpenURL(url);
         }
     }
 }

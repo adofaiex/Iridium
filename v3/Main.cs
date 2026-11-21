@@ -115,6 +115,7 @@ namespace Iridium
             Settings.ValidateCustomEasingConflict(Settings);
             Settings.MigrateJudgeText(Settings);
             Settings.ValidatePanelHotkey(Settings);
+            Settings.ValidateUiImplementation(Settings);
             // Heal shortcut keys saved by builds whose defaults used ASCII
             // letter codes instead of Unity KeyCode values (never triggerable).
             Settings.editorShortcuts.MigrateLegacyAsciiKeyCodes();

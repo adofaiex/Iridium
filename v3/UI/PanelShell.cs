@@ -42,12 +42,28 @@ namespace Iridium.UI
         /// <summary>Called once when the mod is enabled / the panel is created.</summary>
         public static void Show()
         {
+            var settings = Main.Settings;
+            if (settings == null) return;
+            // "umm" mode has no standalone panel: its settings live in UMM's own page.
+            if (settings.EffectiveUiImplementation == Settings.UiImplementationUmm) return;
             EnsureShell();
             SetVisible(true);
         }
 
         public static void SetVisible(bool visible)
         {
+            if (visible)
+            {
+                var settings = Main.Settings;
+                if (settings != null)
+                {
+                    if (settings.EffectiveUiImplementation == Settings.UiImplementationUmm) return;
+                    // The implementation is latched when a surface opens, so changing the
+                    // setting never tears down the UI the user is currently looking at.
+                    settings.LatchUiImplementation();
+                }
+            }
+
             EnsureShell();
             if (_root == null) return; // Settings not ready yet; nothing to toggle.
             if (_visible == visible) return;
@@ -61,7 +77,11 @@ namespace Iridium.UI
             }
         }
 
-        public static void Toggle() => SetVisible(!_visible);
+        public static void Toggle()
+        {
+            if (_visible) SetVisible(false);
+            else Show();
+        }
 
         /// <summary>
         /// Per-frame host hook (wired from every loader's update). Owns the panel hotkey
@@ -74,7 +94,15 @@ namespace Iridium.UI
             // otherwise binding e.g. Ctrl+F9 would immediately close the panel.
             bool capturing = Main.Settings != null && Main.Settings.IsCapturingHotkey;
             var hotkey = Main.Settings?.panelToggleHotkey;
-            if (!capturing && !string.IsNullOrEmpty(hotkey) && CheckHotkey(hotkey!)) Toggle();
+            if (!capturing && !string.IsNullOrEmpty(hotkey) && CheckHotkey(hotkey!))
+            {
+                // In "umm" mode the hotkey may only close an already open panel; it never
+                // opens one (the settings live in UMM's page).
+                var settings = Main.Settings;
+                bool ummMode = settings != null && settings.EffectiveUiImplementation == Settings.UiImplementationUmm;
+                if (_visible) SetVisible(false);
+                else if (!ummMode) Show();
+            }
 
             if (_visible && _root != null) LayoutPanel();
         }

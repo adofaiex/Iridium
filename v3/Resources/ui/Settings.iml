@@ -18,6 +18,13 @@
             <Setter property="fontSize" value="13" />
         </Style>
 
+        <!-- Disabled option (e.g. UMM implementation when not loaded by UMM). -->
+        <Style name="disabledBtn" on=".disabledBtn">
+            <Setter property="background" value="#26272B" />
+            <Setter property="color" value="#5A5C60" />
+            <Setter property="radius" value="8" />
+        </Style>
+
         <Template name="LangBtn">
             <Button text={item.displayName} class={settings.language == item.key ? 'primary' : 'element'} on-click="OnLanguageClick(item.key)" />
         </Template>
@@ -49,7 +56,7 @@
 
             <!-- Content area -->
             <View class="background">
-                <ScrollView scrollPosition="contentScroll" height="740">
+                <ScrollView scrollPosition="contentScroll" height="480">
                     {settings.currentTab == 'general' && <Reference path="@General.iml" />}
                     {settings.currentTab == 'optimizer' && <Reference path="@Optimizer.iml" />}
                     {settings.currentTab == 'editor' && <Reference path="@Editor.iml" />}

@@ -8,6 +8,18 @@
         <HBox>
             <ForEach items={getLanguages()} template="LangBtn" />
         </HBox>
+
+        <Separator />
+        <HBox align="center">
+            <Text text={localize('UiImplementation')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('UiImplementation')" />
+            <Fill />
+            <Button text={localize('UiImplementationPanel')} class={uiImplClass('panel')} on-click="OnUiImplementationClick('panel')" />
+            <Button text={localize('UiImplementationUmm')} class={uiImplClass('umm')} on-click="OnUiImplementationClick('umm')" />
+        </HBox>
+        {isInfoExpanded('UiImplementation') && <Text text={localize('UiImplementationInfo')} style="hint" />}
+        {!settings.ummAvailable && <Text text={localize('UiImplementationUnavailable')} style="hint" />}
+        {settings.uiImplementationPending && <Text text={localize('UiImplementationPending')} style="hint" />}
         <Text text={localize('IridiumHint')} style="text-secondary" visible={localize('IridiumHint') != ''} />
         <HBox align="center">
             <Text text={localize('TutorialHint')} style="text-secondary" />
