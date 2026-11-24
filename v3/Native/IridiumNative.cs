@@ -677,12 +677,19 @@ namespace Iridium.Native
                 if (!dst.Exists || dst.Length != src.Length || dst.LastWriteTimeUtc != src.LastWriteTimeUtc)
                 {
                     string temp = staged + ".tmp";
+                    if (File.Exists(temp)) File.Delete(temp);
                     File.Copy(source, temp, true);
                     File.SetLastWriteTimeUtc(temp, src.LastWriteTimeUtc);
                     if (File.Exists(staged)) File.Delete(staged);
                     File.Move(temp, staged);
                     Main.Logger?.Log("[IridiumNative] staged for Android: " + staged);
                 }
+
+                // Android requires dynamically loaded code to be read-only (enforced for newer target SDKs);
+                // a writable staged copy may be refused by the loader.
+                File.SetAttributes(staged, File.GetAttributes(staged) | FileAttributes.ReadOnly);
+                if ((File.GetAttributes(staged) & FileAttributes.ReadOnly) == 0)
+                    Main.Logger?.Warning("[IridiumNative] could not make the staged library read-only — Android may refuse to load it: " + staged);
                 return staged;
             }
             catch (Exception ex)
