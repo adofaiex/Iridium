@@ -29,6 +29,8 @@ namespace Iridium.Core
             // Without iridium_core the easing comes from DOTween's own EaseManager — the formulas vanilla
             // tweens use — so curves stay identical instead of collapsing to a step at the end.
             WarnManagedEasingOnce();
+            // DOTween's SetEase truncates Flash amplitude before EaseManager sees it.
+            if (ease >= Ease.Flash && ease <= Ease.InOutFlash) amplitude = (int)amplitude;
             return DG.Tweening.Core.Easing.EaseManager.Evaluate(ease, null, time, duration, amplitude, period);
         }
 
