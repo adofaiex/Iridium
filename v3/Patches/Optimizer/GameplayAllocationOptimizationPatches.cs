@@ -109,8 +109,13 @@ namespace Iridium.Patches.Optimizer
                     if (codes[i].operand is MethodInfo mi && mi.MethodSignatureEquals(_vanillaSequence))
                     {
                         // 静态调用改为实例调用：先压入 this，再调 helper
-                        codes[i] = new CodeInstruction(OpCodes.Ldarg_0);
-                        codes.Insert(i + 1, new CodeInstruction(OpCodes.Call, _volumeSequence));
+                        // 原调用指令原地改成调 helper，前面插入的 this 接住它的标签，跳到这里的路径才会先压参数
+                        var loadFloor = new CodeInstruction(OpCodes.Ldarg_0);
+                        loadFloor.labels.AddRange(codes[i].labels);
+                        codes[i].labels.Clear();
+                        codes[i].opcode = OpCodes.Call;
+                        codes[i].operand = _volumeSequence;
+                        codes.Insert(i, loadFloor);
                         Main.Logger?.Log("[GameplayAlloc] patched dead Volume Sequence allocation in scrFloor.Update");
                         return codes;
                     }
@@ -123,16 +128,17 @@ namespace Iridium.Patches.Optimizer
         private static readonly Dictionary<MethodInfo, Action<object, RenderTexture, RenderTexture>?> _invokeCache
             = new Dictionary<MethodInfo, Action<object, RenderTexture, RenderTexture>?>();
 
-        /// <summary>Delegate-cached stand-in for MethodInfo.Invoke; wrong signatures fall back to the reflective call.</summary>
-        public static void FastInvoke(MethodInfo? mi, object target, object[] args)
+        /// <summary>Delegate-cached stand-in for MethodInfo.Invoke; wrong signatures fall back to the reflective call.
+        /// Returns object like the Invoke it replaces: the transpiler swaps only the call target, so the
+        /// instruction that consumes Invoke's result (a pop in UpdateShader) stays and needs a value.</summary>
+        public static object? FastInvoke(MethodInfo? mi, object target, object[] args)
         {
-            if (mi == null) return;
+            if (mi == null) return null;
             if (Main.Settings?.optimizer.optimizeGameplayAllocations != true
                 || args == null || args.Length != 2
                 || !(args[0] is RenderTexture) || !(args[1] is RenderTexture))
             {
-                mi.Invoke(target, args);
-                return;
+                return mi.Invoke(target, args);
             }
             if (!_invokeCache.TryGetValue(mi, out var dlg))
             {
@@ -146,10 +152,10 @@ namespace Iridium.Patches.Optimizer
                 }
                 _invokeCache[mi] = dlg;
             }
-            if (dlg != null)
-                dlg(target, (RenderTexture)args[0], (RenderTexture)args[1]);
-            else
-                mi.Invoke(target, args);
+            if (dlg == null)
+                return mi.Invoke(target, args);
+            dlg(target, (RenderTexture)args[0], (RenderTexture)args[1]);
+            return null; // OnRenderImage returns void, so Invoke would have returned null too
         }
 
         [IriPatch(Path = "optimizer/gameplayAlloc", Pre = typeof(OptimizerSettings), Condition = "optimizeGameplayAllocations")]
@@ -181,6 +187,8 @@ namespace Iridium.Patches.Optimizer
                         if (code.operand is not MethodInfo mi) continue;
                         if (!IsReflectionInvoke(mi)) continue;
 
+                        // FastInvoke is static: a callvirt against it is invalid IL, so the opcode changes with the operand
+                        code.opcode = OpCodes.Call;
                         code.operand = _fastInvoke;
                         replaced++;
                     }

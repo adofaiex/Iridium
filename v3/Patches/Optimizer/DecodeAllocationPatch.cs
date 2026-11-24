@@ -110,7 +110,11 @@ namespace Iridium.Patches.Optimizer
 					if (ci.opcode == OpCodes.Newobj && ci.operand is ConstructorInfo ctor
 						&& SameClosedCtor(ctor, ListCtor))
 					{
-						yield return new CodeInstruction(OpCodes.Ldc_I4_4);
+						// 插入的容量参数要接住原 newobj 上的标签，跳到这里的路径才会先压参数
+						var capacity = new CodeInstruction(OpCodes.Ldc_I4_4);
+						capacity.labels.AddRange(ci.labels);
+						ci.labels.Clear();
+						yield return capacity;
 						ci.operand = ListCapCtor;
 					}
 					yield return ci;

@@ -27,8 +27,13 @@ namespace Iridium.Patches
                     if (inst.opcode == OpCodes.Call && inst.operand is MethodInfo method &&
                         method.Name == nameof(Json.Deserialize) && method.DeclaringType == typeof(Json))
                     {
-                        yield return new CodeInstruction(OpCodes.Ldstr, "actions");
-                        yield return new CodeInstruction(OpCodes.Call, _deserializePartially);
+                        // 原调用上的标签转到插入的第一条指令上；调用本身原地改操作数，异常块标记保持不动
+                        var key = new CodeInstruction(OpCodes.Ldstr, "actions");
+                        key.labels.AddRange(inst.labels);
+                        inst.labels.Clear();
+                        inst.operand = _deserializePartially;
+                        yield return key;
+                        yield return inst;
                     }
                     else
                     {

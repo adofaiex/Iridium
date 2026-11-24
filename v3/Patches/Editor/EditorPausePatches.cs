@@ -51,8 +51,11 @@ namespace Iridium.Patches.Editor
 					if ((prev.opcode == OpCodes.Ldc_I4_S && prev.operand is sbyte s && s == 32)
 						|| (prev.opcode == OpCodes.Ldc_I4 && prev.operand is int n && n == 32))
 					{
-						codes[i - 1] = new CodeInstruction(OpCodes.Call, checkPauseKey);
-						codes[i] = new CodeInstruction(OpCodes.Nop);
+						// 原地改两条指令：ldc 上可能挂着条件跳转的标签，换成新对象会丢掉它们
+						prev.opcode = OpCodes.Call;
+						prev.operand = checkPauseKey;
+						codes[i].opcode = OpCodes.Nop;
+						codes[i].operand = null;
 						Main.Logger?.Log("[EditorPausePatch] Replaced pause key check");
 						break;
 					}
