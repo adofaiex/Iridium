@@ -23,8 +23,22 @@ namespace Iridium.Core
 
         public static float Evaluate(Ease ease, float time, float duration, float amplitude, float period)
         {
-            // Easing math is hard-bound to iridium_core: without the library the engine is inert.
-            return Iridium.Native.IridiumNative.Evaluate((int)ease, time, duration, amplitude, period);
+            if (Iridium.Native.IridiumNative.HasEvaluate)
+                return Iridium.Native.IridiumNative.Evaluate((int)ease, time, duration, amplitude, period);
+
+            // Without iridium_core the easing comes from DOTween's own EaseManager — the formulas vanilla
+            // tweens use — so curves stay identical instead of collapsing to a step at the end.
+            WarnManagedEasingOnce();
+            return DG.Tweening.Core.Easing.EaseManager.Evaluate(ease, null, time, duration, amplitude, period);
+        }
+
+        private static bool _managedEasingWarned;
+
+        private static void WarnManagedEasingOnce()
+        {
+            if (_managedEasingWarned) return;
+            _managedEasingWarned = true;
+            Main.Logger?.Warning("[CustomEasing] iridium_core not present — easing falls back to DOTween EaseManager (managed, slower)");
         }
 
         public enum ValueKind { Float, Vec2, Color }
