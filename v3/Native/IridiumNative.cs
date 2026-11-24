@@ -212,6 +212,12 @@ namespace Iridium.Native
             }
         }
 
+        /// <summary>True when the single easing export is present.</summary>
+        internal static bool HasEvaluate
+        {
+            get { EnsureProbed(); return _available && _evaluate != null; }
+        }
+
         /// <summary>True when the batch easing export is present.</summary>
         internal static bool HasEvaluateBatch
         {
@@ -526,6 +532,10 @@ namespace Iridium.Native
         {
             get
             {
+                // Android is checked first: it reports as Linux, but needs the bionic build
+                // (CI: build-native.sh --android), not the glibc slices below.
+                if (Application.platform == RuntimePlatform.Android)
+                    return "libiridium_core_android_arm64.so";
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                     return "iridium_core.dll";
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -592,6 +602,12 @@ namespace Iridium.Native
                     return;
                 }
 
+                if (Application.platform == RuntimePlatform.Android)
+                {
+                    path = StageForAndroid(path);
+                    if (path == null) return;
+                }
+
                 if (!LoadNative(path))
                 {
                     Main.Logger?.Log("[IridiumNative] load failed: " + path + " — native-backed features DISABLED");
@@ -637,13 +653,54 @@ namespace Iridium.Native
             }
         }
 
+        /// <summary>
+        /// Android mounts shared storage (where the mod directory lives) noexec, so the
+        /// linker cannot map a library from there. Copies it into the app's code cache
+        /// (internal storage) when missing or changed and returns that path; null on failure.
+        /// </summary>
+        private static string StageForAndroid(string source)
+        {
+            try
+            {
+                string cacheDir;
+                using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (var dir = activity.Call<AndroidJavaObject>("getCodeCacheDir"))
+                    cacheDir = dir.Call<string>("getAbsolutePath");
+
+                string stageDir = Path.Combine(cacheDir, "iridium");
+                Directory.CreateDirectory(stageDir);
+                string staged = Path.Combine(stageDir, Path.GetFileName(source));
+
+                var src = new FileInfo(source);
+                var dst = new FileInfo(staged);
+                if (!dst.Exists || dst.Length != src.Length || dst.LastWriteTimeUtc != src.LastWriteTimeUtc)
+                {
+                    string temp = staged + ".tmp";
+                    File.Copy(source, temp, true);
+                    File.SetLastWriteTimeUtc(temp, src.LastWriteTimeUtc);
+                    if (File.Exists(staged)) File.Delete(staged);
+                    File.Move(temp, staged);
+                    Main.Logger?.Log("[IridiumNative] staged for Android: " + staged);
+                }
+                return staged;
+            }
+            catch (Exception ex)
+            {
+                Main.Logger?.Log("[IridiumNative] Android staging failed: " + ex.Message + " — native-backed features DISABLED");
+                return null;
+            }
+        }
+
         // ── Per-OS loader APIs (lazy-bound; only the current OS's is used) ──
 
         private static bool LoadNative(string path)
         {
             try
             {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                if (Application.platform == RuntimePlatform.Android)
+                    _handle = AndroidDlopen(path, 2 /*RTLD_NOW*/);
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                     _handle = LoadLibraryExW(path, IntPtr.Zero, 0x8 /*LOAD_WITH_ALTERED_SEARCH_PATH*/);
                 else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                     _handle = MacDlopen(path, 2 /*RTLD_NOW*/);
@@ -659,12 +716,21 @@ namespace Iridium.Native
 
         private static IntPtr GetSymbol(string name)
         {
+            if (Application.platform == RuntimePlatform.Android)
+                return AndroidDlsym(_handle, name);
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 return GetProcAddressW(_handle, name);
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                 return MacDlsym(_handle, name);
             return LinuxDlsym(_handle, name);
         }
+
+        // Android (bionic): dlopen/dlsym live in libdl.so — there is no libdl.so.2.
+        [DllImport("libdl.so", EntryPoint = "dlopen")]
+        private static extern IntPtr AndroidDlopen(string path, int flags);
+
+        [DllImport("libdl.so", EntryPoint = "dlsym")]
+        private static extern IntPtr AndroidDlsym(IntPtr handle, string name);
 
         [DllImport("kernel32", CharSet = CharSet.Unicode, EntryPoint = "LoadLibraryExW", SetLastError = true)]
         private static extern IntPtr LoadLibraryExW(string path, IntPtr file, uint flags);

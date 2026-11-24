@@ -75,8 +75,38 @@ jobs:
         if-no-files-found: error
         retention-days: 7
 
+  # Android ARM64 (arm64-v8a, bionic) slice for the Android build of the game.
+  # Linked with the NDK preinstalled on the runner (ANDROID_NDK_LATEST_HOME);
+  # the artifact ships inside every version zip next to the desktop libraries.
+  native-android:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-linux-android
+
+    - name: Cache Rust build
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: native/iridium-core
+
+    - name: Build Android ARM64 library (arm64-v8a)
+      run: ./scripts/build-native.sh --android
+
+    - name: Upload Android ARM64 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: native-android-arm64
+        path: out/native/libiridium_core_android_arm64.so
+        if-no-files-found: error
+        retention-days: 7
+
   build:
-    needs: [native-macos, native-linux-arm]
+    needs: [native-macos, native-linux-arm, native-android]
     strategy:
       matrix:
         include:
@@ -143,6 +173,13 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: native-linux-arm
+        path: out/native
+
+    # Android ARM64 slice from native-android.
+    - name: Add Android ARM64 library (from native-android job)
+      uses: actions/download-artifact@v4
+      with:
+        name: native-android-arm64
         path: out/native
 
     # Bit-exactness kernels: fail the release if a port drifts from C#.
