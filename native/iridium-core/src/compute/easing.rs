@@ -45,6 +45,13 @@ pub fn evaluate(ease: i32, time: f32, duration: f32, amplitude: f32, period: f32
     if duration <= 0.0 {
         return if time >= 0.0 { 1.0 } else { 0.0 };
     }
+    // DOTween's SetEase truncates the amplitude of Flash eases to an integer
+    // (flash count) before EaseManager.Evaluate ever sees it.
+    let amplitude = if (FLASH..=IN_OUT_FLASH).contains(&ease) {
+        amplitude.trunc()
+    } else {
+        amplitude
+    };
 
     match ease {
         LINEAR => time / duration,
@@ -111,7 +118,7 @@ pub fn evaluate(ease: i32, time: f32, duration: f32, amplitude: f32, period: f32
             t * t * t * t * t
         }
         OUT_QUINT => {
-            let t = time / duration;
+            let t = time / duration - 1.0;
             t * t * t * t * t + 1.0
         }
         IN_OUT_QUINT => {
@@ -388,4 +395,29 @@ fn flash_in_out(time: f32, duration: f32, amplitude: f32, period: f32) -> f32 {
         -0.5 * (t * (t - 2.0) - 1.0)
     };
     flash_weighted(amplitude, period, step, step_duration, dir, res)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Every DOTween ease starts at 0 and ends at 1, with the amplitude the
+    // managed callers actually pass (1.70158, which Flash truncates to 1).
+    #[test]
+    fn endpoints_match_dotween() {
+        for ease in LINEAR..=IN_OUT_FLASH {
+            for duration in [0.25f32, 1.0, 6.0] {
+                let start = evaluate(ease, 0.0, duration, 1.70158, 0.0);
+                let end = evaluate(ease, duration, duration, 1.70158, 0.0);
+                assert!(start.abs() < 1e-6, "ease {ease} d={duration}: start {start}");
+                assert!((end - 1.0).abs() < 1e-6, "ease {ease} d={duration}: end {end}");
+            }
+        }
+    }
+
+    #[test]
+    fn out_quint_midpoint() {
+        // DOTween: (t - 1)^5 + 1 at t = 0.5
+        assert!((evaluate(OUT_QUINT, 0.5, 1.0, 1.70158, 0.0) - 0.96875).abs() < 1e-6);
+    }
 }

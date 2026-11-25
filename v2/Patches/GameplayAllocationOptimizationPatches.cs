@@ -80,15 +80,16 @@ namespace Iridium.Patches
         private static readonly Dictionary<MethodInfo, Action<object, RenderTexture, RenderTexture>?> _invokeCache
             = new Dictionary<MethodInfo, Action<object, RenderTexture, RenderTexture>?>();
 
-        public static void FastInvoke(MethodInfo? mi, object target, object[] args)
+        // Returns object like the Invoke it replaces: the transpiler swaps only the call target, so the
+        // instruction that consumes Invoke's result (a pop in UpdateShader) stays and needs a value.
+        public static object? FastInvoke(MethodInfo? mi, object target, object[] args)
         {
-            if (mi == null) return;
+            if (mi == null) return null;
             if (Main.Settings?.optimizer.optimizeGameplayAllocations != true
                 || args == null || args.Length != 2
                 || !(args[0] is RenderTexture) || !(args[1] is RenderTexture))
             {
-                mi.Invoke(target, args);
-                return;
+                return mi.Invoke(target, args);
             }
             if (!_invokeCache.TryGetValue(mi, out var dlg))
             {
@@ -102,10 +103,10 @@ namespace Iridium.Patches
                 }
                 _invokeCache[mi] = dlg;
             }
-            if (dlg != null)
-                dlg(target, (RenderTexture)args[0], (RenderTexture)args[1]);
-            else
-                mi.Invoke(target, args);
+            if (dlg == null)
+                return mi.Invoke(target, args);
+            dlg(target, (RenderTexture)args[0], (RenderTexture)args[1]);
+            return null; // OnRenderImage returns void, so Invoke would have returned null too
         }
 
         [HarmonyPatch(typeof(scrVisualDecoration), "UpdateShader")]
@@ -134,6 +135,8 @@ namespace Iridium.Patches
                         if (code.operand is not MethodInfo mi) continue;
                         if (!IsReflectionInvoke(mi)) continue;
 
+                        // FastInvoke is static: a callvirt against it is invalid IL, so the opcode changes with the operand
+                        code.opcode = OpCodes.Call;
                         code.operand = _fastInvoke;
                         replaced++;
                     }

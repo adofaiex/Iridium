@@ -36,12 +36,19 @@ namespace Iridium.Patches.Editor
 			return Input.GetKeyDown((KeyCode)key);
 		}
 
+		/// <summary>
+		/// Same signature as the Input.GetKeyDown(KeyCode) call it replaces, so the transpiler only swaps the
+		/// call target: the vanilla key stays on the stack as this argument (and is ignored), the stack effect is
+		/// unchanged and branch labels on either instruction stay valid.
+		/// </summary>
+		public static bool CheckPauseKey(KeyCode vanillaKey) => CheckPauseKey();
+
 		[HarmonyTranspiler]
 		public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
 		{
 			var codes = instructions.ToList();
 			var getKeyDown = AccessTools.Method(typeof(Input), "GetKeyDown", new[] { typeof(KeyCode) });
-			var checkPauseKey = AccessTools.Method(typeof(EditorPausePatches), nameof(CheckPauseKey));
+			var checkPauseKey = AccessTools.Method(typeof(EditorPausePatches), nameof(CheckPauseKey), new[] { typeof(KeyCode) });
 
 			for (int i = 1; i < codes.Count; i++)
 			{
@@ -51,8 +58,9 @@ namespace Iridium.Patches.Editor
 					if ((prev.opcode == OpCodes.Ldc_I4_S && prev.operand is sbyte s && s == 32)
 						|| (prev.opcode == OpCodes.Ldc_I4 && prev.operand is int n && n == 32))
 					{
-						codes[i - 1] = new CodeInstruction(OpCodes.Call, checkPauseKey);
-						codes[i] = new CodeInstruction(OpCodes.Nop);
+						// Only the call target changes (KeyCode -> bool both before and after), so whichever of the
+						// two instructions a branch lands on, the stack it finds is the one vanilla had.
+						codes[i].operand = checkPauseKey;
 						Main.Logger?.Log("[EditorPausePatch] Replaced pause key check");
 						break;
 					}

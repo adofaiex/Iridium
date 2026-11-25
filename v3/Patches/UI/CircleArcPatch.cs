@@ -24,12 +24,17 @@ namespace Iridium.Patches.UI
 			{
 				if (codes[i].opcode != OpCodes.Ret) continue;
 
-				codes.Insert(i, new CodeInstruction(OpCodes.Stloc, resultLocal));
+				// Every return path goes through the override: branches that targeted the ret now land on the
+				// inserted store (the labels move with it), and later rets are handled by continuing the loop.
+				var store = new CodeInstruction(OpCodes.Stloc, resultLocal);
+				store.labels.AddRange(codes[i].labels);
+				codes[i].labels.Clear();
+				codes.Insert(i, store);
 				codes.Insert(i + 1, new CodeInstruction(OpCodes.Ldloc, resultLocal));
 				codes.Insert(i + 2, new CodeInstruction(OpCodes.Ldarg_1));
 				codes.Insert(i + 3, new CodeInstruction(OpCodes.Ldarg_2));
 				codes.Insert(i + 4, new CodeInstruction(OpCodes.Call, ApplyOverride));
-				break;
+				i += 5;
 			}
 			return codes;
 		}

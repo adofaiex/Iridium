@@ -13,6 +13,11 @@
 #                -> libiridium_core_arm64.so. Needs the rustup target
 #                aarch64-unknown-linux-gnu plus gcc-aarch64-linux-gnu
 #                (CI installs it).
+#   --android    additionally cross-compile the Android ARM64 slice (arm64-v8a,
+#                bionic) -> libiridium_core_android_arm64.so. Needs the rustup
+#                target aarch64-linux-android and an Android NDK, found through
+#                ANDROID_NDK_HOME or ANDROID_NDK_LATEST_HOME (CI uses the NDK
+#                preinstalled on the runner).
 #
 # Any other arguments are passed through to `cargo build`.
 set -euo pipefail
@@ -21,12 +26,14 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 cross=false
 universal=false
 arm=false
+android=false
 args=()
 for a in "$@"; do
     case "$a" in
         --cross)     cross=true ;;
         --universal) universal=true ;;
         --arm)       arm=true ;;
+        --android)   android=true ;;
         *)           args+=("$a") ;;
     esac
 done
@@ -95,4 +102,33 @@ if [ "$arm" = true ]; then
     env "$env_key=aarch64-linux-gnu-gcc" cargo build --release --target "$target" ${args[@]+"${args[@]}"}
     cp "target/$target/release/libiridium_core.so" "$repo/out/native/libiridium_core_arm64.so"
     echo "staged: $repo/out/native/libiridium_core_arm64.so ($target)"
+fi
+
+# --android: cross-compile the Android ARM64 (arm64-v8a) slice with the NDK's
+# clang. Bionic, not glibc, so it ships under its own name and the runtime
+# picks it only on Android. API 26 is the game's minSdk; 16 KB page alignment
+# keeps the library loadable on 16 KB-page devices (Android 15+).
+if [ "$android" = true ]; then
+    target="aarch64-linux-android"
+    ndk="${ANDROID_NDK_HOME:-${ANDROID_NDK_LATEST_HOME:-}}"
+    if [ -z "$ndk" ]; then
+        echo "build-native.sh: --android needs ANDROID_NDK_HOME (or ANDROID_NDK_LATEST_HOME)" >&2
+        exit 1
+    fi
+    case "$(uname -s)" in
+        Darwin)               ndk_host="darwin-x86_64"; ndk_ext="" ;;
+        MINGW*|MSYS*|CYGWIN*) ndk_host="windows-x86_64"; ndk_ext=".cmd" ;;
+        *)                    ndk_host="linux-x86_64"; ndk_ext="" ;;
+    esac
+    linker="$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/aarch64-linux-android26-clang$ndk_ext"
+    triple_key="$(echo "$target" | tr 'a-z-' 'A-Z_')"
+
+    if command -v rustup >/dev/null 2>&1; then
+        rustup target add "$target" >/dev/null 2>&1 || true
+    fi
+    env "CARGO_TARGET_${triple_key}_LINKER=$linker" \
+        "CARGO_TARGET_${triple_key}_RUSTFLAGS=-C link-arg=-Wl,-z,max-page-size=16384" \
+        cargo build --release --target "$target" ${args[@]+"${args[@]}"}
+    cp "target/$target/release/libiridium_core.so" "$repo/out/native/libiridium_core_android_arm64.so"
+    echo "staged: $repo/out/native/libiridium_core_android_arm64.so ($target)"
 fi

@@ -522,9 +522,9 @@ namespace Iridium.Patches
                         method.Name == "RemakePath" &&
                         method.DeclaringType == typeof(scnEditor))
                     {
-                        list[i] = new CodeInstruction(OpCodes.Call,
-                            AccessTools.Method(typeof(DeleteFloorOptimizationPatch),
-                                nameof(LightweightDeleteRemakePath)));
+                        // 原地改操作数：指令上的标签和异常块标记保持不动
+                        list[i].operand = AccessTools.Method(typeof(DeleteFloorOptimizationPatch),
+                            nameof(LightweightDeleteRemakePath));
                     }
                 }
                 return list;
