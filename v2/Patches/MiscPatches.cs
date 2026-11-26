@@ -99,10 +99,17 @@ namespace Iridium.Patches
                 var ui = Main.Settings.ui;
                 float min = Mathf.Clamp(ui.circleArcMinAngle, 0f, 180f);
                 float max = Mathf.Clamp(ui.circleArcMaxAngle, min, 180f);
-                if (minDiffDeg >= min && minDiffDeg <= max)
+                // minDiffDeg 由经过多次弧度/角度往返的 float 重算，精确 90 度拐角约五分之一的朝向会落到 89.99997，
+                // 裸 ">= min" 会让这些拐角退回原版直角。整个区间统一下移容差，边界保持一致、浮点噪声不再决定归属。
+                // 上限同时加 179.99 的封顶，保证 180 度折返（piAngle 实心砖）永远不进入，与 v3 一致。
+                if (minDiffDeg >= min - BandToleranceDeg && minDiffDeg < Mathf.Min(max, MaxAppliedAngleDeg) - BandToleranceDeg)
                     return minDiff * 5f / 180f * Mathf.PI;
                 return original;
             }
+
+            // 远大于实测浮点误差（约 6e-5 度），远小于关卡能写出的拐角角度差。
+            public const float BandToleranceDeg = 0.01f;
+            public const float MaxAppliedAngleDeg = 179.99f;
         }
 
         // All-angle arc corners. Vanilla FloorMesh.GetPositions draws the corner

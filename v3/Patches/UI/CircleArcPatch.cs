@@ -47,10 +47,14 @@ namespace Iridium.Patches.UI
 			var ui = Main.Settings?.ui;
 			float min = Mathf.Clamp(ui != null ? ui.circleArcMinAngle : 90f, 0f, 180f);
 			float max = Mathf.Clamp(ui != null ? ui.circleArcMaxAngle : 105f, min, 180f);
-			if (minDiffDeg >= min && minDiffDeg < Mathf.Min(max, MaxAppliedAngleDeg))
+			// minDiffDeg is rebuilt from float radians that already went through several deg/rad round trips (SetAngle, GetPositions), so an exact 90 degree turn lands on 89.99997 for roughly one orientation in five and a bare ">= min" would leave those corners as vanilla right angles. Shift the whole half-open band down by the tolerance: boundaries stay consistent, the float noise no longer decides which side a corner falls on.
+			if (minDiffDeg >= min - BandToleranceDeg && minDiffDeg < Mathf.Min(max, MaxAppliedAngleDeg) - BandToleranceDeg)
 				return minDiff * 5f / 180f * Mathf.PI;
 			return original;
 		}
+
+		// Far above the observed float error (about 6e-5 degrees) and far below any turn angle a level can author.
+		public const float BandToleranceDeg = 0.01f;
 
 		// Ceiling just under 180: vanilla's piAngle epsilon is 1e-4 rad, so this keeps a float round trip from reaching a reversal while staying visually identical to 180.
 		public const float MaxAppliedAngleDeg = 179.99f;
