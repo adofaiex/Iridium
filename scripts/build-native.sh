@@ -13,9 +13,9 @@
 #                -> libiridium_core_arm64.so. Needs the rustup target
 #                aarch64-unknown-linux-gnu plus gcc-aarch64-linux-gnu
 #                (CI installs it).
-#   --android    additionally cross-compile the Android ARM64 slice (arm64-v8a,
-#                bionic) -> libiridium_core_android_arm64.so. Needs the rustup
-#                target aarch64-linux-android and an Android NDK, found through
+#   --bionic     additionally cross-compile the bionic ARM64 slice (arm64-v8a)
+#                -> libiridium_core_bionic_arm64.so. Needs the rustup target
+#                aarch64-linux-android and an NDK, found through
 #                ANDROID_NDK_HOME or ANDROID_NDK_LATEST_HOME (CI uses the NDK
 #                preinstalled on the runner).
 #
@@ -26,14 +26,14 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 cross=false
 universal=false
 arm=false
-android=false
+bionic=false
 args=()
 for a in "$@"; do
     case "$a" in
         --cross)     cross=true ;;
         --universal) universal=true ;;
         --arm)       arm=true ;;
-        --android)   android=true ;;
+        --bionic)    bionic=true ;;
         *)           args+=("$a") ;;
     esac
 done
@@ -104,15 +104,15 @@ if [ "$arm" = true ]; then
     echo "staged: $repo/out/native/libiridium_core_arm64.so ($target)"
 fi
 
-# --android: cross-compile the Android ARM64 (arm64-v8a) slice with the NDK's
+# --bionic: cross-compile the bionic ARM64 (arm64-v8a) slice with the NDK's
 # clang. Bionic, not glibc, so it ships under its own name and the runtime
-# picks it only on Android. API 26 is the game's minSdk; 16 KB page alignment
-# keeps the library loadable on 16 KB-page devices (Android 15+).
-if [ "$android" = true ]; then
+# picks it only where the libc is bionic. API 26 is the game's minimum API
+# level; 16 KB page alignment keeps the library loadable on 16 KB-page devices.
+if [ "$bionic" = true ]; then
     target="aarch64-linux-android"
     ndk="${ANDROID_NDK_HOME:-${ANDROID_NDK_LATEST_HOME:-}}"
     if [ -z "$ndk" ]; then
-        echo "build-native.sh: --android needs ANDROID_NDK_HOME (or ANDROID_NDK_LATEST_HOME)" >&2
+        echo "build-native.sh: --bionic needs ANDROID_NDK_HOME (or ANDROID_NDK_LATEST_HOME)" >&2
         exit 1
     fi
     case "$(uname -s)" in
@@ -129,6 +129,6 @@ if [ "$android" = true ]; then
     env "CARGO_TARGET_${triple_key}_LINKER=$linker" \
         "CARGO_TARGET_${triple_key}_RUSTFLAGS=-C link-arg=-Wl,-z,max-page-size=16384" \
         cargo build --release --target "$target" ${args[@]+"${args[@]}"}
-    cp "target/$target/release/libiridium_core.so" "$repo/out/native/libiridium_core_android_arm64.so"
-    echo "staged: $repo/out/native/libiridium_core_android_arm64.so ($target)"
+    cp "target/$target/release/libiridium_core.so" "$repo/out/native/libiridium_core_bionic_arm64.so"
+    echo "staged: $repo/out/native/libiridium_core_bionic_arm64.so ($target)"
 fi

@@ -75,10 +75,10 @@ jobs:
         if-no-files-found: error
         retention-days: 7
 
-  # Android ARM64 (arm64-v8a, bionic) slice for the Android build of the game.
+  # bionic arm64 (arm64-v8a) slice, for game builds whose libc is bionic.
   # Linked with the NDK preinstalled on the runner (ANDROID_NDK_LATEST_HOME);
   # the artifact ships inside every version zip next to the desktop libraries.
-  native-android:
+  native-linux-bionic-arm:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
@@ -94,19 +94,19 @@ jobs:
       with:
         workspaces: native/iridium-core
 
-    - name: Build Android ARM64 library (arm64-v8a)
-      run: ./scripts/build-native.sh --android
+    - name: Build bionic ARM64 library (arm64-v8a)
+      run: ./scripts/build-native.sh --bionic
 
-    - name: Upload Android ARM64 artifact
+    - name: Upload bionic ARM64 artifact
       uses: actions/upload-artifact@v4
       with:
-        name: native-android-arm64
-        path: out/native/libiridium_core_android_arm64.so
+        name: native-linux-bionic-arm
+        path: out/native/libiridium_core_bionic_arm64.so
         if-no-files-found: error
         retention-days: 7
 
   build:
-    needs: [native-macos, native-linux-arm, native-android]
+    needs: [native-macos, native-linux-arm, native-linux-bionic-arm]
     strategy:
       matrix:
         include:
@@ -175,11 +175,11 @@ jobs:
         name: native-linux-arm
         path: out/native
 
-    # Android ARM64 slice from native-android.
-    - name: Add Android ARM64 library (from native-android job)
+    # bionic ARM64 slice from native-linux-bionic-arm.
+    - name: Add bionic ARM64 library (from native-linux-bionic-arm job)
       uses: actions/download-artifact@v4
       with:
-        name: native-android-arm64
+        name: native-linux-bionic-arm
         path: out/native
 
     # Bit-exactness kernels: fail the release if a port drifts from C#.

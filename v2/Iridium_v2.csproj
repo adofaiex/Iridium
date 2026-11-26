@@ -325,7 +325,7 @@
 			<FilesToCopy Include="$(ProjectDir)..\out\native\libiridium_core.dylib" Condition="Exists('$(ProjectDir)..\out\native\libiridium_core.dylib')" />
 			<!-- Linux ARM64 (arm-v8a) slice; the runtime probe picks it by process arch. -->
 			<FilesToCopy Include="$(ProjectDir)..\out\native\libiridium_core_arm64.so" Condition="Exists('$(ProjectDir)..\out\native\libiridium_core_arm64.so')" />
-			<FilesToCopy Include="$(ProjectDir)..\out\native\libiridium_core_android_arm64.so" Condition="Exists('$(ProjectDir)..\out\native\libiridium_core_android_arm64.so')" />
+			<FilesToCopy Include="$(ProjectDir)..\out\native\libiridium_core_bionic_arm64.so" Condition="Exists('$(ProjectDir)..\out\native\libiridium_core_bionic_arm64.so')" />
 			<FilesToCopy Include="$(ProjectDir)Info.json" />
 			<ResourceFiles Include="$(ProjectDir)Resources\**\*" Exclude="$(ProjectDir)Resources\**\*\" />
 		</ItemGroup>

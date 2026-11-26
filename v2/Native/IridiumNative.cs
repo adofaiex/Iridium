@@ -418,10 +418,10 @@ namespace Iridium.Native
         {
             get
             {
-                // Android is checked first: it reports as Linux, but needs the bionic build
-                // (CI: build-native.sh --android), not the glibc slices below.
-                if (Application.platform == RuntimePlatform.Android)
-                    return "libiridium_core_android_arm64.so";
+                // bionic is checked first: it reports as Linux, but needs the bionic build
+                // (CI: build-native.sh --bionic), not the glibc slices below.
+                if (IsBionic)
+                    return "libiridium_core_bionic_arm64.so";
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                     return "iridium_core.dll";
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -482,9 +482,9 @@ namespace Iridium.Native
                     return;
                 }
 
-                if (Application.platform == RuntimePlatform.Android)
+                if (IsBionic)
                 {
-                    path = StageForAndroid(path);
+                    path = StageForBionic(path);
                     if (path == null) return;
                 }
 
@@ -532,13 +532,16 @@ namespace Iridium.Native
             }
         }
 
+        // The game's bionic builds report this Unity platform value.
+        private static bool IsBionic => Application.platform == RuntimePlatform.Android;
+
         /// <summary>
-        /// Android mounts shared storage (where the mod directory lives) noexec, so the
+        /// On bionic, shared storage (where the mod directory lives) is mounted noexec, so the
         /// linker cannot map a library from there. Copies it into the app's code cache
         /// (internal storage) when missing or changed, marks it read-only and returns that
         /// path; null on failure.
         /// </summary>
-        private static string StageForAndroid(string source)
+        private static string StageForBionic(string source)
         {
             try
             {
@@ -562,19 +565,19 @@ namespace Iridium.Native
                     File.SetLastWriteTimeUtc(temp, src.LastWriteTimeUtc);
                     if (File.Exists(staged)) File.Delete(staged);
                     File.Move(temp, staged);
-                    Main.Logger?.Log("[IridiumNative] staged for Android: " + staged);
+                    Main.Logger?.Log("[IridiumNative] staged to code cache: " + staged);
                 }
 
-                // Android requires dynamically loaded code to be read-only (enforced for newer target SDKs);
+                // Dynamically loaded code must be read-only on newer target API levels;
                 // a writable staged copy may be refused by the loader.
                 File.SetAttributes(staged, File.GetAttributes(staged) | FileAttributes.ReadOnly);
                 if ((File.GetAttributes(staged) & FileAttributes.ReadOnly) == 0)
-                    Main.Logger?.Warning("[IridiumNative] could not make the staged library read-only — Android may refuse to load it: " + staged);
+                    Main.Logger?.Warning("[IridiumNative] could not make the staged library read-only — the loader may refuse it: " + staged);
                 return staged;
             }
             catch (Exception ex)
             {
-                Main.Logger?.Log("[IridiumNative] Android staging failed: " + ex.Message + " — native-backed features DISABLED");
+                Main.Logger?.Log("[IridiumNative] code cache staging failed: " + ex.Message + " — native-backed features DISABLED");
                 return null;
             }
         }
@@ -585,8 +588,8 @@ namespace Iridium.Native
         {
             try
             {
-                if (Application.platform == RuntimePlatform.Android)
-                    _handle = AndroidDlopen(path, 2 /*RTLD_NOW*/);
+                if (IsBionic)
+                    _handle = BionicDlopen(path, 2 /*RTLD_NOW*/);
                 else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                     _handle = LoadLibraryExW(path, IntPtr.Zero, 0x8 /*LOAD_WITH_ALTERED_SEARCH_PATH*/);
                 else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -603,8 +606,8 @@ namespace Iridium.Native
 
         private static IntPtr GetSymbol(string name)
         {
-            if (Application.platform == RuntimePlatform.Android)
-                return AndroidDlsym(_handle, name);
+            if (IsBionic)
+                return BionicDlsym(_handle, name);
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 return GetProcAddressW(_handle, name);
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -612,12 +615,12 @@ namespace Iridium.Native
             return LinuxDlsym(_handle, name);
         }
 
-        // Android (bionic): dlopen/dlsym live in libdl.so — there is no libdl.so.2.
+        // bionic: dlopen/dlsym live in libdl.so — there is no libdl.so.2.
         [DllImport("libdl.so", EntryPoint = "dlopen")]
-        private static extern IntPtr AndroidDlopen(string path, int flags);
+        private static extern IntPtr BionicDlopen(string path, int flags);
 
         [DllImport("libdl.so", EntryPoint = "dlsym")]
-        private static extern IntPtr AndroidDlsym(IntPtr handle, string name);
+        private static extern IntPtr BionicDlsym(IntPtr handle, string name);
 
         [DllImport("kernel32", CharSet = CharSet.Unicode, EntryPoint = "LoadLibraryExW", SetLastError = true)]
         private static extern IntPtr LoadLibraryExW(string path, IntPtr file, uint flags);
