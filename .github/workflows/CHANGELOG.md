@@ -8,13 +8,16 @@
 
 ### Fixes
 
-1. Fixed the settings panel scaling on high-resolution displays. On a fresh install the panel used to default to a near-fullscreen window, which overflowed and covered almost the whole screen on 4K monitors. It now opens at a fixed design size (1280×840) on large screens; smaller screens still fit proportionally.
-2. Fixed a saved window geometry from another resolution or device being restored larger than the screen, leaving both edges cut off. The size is now clamped back into the visible area on restore.
-3. Fixed the selected tab losing its highlight on the UMM settings page.
+1. Fixed rounded track corners sometimes falling back to the vanilla right angle. Floating-point error could put an exact 90° turn just below the configured range, so roughly one corner orientation in five was drawn square. On v2 the corner range now also matches v3: the upper bound is exclusive and capped just under 180°.
+2. Fixed the custom easing engine misplacing or hiding tracks. The native OutQuint curve overshot to twice the distance, and Flash eases did not round their amplitude the way DOTween does; both now match DOTween exactly.
+3. When the native library is missing, the custom easing engine now falls back to DOTween's own easing formulas, with a one-time warning in the log, instead of jumping straight to the end of every tween.
+4. Fixed the decoration filter part of the gameplay allocation optimization never taking effect: its patch produced invalid code and was silently skipped. It now applies whenever that optimization is enabled.
+5. Fixed the AIO scene-load hook running after the method had already returned, so AIO timing is now actually reset when a scene loads.
+6. Several patches now keep jump targets intact when they replace or insert instructions, so they stay valid if a future game update changes the patched code.
 
 ### New
 
-4. You can now freely choose how the UI is displayed, either within UMM or in a standalone panel.
+7. Added a native library build for bionic ARM64 (arm64-v8a). It ships in every release zip, and both v2 and v3 load it automatically where the game runs on bionic.
 
 > [!CAUTION]
 > Disclaimer: Optimization mods are not a silver bullet — do not chase FPS blindly. If issues occur, disable the specific feature and report the bug instead of labeling the entire mod broken.
