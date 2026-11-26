@@ -7,7 +7,7 @@ public static class BuildInfo
     /// Set by the build script / CI for each variant.
     /// </summary>
     public const string AdofaiVersion = "v2";
-    public const string ModVersion = "2.1.1";
+    public const string ModVersion = "2.1.2";
     public const string ModName = "Iridium";
     public const string ModAuthor = "Xbodwf";
 }
