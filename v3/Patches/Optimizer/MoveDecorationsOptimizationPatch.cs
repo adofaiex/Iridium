@@ -314,14 +314,23 @@ namespace Iridium.Patches.Optimizer
 						dec.SetDepth(__instance.targetDepth);
 					}
 
+					// 粒子装饰物的贴图（原版有，旧补丁漏了）
+					if (dec is scrParticleDecoration particleDec && __instance.imageFilenameUsed)
+					{
+						bool hasImg = !string.IsNullOrEmpty(__instance.targetImageFilename);
+						var particleSprites = scrDecorationManager.instance.imageHolder.customSprites;
+						particleDec.SetSprite(hasImg ? particleSprites[__instance.targetImageFilename] : null);
+					}
 					if (isVisual && visualDec != null)
 					{
 						if (__instance.imageFilenameUsed)
 						{
 							var customSprites = scrDecorationManager.instance.imageHolder.customSprites;
 							customSprites.TryGetValue(__instance.targetImageFilename ?? string.Empty, out var s);
-							OptimizerShared.RuntimeSetSprite(visualDec, s);
+							OptimizerShared.RuntimeSetSpriteOrClear(visualDec, s);
 						}
+						// 3.3.x 新增：原始尺寸 / 平滑
+						OptimizerShared.MoveDecorationsApplyVisualProps(__instance, visualDec);
 
 						if (__instance.maskingTypeUsed)
 						{

@@ -134,20 +134,18 @@ namespace Iridium.Patches
 				{
 					scrFloor target = ADOBase.lm.listFloors[i];
 					((Behaviour)__instance).enabled = false;
-					target.styleNum = (int)__instance.style;
-					target.UpdateAngle(false);
-					target.SetTrackStyle(__instance.style);
+					// 样式 / 贴图 / ColorFloor 对齐 3.3.x（used* 标志位：没勾选的属性沿用地板当前值）
+					Optimizer.OptimizerShared.RecolorFloorApply(__instance, target);
 
-					KillVanillaTween(target.moveTweens, TweenType.Glow);
+					// 原版无论是否勾选 glow 都会先 Kill(complete) 旧的 glow tween
+					CustomEasingEngine.KillByKey(target, TweenType.Glow, complete: true);
 
-					// ColorFloor 是游戏内部复杂逻辑（含脉冲动画等），保持原样
-					target.ColorFloor(__instance.colorType, __instance.color1, __instance.color2,
-						__instance.colorAnimDuration / __instance.cond.song.pitch,
-						__instance.pulseType, __instance.pulseLength, __instance.start,
-						__instance.duration, __instance.ease);
-
-					// 仅替换 glowMultiplier 的 DOTween tween
-					CustomEasingEngine.Start(target, TweenType.Glow, __instance.glowMult, __instance.duration, __instance.ease, owner);
+					// 仅替换 glowMultiplier 的 DOTween tween；原版只在勾选 glow 时才创建
+					if (__instance.usedGlowMult)
+					{
+						KillVanillaTween(target.moveTweens, TweenType.Glow);
+						CustomEasingEngine.Start(target, TweenType.Glow, __instance.glowMult, __instance.duration, __instance.ease, owner);
+					}
 				}
 
 				return false;
@@ -165,8 +163,9 @@ namespace Iridium.Patches
 					return true;
 
 				// 低画质官方关卡跳过（与原逻辑一致）
+				// 原版条件还包含 Persistence.forceVisualSettings
 				if (ADOBase.controller.visualQuality == VisualQuality.Low
-					&& ADOBase.isOfficialLevel && !ADOBase.levelIsMikoSkip)
+					&& (ADOBase.isOfficialLevel || Persistence.forceVisualSettings) && !ADOBase.levelIsMikoSkip)
 					return false;
 
 				if (!float.IsNaN(__instance.targetScale))
@@ -299,6 +298,9 @@ namespace Iridium.Patches
 						var cs = hasImg ? sprites[__instance.targetImageFilename] : null;
 						((scrVisualDecoration)dec).SetSprite(cs?.sprite);
 					}
+					// 3.3.x 新增：原始尺寸 / 平滑
+					if (isVisual)
+						Optimizer.OptimizerShared.MoveDecorationsApplyVisualProps(__instance, (scrVisualDecoration)dec);
 					// Masking 属性 (仅 scrVisualDecoration)
 					if (isVisual)
 					{

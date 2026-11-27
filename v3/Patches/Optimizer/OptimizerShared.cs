@@ -1,4 +1,5 @@
 using ADOFAI;
+using DG.Tweening;
 using HarmonyLib;
 using Iridium.Config;
 using System;
@@ -287,6 +288,80 @@ namespace Iridium.Patches.Optimizer
 			var method1 = AccessTools.Method(typeof(scrVisualDecoration), "SetSprite",
 				new Type[] { typeof(Sprite) });
 			method1?.Invoke(dec, new object[] { customSprite.sprite });
+		}
+
+		/// <summary>
+		/// ffxRecolorFloorPlus.StartEffect 逐地板部分（样式 / 贴图 / ColorFloor），逐句对齐 3.3.x 原版：
+		/// 事件里没勾选的属性（used* == false）沿用地板当前值，而不是被事件的默认值覆盖。
+		/// 不含 glow tween，由调用方按 usedGlowMult 处理。
+		/// </summary>
+		internal static void RecolorFloorApply(ffxRecolorFloorPlus e, scrFloor target)
+		{
+			target.styleNum = (int)e.style;
+			target.UpdateAngle(false);
+			bool textureTouched = false;
+			if (e.usedTrackTexture && !string.IsNullOrEmpty(e.trackTexture))
+			{
+				var customTextures = scrDecorationManager.instance.imageHolder.customTextures;
+				customTextures.TryGetValue(e.trackTexture, out var customTexture);
+				target.customTexture = customTexture?.texture;
+				textureTouched = true;
+			}
+			if (e.usedTrackTextureScale)
+			{
+				target.customTextureScale = e.trackTextureScale;
+				textureTouched = true;
+			}
+			if (textureTouched || e.usedStyle)
+				target.SetTrackStyle(e.style);
+
+			// 原版先 Kill(complete) 掉 Color / Glow 两个 tween 再 ColorFloor
+			var mt = target.moveTweens;
+			if (mt.TryGetValue(TweenType.Color, out var colorTween)) colorTween.Kill(true);
+			if (mt.TryGetValue(TweenType.Glow, out var glowTween)) glowTween.Kill(true);
+
+			TrackColorType colorType = e.usedColorType ? e.colorType : target.specialColorType;
+			int startOfColorChange = e.usedColorType ? e.start : target.specialColorTypeStart;
+			Color color1 = e.usedColor1 ? e.color1 : target.specialColor1;
+			Color color2 = e.usedColor2 ? e.color2 : target.specialColor2;
+			float animDuration = e.usedColorAnimDuration ? e.colorAnimDuration : target.specialAnimDuration;
+			TrackColorPulse pulseType = e.usedPulseType ? e.pulseType : target.specialColorPulse;
+			float pulseLength = e.usedPulseLength ? (float)e.pulseLength : target.specialPulseLength;
+			target.ColorFloor(colorType, color1, color2, animDuration / e.cond.song.pitch,
+				pulseType, pulseLength, startOfColorChange, e.duration, e.ease);
+		}
+
+		/// <summary>
+		/// ffxMoveDecorationsPlus.StartEffect 里 3.3.x 新增、旧补丁没有实现的非动画属性：原始尺寸、平滑。
+		/// </summary>
+		internal static void MoveDecorationsApplyVisualProps(ffxMoveDecorationsPlus e, scrVisualDecoration visual)
+		{
+			if (e.originalSizeUsed)
+				visual.SetTextureScaleMultiplier(e.targetOriginalSize);
+			if (e.smoothingUsed)
+			{
+				visual.smoothing = e.targetSmoothing;
+				visual.SetSprite(null, sameSprite: true);
+			}
+		}
+
+		/// <summary>
+		/// 对齐原版：decorationImage 为空（或找不到）时原版会 SetSprite(null) 清掉图片，
+		/// RuntimeSetSprite 遇到 null 直接返回，所以事件里"清空图片"会被吞掉。
+		/// </summary>
+		internal static void RuntimeSetSpriteOrClear(scrVisualDecoration dec, TextureManager.CustomSprite? customSprite)
+		{
+			if (customSprite != null)
+			{
+				RuntimeSetSprite(dec, customSprite);
+				return;
+			}
+			var method = AccessTools.Method(typeof(scrVisualDecoration), "SetSprite",
+				new Type[] { typeof(TextureManager.CustomSprite), typeof(bool) });
+			if (method != null)
+				method.Invoke(dec, new object?[] { null, false });
+			else
+				dec.SetSprite((Sprite?)null);
 		}
 
 		public static bool TryGetPrefixCompleted(Texture2D tex) => _prefixCompletedTextures.ContainsKey(tex.GetInstanceID());

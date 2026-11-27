@@ -26,6 +26,24 @@ namespace Iridium.Patches.Optimizer
 
 		private static readonly ConditionalWeakTable<scrFloor, StyleSnapshot> _snapshots = new();
 
+		/// <summary>
+		/// RecolorTrack / 装饰物事件会在运行中把样式改成 initialTrackStyle 以外的值（material、_length/_width），
+		/// 而快照里只有"输入"，看不到这个已发生的改写；不让快照失效的话，死亡复位会把这块砖跳过，
+		/// 样式就停留在上一轮的状态。
+		/// </summary>
+		[IriPatch(Path = "optimizer/deathReset", Pre = typeof(OptimizerSettings), Condition = "optimizeDeathReset")]
+		[HarmonyPatch(typeof(scrFloor), nameof(scrFloor.SetTrackStyle))]
+		public static class StyleInvalidatePatch
+		{
+			[HarmonyPostfix]
+			public static void Postfix(scrFloor __instance, object[] __args)
+			{
+				if (__args == null || __args.Length == 0 || !(__args[0] is TrackStyle style)) return;
+				if (style == __instance.initialTrackStyle) return;
+				if (_snapshots.TryGetValue(__instance, out var snap)) snap.Valid = false;
+			}
+		}
+
 		[HarmonyPrefix]
 		public static bool Prefix(scrFloor __instance)
 		{

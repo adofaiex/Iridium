@@ -27,10 +27,10 @@ namespace Iridium.Patches
 			}
 
 			[HarmonyFinalizer]
-			public static Exception Finalizer()
+			public static Exception Finalizer(Exception __exception)
 			{
 				_suppressCopy = false;
-				return null; // 不吞异常，只保证复位
+				return __exception; // 原样透传：返回 null 会把 SaveState 里的异常整个吞掉
 			}
 		}
 

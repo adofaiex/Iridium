@@ -563,7 +563,12 @@ namespace Iridium.Core
                 {
                     var tween = list[i];
                     if (tween.IsAlive) tween.Kill(complete);
-                    _byKey.Remove((tween.Target, tween.Type));
+                    // 该 key 可能已被后来的别的事件的 tween 占用（旧 tween 早已被 KillByKey 顶掉），
+                    // 无条件 Remove 会把新 tween 从 _byKey 里摘掉，之后它再也不会被同 key 的新 tween 杀死，
+                    // 两个存活 tween 同时写同一属性。
+                    var key = (tween.Target, tween.Type);
+                    if (_byKey.TryGetValue(key, out var current) && ReferenceEquals(current, tween))
+                        _byKey.Remove(key);
                 }
                 list.Clear();
             }
