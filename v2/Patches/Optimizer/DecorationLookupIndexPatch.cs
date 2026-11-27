@@ -53,23 +53,28 @@ namespace Iridium.Patches
 		public static class GetDecorationPatch
 		{
 			[HarmonyPrefix]
-			public static bool Prefix(scrDecorationManager __instance, LevelEvent source,
-				ref scrDecoration __result)
+			// GetDecoration 是 static 方法（读 scrDecorationManager.instance），Harmony 给 static 方法的
+			// __instance 恒为 null，旧写法每次调用都抛 NRE 再回退原版，既没加速还多一次异常开销。
+			public static bool Prefix(LevelEvent source, ref scrDecoration __result)
 			{
 				try
 				{
-					var list = __instance.allDecorations;
-					if (list == null)
+					var manager = scrDecorationManager.instance;
+					var list = manager != null ? manager.allDecorations : null;
+					if (list == null || source == null)
 						return true;
 
-					if (source == null)
+					// 只接受"校验过的命中"：缓存按 (帧, Count) 失效，同帧内 Remove+Insert 重排不会改 Count，
+					// 所以命中后核对 list[pos] 仍是该装饰物；未命中或校验失败一律交还原版线性查找。
+					var state = GetState(manager, list);
+					if (state.Map.TryGetValue(source, out var dec)
+						&& state.Positions.TryGetValue(source, out int pos)
+						&& pos < list.Count && ReferenceEquals(list[pos], dec))
 					{
-						__result = null;
+						__result = dec;
 						return false;
 					}
-
-					__result = GetState(__instance, list).Map.TryGetValue(source, out var dec) ? dec : null;
-					return false;
+					return true;
 				}
 				catch (Exception)
 				{
@@ -82,22 +87,24 @@ namespace Iridium.Patches
 		public static class GetDecorationIndexPatch
 		{
 			[HarmonyPrefix]
-			public static bool Prefix(scrDecorationManager __instance, LevelEvent dec, ref int __result)
+			// static 方法，见 GetDecorationPatch 的说明：用 scrDecorationManager.instance，不能用 __instance。
+			public static bool Prefix(LevelEvent dec, ref int __result)
 			{
 				try
 				{
-					var list = __instance.allDecorations;
-					if (list == null)
+					var manager = scrDecorationManager.instance;
+					var list = manager != null ? manager.allDecorations : null;
+					if (list == null || dec == null)
 						return true;
 
-					if (dec == null)
+					var state = GetState(manager, list);
+					if (state.Positions.TryGetValue(dec, out int pos)
+						&& pos < list.Count && list[pos] != null && list[pos].sourceLevelEvent == dec)
 					{
-						__result = -1;
+						__result = pos;
 						return false;
 					}
-
-					__result = GetState(__instance, list).Positions.TryGetValue(dec, out int pos) ? pos : -1;
-					return false;
+					return true;
 				}
 				catch (Exception)
 				{

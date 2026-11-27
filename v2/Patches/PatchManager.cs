@@ -198,6 +198,7 @@ namespace Iridium.Patches
 
             var deathResetCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeDeathReset;
             _definitions.Add(new PatchDef(typeof(DeathResetFloorPatch), deathResetCond));
+            _definitions.Add(new PatchDef(typeof(DeathResetFloorPatch.StyleInvalidatePatch), deathResetCond));
             _definitions.Add(new PatchDef(typeof(HoldReusePatch), deathResetCond));
 
             var decorResetCond = () => Main.Settings.optimizer.enableOptimizer && Main.Settings.optimizer.optimizeDecorationReset;

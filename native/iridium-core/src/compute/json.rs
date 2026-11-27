@@ -389,38 +389,33 @@ fn intern_string(doc: &mut Doc, slice: &[u16]) -> u32 {
 
 /// .NET `int.TryParse` approximation: failure (including overflow) => 0.
 fn ascii_to_i32(w: &[u16]) -> i32 {
-    if w.len() > 24 {
-        return 0;
-    }
-    let mut buf = [0u8; 24];
-    for (k, &c) in w.iter().enumerate() {
-        if c > 0x7F {
-            return 0;
-        }
-        buf[k] = c as u8;
-    }
-    match std::str::from_utf8(&buf[..w.len()]) {
-        Ok(s) => s.parse::<i32>().unwrap_or(0),
-        Err(_) => 0,
-    }
+    // No length cap: `int.TryParse` accepts arbitrarily many leading zeros, so a cap would turn
+    // a valid "000000000000000000000000001" into 0 where GDMiniJSON yields 1.
+    with_ascii(w, |s| s.parse::<i32>().unwrap_or(0)).unwrap_or(0)
 }
 
 /// .NET `float.TryParse` approximation: failure => 0.
 fn ascii_to_f32(w: &[u16]) -> f32 {
-    if w.len() > 48 {
-        return 0.0;
+    // No length cap: long digit strings (e.g. a 17+ digit double written by another tool) must
+    // parse, not collapse to 0 like a failed TryParse.
+    with_ascii(w, |s| s.parse::<f32>().unwrap_or(0.0)).unwrap_or(0.0)
+}
+
+/// Runs `f` on the ASCII text of a UTF-16 word; `None` when any unit is outside ASCII
+/// (TryParse fails on those). Short words use a stack buffer, longer ones fall back to the heap.
+fn with_ascii<R>(w: &[u16], f: impl FnOnce(&str) -> R) -> Option<R> {
+    if w.iter().any(|&c| c > 0x7F) {
+        return None;
     }
-    let mut buf = [0u8; 48];
-    for (k, &c) in w.iter().enumerate() {
-        if c > 0x7F {
-            return 0.0;
+    if w.len() <= 64 {
+        let mut buf = [0u8; 64];
+        for (k, &c) in w.iter().enumerate() {
+            buf[k] = c as u8;
         }
-        buf[k] = c as u8;
+        return std::str::from_utf8(&buf[..w.len()]).ok().map(f);
     }
-    match std::str::from_utf8(&buf[..w.len()]) {
-        Ok(s) => s.parse::<f32>().unwrap_or(0.0),
-        Err(_) => 0.0,
-    }
+    let s: String = w.iter().map(|&c| c as u8 as char).collect();
+    Some(f(&s))
 }
 
 #[cfg(test)]
@@ -495,6 +490,18 @@ mod tests {
         assert_eq!(doc.a[kids[1] as usize] as i32, 0); // 1e5 has no '.' => int parse fails
         assert_eq!(doc.values[kids[2] as usize], 1500.0);
         assert_eq!(doc.values[kids[3] as usize], 1.0);
+    }
+
+    #[test]
+    fn long_numeric_words_are_not_capped() {
+        // 52-char float and 28-char int: both valid for float/int.TryParse, so neither may collapse to 0.
+        let long_float = "3.14159265358979323846264338327950288419716939937510";
+        let long_int = "0000000000000000000000000001";
+        let doc = parse_str(&format!("[{long_float}, {long_int}]"));
+        let base = doc.a[0] as usize;
+        let kids = &doc.children[base..base + 2];
+        assert_eq!(doc.values[kids[0] as usize], 3.1415927f32);
+        assert_eq!(doc.a[kids[1] as usize] as i32, 1);
     }
 
     #[test]

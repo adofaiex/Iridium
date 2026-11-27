@@ -43,9 +43,8 @@ namespace Iridium.Patches.Optimizer
 				if (finishLoading != null) yield return finishLoading;
 
 				// 组件写法谱面 / 场景重置时的整表扫描
-				var setFxPlus = AccessTools.Method(typeof(scnGame), "SetFxPlusFromComponents",
-					new[] { typeof(List<scrFloor>), typeof(bool) });
-				if (setFxPlus != null) yield return setFxPlus;
+				// 不包含 SetFxPlusFromComponents：它正是靠 GetComponents 把组件登记进 plusEffects，
+				// 进入时 plusEffects 为空是常态，快速路径会让这些组件永远登记不上。
 
 				var resetScene = AccessTools.Method(typeof(scnGame), "ResetScene", new[] { typeof(bool) });
 				if (resetScene != null) yield return resetScene;

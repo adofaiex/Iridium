@@ -160,18 +160,14 @@ namespace Iridium.Patches
 				for (int i = startIdx; i <= endIdx && i < count; i += step)
 				{
 					scrFloor target = floors[i];
-					target.styleNum = (int)__instance.style;
-					target.UpdateAngle(false);
-					target.SetTrackStyle(__instance.style);
+					// 3.3.x 的 RecolorTrack 有 used* 标志位（没勾选的属性沿用地板当前值）和自定义贴图，
+					// 旧写法按 3.1.2 无条件用事件默认值覆盖，见 OptimizerShared.RecolorFloorApply。
+					__instance.enabled = false;
+					Optimizer.OptimizerShared.RecolorFloorApply(__instance, target);
 
-					var mt = target.moveTweens;
-					if (mt.TryGetValue(TweenType.Color, out var t1)) t1.Kill(true);
-					if (mt.TryGetValue(TweenType.Glow, out var t2)) t2.Kill(true);
-
-					target.ColorFloor(__instance.colorType, __instance.color1, __instance.color2, __instance.colorAnimDuration / pitch, __instance.pulseType, (float)__instance.pulseLength, __instance.start, __instance.duration, __instance.ease);
-					
-					mt[TweenType.Glow] = DOTween.To((DOGetter<float>)(() => target.glowMultiplier), (DOSetter<float>)(x => target.glowMultiplier = x), __instance.glowMult, __instance.duration)
-						.SetEase(__instance.ease);
+					if (__instance.usedGlowMult)
+						target.moveTweens[TweenType.Glow] = DOTween.To((DOGetter<float>)(() => target.glowMultiplier), (DOSetter<float>)(x => target.glowMultiplier = x), __instance.glowMult, __instance.duration)
+							.SetEase(__instance.ease);
 				}
 
 				__instance.enabled = false;
