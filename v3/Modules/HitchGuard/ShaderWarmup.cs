@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 using Iridium.Config;
+using Iridium.Patches;
 
 namespace Iridium.Modules.HitchGuard
 {
