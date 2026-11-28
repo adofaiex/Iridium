@@ -201,6 +201,13 @@ namespace Iridium
             // 大谱面加载优化 B：分帧激活砖块
             Iridium.Patches.Optimizer.ChunkedFloorSpawnPatch.Tick();
 
+            // HitchGuard：shader 渐进预热 + 游玩期卡顿 watchdog
+            Modules.HitchGuard.ShaderWarmup.Tick();
+            if (Settings.optimizer.enableHitchWatchdog)
+            {
+                Modules.HitchGuard.HitchWatchdog.Tick();
+            }
+
             // 自定义缓速引擎帧驱动；开关关闭后继续驱动在飞的 tween 直到自然结束
             // （补丁已卸载不会再创建新的），避免精灵卡在中间状态。
             if (Settings.optimizer.enableCustomEasingEngine || Iridium.Core.CustomEasingEngine.ActiveCount > 0)

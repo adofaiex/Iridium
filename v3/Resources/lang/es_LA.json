@@ -392,5 +392,14 @@
   "OptimizeDecorationShaderCache": "Caché de sombreador de decoración",
   "OptimizeDecorationShaderCacheInfo": "Omite las escrituras de material por cuadro para decoraciones cuyo color/opacidad/mosaico/visibilidad no han cambiado. Gran victoria en listas con cientos de decoraciones estáticas. Se excluyen las decoraciones con máscaras; Las decoraciones filtradas son manejadas por la optimización del filtro.",
   "EnableStaticDecorationBatching": "Decoración estática por lotes (experimental)",
-  "EnableStaticDecorationBatchingInfo": "Reemplaza los renderizadores individuales de decoraciones estáticas sin filtrar con una malla por lotes por página de atlas: las llamadas a sorteos disminuyen de miles a unas pocas. Requiere el motor de aceleración personalizado (para reconocimiento de interpolación). Las decoraciones con filtros, máscaras, mosaicos o modos de fusión no predeterminados mantienen el estilo básico. Si algo parece estar fuera de lugar o el orden de apilamiento es incorrecto, desactívelo."
+  "EnableStaticDecorationBatchingInfo": "Reemplaza los renderizadores individuales de decoraciones estáticas sin filtrar con una malla por lotes por página de atlas: las llamadas a sorteos disminuyen de miles a unas pocas. Requiere el motor de aceleración personalizado (para reconocimiento de interpolación). Las decoraciones con filtros, máscaras, mosaicos o modos de fusión no predeterminados mantienen el estilo básico. Si algo parece estar fuera de lugar o el orden de apilamiento es incorrecto, desactívelo.",
+  "HitchGuard": "Protección contra tirones (experimental)",
+  "EnableShaderWarmup": "Precalentar shaders",
+  "EnableShaderWarmupInfo": "Tras cargar un nivel, calienta progresivamente en unos pocos fotogramas todos los shaders que usa, eliminando el tirón de compilación de la primera renderización de efectos o filtros (más notable al entrar por primera vez a un nivel). No cambia el aspecto de nada; desactívalo si ves una caída breve de fotogramas justo después de cargar.",
+  "EnableHitchWatchdog": "Diagnóstico de tirones",
+  "EnableHitchWatchdogInfo": "Registra una línea (duración del fotograma, cambio de presión de GC, instantánea de memoria) cada vez que un fotograma supera el umbral, para ayudar a localizar el origen de los tirones. Solo observación — nunca interfiere con el juego; mantenlo apagado cuando no lo necesites.",
+  "HitchThreshold": "Umbral de tirón (ms)",
+  "HitchThresholdInfo": "Un fotograma más largo que esta cantidad de milisegundos se registra como tirón. Por defecto 33 ms; valores más bajos son más sensibles, valores más altos solo registran tirones graves.",
+  "EnableJitWarmup": "Precalentar JIT",
+  "EnableJitWarmupInfo": "Precompila métodos de ruta caliente de uso común antes de comenzar la partida, evitando pequeños tropiezos la primera vez que cada método se ejecuta durante el juego. Más notable en gráficos de BPM alto con muchos eventos."
 }

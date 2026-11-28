@@ -47,6 +47,7 @@ namespace Iridium
 				"EnableExtremeOptimization", "MaxTweensPerFrame",
 				"OptimizeMoveTrackTweens", "BatchMoveDecorations",
 				"EnableStaticDecorationBatching",
+				"EnableShaderWarmup", "EnableHitchWatchdog", "HitchThreshold", "EnableJitWarmup",
 			},
 		};
 

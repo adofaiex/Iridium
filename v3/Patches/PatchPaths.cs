@@ -21,6 +21,7 @@ namespace Iridium.Patches
 			.WithChild("json", new PatchNode())
 			.WithChild("tweenSafety", new PatchNode())
 			.WithChild("customEasing", new PatchNode())
+			.WithChild("hitchGuard", new PatchNode())
 			.WithChild("editorPerf", new PatchNode())
 			.WithChild("deathReset", new PatchNode())
 			.WithChild("decorReset", new PatchNode())

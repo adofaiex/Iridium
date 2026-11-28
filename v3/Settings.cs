@@ -269,6 +269,7 @@ namespace Iridium
         public bool expandExtremeOpts => IsSectionExpanded("extreme");
         public bool expandMemoryOpts => IsSectionExpanded("memory");
         public bool expandAdvancedMemoryOpts => IsSectionExpanded("advancedMemory");
+        public bool expandHitchGuardOpts => IsSectionExpanded("hitchGuard");
 
         private bool IsSectionExpanded(string key) => _sectionExpanded.TryGetValue(key, out var v) && v;
 
@@ -1056,6 +1057,39 @@ namespace Iridium
                 bool value = obj is bool b ? b : false;
                 optimizer.enableEditorFloorOptimization = value;
                 AsyncPatchManager.UpdateOptimizerPatchesAsync();
+                Save();
+            });
+
+            Target.RegisterHandler("OnShaderWarmupToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.enableShaderWarmup = value;
+                if (!value) Modules.HitchGuard.ShaderWarmup.Reset();
+                Save();
+            });
+
+            Target.RegisterHandler("OnHitchWatchdogToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.enableHitchWatchdog = value;
+                if (value) Modules.HitchGuard.HitchWatchdog.Reset();
+                Save();
+            });
+
+            Target.RegisterHandler("OnHitchThresholdChanged", (obj) =>
+            {
+                if (obj is float f)
+                {
+                    optimizer.hitchThresholdMs = Mathf.Clamp((int)f, 17, 200);
+                    Save();
+                }
+            });
+
+            Target.RegisterHandler("OnJitWarmupToggled", (obj) =>
+            {
+                bool value = obj is bool b ? b : false;
+                optimizer.enableJitWarmup = value;
+                if (!value) Modules.HitchGuard.JitWarmup.Reset();
                 Save();
             });
 
