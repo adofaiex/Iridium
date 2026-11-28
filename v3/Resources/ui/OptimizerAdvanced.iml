@@ -51,7 +51,7 @@
             <ArrowButton direction={settings.expandHitchGuardOpts ? 'down' : 'right'} on-click="OnSectionToggle('hitchGuard')" />
             <Text text={localize('HitchGuard')} style="subtitle" />
         </HBox>
-        {settings.expandStutterGuardOpts && <View class="background">
+        {settings.expandHitchGuardOpts && <View class="background">
         <HBox align="center">
             <Text text={optLabel('EnableShaderWarmup')} style="label" />
             <Icon type="information" on-click="OnInfoToggle('EnableShaderWarmup')" />

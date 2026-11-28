@@ -546,6 +546,7 @@ namespace Iridium
                 else
                 {
                     QualitySettings.shadows = ShadowQuality.All;
+                    Modules.HitchGuard.ShaderWarmup.Reset();
                     AsyncPatchManager.UpdateOptimizerPatchesAsync();
                 }
                 Save();
@@ -1065,6 +1066,7 @@ namespace Iridium
                 bool value = obj is bool b ? b : false;
                 optimizer.enableShaderWarmup = value;
                 if (!value) Modules.HitchGuard.ShaderWarmup.Reset();
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
                 Save();
             });
 
@@ -1072,7 +1074,7 @@ namespace Iridium
             {
                 bool value = obj is bool b ? b : false;
                 optimizer.enableHitchWatchdog = value;
-                if (value) Modules.HitchGuard.HitchWatchdog.Reset();
+                Modules.HitchGuard.HitchWatchdog.Reset();
                 Save();
             });
 
@@ -1090,6 +1092,7 @@ namespace Iridium
                 bool value = obj is bool b ? b : false;
                 optimizer.enableJitWarmup = value;
                 if (!value) Modules.HitchGuard.JitWarmup.Reset();
+                AsyncPatchManager.UpdateOptimizerPatchesAsync();
                 Save();
             });
 

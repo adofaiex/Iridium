@@ -9,7 +9,9 @@ namespace Iridium.Modules.HitchGuard
 {
     /// <summary>
     /// 关卡切换后渐进式 Shader 预热：把首次渲染新滤镜/特效时的 shader 编译突刺
-    /// 摊到加载收尾后的若干帧里。按 shader 名去重，整个进程生命周期不重复预热。
+    /// 摊到加载收尾后的若干帧里。按 "shader 名 + 材质关键字组合" 去重，逐变体预热；
+    /// 只有成功预热的变体才记入去重，失败的会在下次关卡收集时重试。
+    /// 换关时丢弃上一关未完成的队列，优先预热当前关的变体。
     /// 队列每帧只处理少量条目，保证预热本身不引入新的卡顿。
     /// </summary>
     [IriPatch(Path = "optimizer/hitchGuard", Pre = typeof(OptimizerSettings), Condition = "enableOptimizer,enableShaderWarmup")]
@@ -20,10 +22,14 @@ namespace Iridium.Modules.HitchGuard
         {
             public Shader Shader = null!;
             public string Name = "";
+            public string Key = "";
+            public string[] Keywords = Array.Empty<string>();
         }
 
-        // 去重：本进程生命周期内已预热过的 shader 名。
+        // 去重：本进程生命周期内已成功预热的变体（shader 名 + 关键字组合）。
         private static readonly HashSet<string> _warmed = new();
+        // 在飞去重：已入队尚未处理的变体键，避免同一变体重复入队。
+        private static readonly HashSet<string> _inFlight = new();
         // 待预热队列：每帧最多处理 budget 个。
         private static readonly Queue<WarmItem> _pending = new();
 
@@ -33,9 +39,10 @@ namespace Iridium.Modules.HitchGuard
         public static void Reset()
         {
             _pending.Clear();
+            _inFlight.Clear();
         }
 
-        /// <summary>关卡加载收尾：收集场景内所有 renderer 的 shader，入队渐进预热。</summary>
+        /// <summary>关卡加载收尾：收集场景内所有 renderer 的 shader 变体，入队渐进预热。</summary>
         private static void Postfix()
         {
             if (!Enabled) return;
@@ -51,6 +58,10 @@ namespace Iridium.Modules.HitchGuard
 
         internal static void CollectAndEnqueue()
         {
+            // 换关：丢弃上一关未完成的队列（旧关 shader 多已卸载），只保留已成功的去重记录
+            _pending.Clear();
+            _inFlight.Clear();
+
             int queued = 0;
             // Include inactive: 装饰物在激活前也可能持有材质；只读 sharedMaterial 不实例化材质。
             var renderers = UnityEngine.Object.FindObjectsOfType<Renderer>(true);
@@ -65,13 +76,19 @@ namespace Iridium.Modules.HitchGuard
                     var shader = m.shader;
                     if (shader == null) continue;
                     string name = shader.name;
-                    if (string.IsNullOrEmpty(name) || !_warmed.Add(name)) continue;
-                    _pending.Enqueue(new WarmItem { Shader = shader, Name = name });
+                    if (string.IsNullOrEmpty(name)) continue;
+
+                    // 材质关键字决定实际编译的 shader 变体：按 名字+关键字组合 去重
+                    string[] keywords = m.shaderKeywords ?? Array.Empty<string>();
+                    Array.Sort(keywords);
+                    string key = keywords.Length > 0 ? name + "|" + string.Join(",", keywords) : name;
+                    if (_warmed.Contains(key) || !_inFlight.Add(key)) continue;
+                    _pending.Enqueue(new WarmItem { Shader = shader, Name = name, Key = key, Keywords = keywords });
                     queued++;
                 }
             }
             if (queued > 0)
-                Main.Logger?.Log($"[ShaderWarmup] queued {queued} shader(s) for warmup");
+                Main.Logger?.Log($"[ShaderWarmup] queued {queued} shader variant(s) for warmup");
         }
 
         /// <summary>由 Main.OnUpdate 驱动：每帧渐进处理队列。</summary>
@@ -82,10 +99,11 @@ namespace Iridium.Modules.HitchGuard
             while (budget-- > 0 && _pending.Count > 0)
             {
                 var item = _pending.Dequeue();
+                _inFlight.Remove(item.Key);
                 try
                 {
-                    WarmShader(item.Shader);
-                    _warmed.Add(item.Name);
+                    WarmShader(item);
+                    _warmed.Add(item.Key); // 只有成功才记入去重，失败的下次收集时会重试
                 }
                 catch (Exception e)
                 {
@@ -95,18 +113,21 @@ namespace Iridium.Modules.HitchGuard
         }
 
         /// <summary>
-        /// 预热单个 shader：触发 Unity/驱动编译其变体。渲染到 4x4 离屏 RenderTexture
+        /// 预热单个 shader 变体：触发 Unity/驱动编译其变体。渲染到 4x4 离屏 RenderTexture
         ///（GL immediate 模式），不碰主画面——即使在 OnUpdate 里调用也不会闪现杂色。
         /// </summary>
-        private static void WarmShader(Shader shader)
+        private static void WarmShader(WarmItem item)
         {
-            if (shader == null) return;
-            var material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            if (item.Shader == null) return;
+            var material = new Material(item.Shader) { hideFlags = HideFlags.HideAndDontSave };
             var rt = RenderTexture.GetTemporary(4, 4, 0);
             var prev = RenderTexture.active;
             RenderTexture.active = rt;
             try
             {
+                // 应用场景材质的关键字组合，使 SetPass 编译的是实际使用的变体而非默认变体
+                if (item.Keywords.Length > 0) material.shaderKeywords = item.Keywords;
+
                 // 每个可用 pass 画一次最小三角形，迫使驱动编译该 pass 的变体。
                 GL.Clear(false, true, Color.clear);
                 GL.PushMatrix();

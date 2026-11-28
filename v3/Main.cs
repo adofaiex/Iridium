@@ -201,11 +201,12 @@ namespace Iridium
             // 大谱面加载优化 B：分帧激活砖块
             Iridium.Patches.Optimizer.ChunkedFloorSpawnPatch.Tick();
 
-            // HitchGuard：shader 渐进预热 + 游玩期卡顿 watchdog
-            Modules.HitchGuard.ShaderWarmup.Tick();
-            if (Settings.optimizer.enableHitchWatchdog)
+            // HitchGuard：shader 渐进预热 + 游玩期卡顿 watchdog。
+            // 总开关关闭时不 tick；watchdog 只在游玩态计数，菜单/设置/加载态只推进基线。
+            if (Settings.optimizer.enableOptimizer)
             {
-                Modules.HitchGuard.HitchWatchdog.Tick();
+                Modules.HitchGuard.ShaderWarmup.Tick();
+                Modules.HitchGuard.HitchWatchdog.Tick(ADOFAI.scrController.instance?.gameworld == true);
             }
 
             // 自定义缓速引擎帧驱动；开关关闭后继续驱动在飞的 tween 直到自然结束
