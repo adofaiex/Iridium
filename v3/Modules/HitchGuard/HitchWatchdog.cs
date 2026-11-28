@@ -30,7 +30,7 @@ namespace Iridium.Modules.HitchGuard
         private const long GapMs = 1000;
 
         internal static bool Enabled => Main.Settings?.optimizer.enableHitchWatchdog == true;
-        private static long ThresholdMs => Main.Settings?.optimizer.hitchThresholdMs is int v ? Math.Clamp(v, 17, 200) : 33;
+        private static long ThresholdMs => Main.Settings?.optimizer.hitchThresholdMs is int v ? (v < 17 ? 17 : v > 200 ? 200 : v) : 33;
 
         public static void Reset()
         {
