@@ -70,6 +70,12 @@ namespace Iridium.Config
 
         public bool enableCustomEasingEngine = false; // 自定义缓速引擎（替代 DOTween）
 
+        // HitchGuard：防卡顿三件套（shader 预热 / hitch watchdog / JIT 预热）
+        public bool enableShaderWarmup = false;       // 关卡切换后渐进预热本关 shader（消除首次渲染编译突刺）
+        public bool enableHitchWatchdog = false;      // 帧耗时超阈值时记录 GC/内存快照（只观察不干预）
+        public int hitchThresholdMs = 33;             // watchdog 阈值（毫秒，超过即记录）
+        public bool enableJitWarmup = false;          // 进 gameplay 前 JIT 预热热路径方法
+
         public bool enableEditorFloorOptimization = false; // 主开关
         public bool incrementalFloorInsert = false;        // 增量式砖块插入/删除
         public bool rangeBasedRedraw = false;              // 范围式重绘(Holds/Planets/Nums)

@@ -46,6 +46,47 @@
             {isInfoExpanded('DecorationsPerFrame') && <Text text={localize('DecorationsPerFrameInfo')} style="hint" />}
         </>}
 
+        <Separator />
+        <HBox align="center">
+            <ArrowButton direction={settings.expandHitchGuardOpts ? 'down' : 'right'} on-click="OnSectionToggle('hitchGuard')" />
+            <Text text={localize('HitchGuard')} style="subtitle" />
+        </HBox>
+        {settings.expandHitchGuardOpts && <View class="background">
+        <HBox align="center">
+            <Text text={optLabel('EnableShaderWarmup')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('EnableShaderWarmup')" />
+            <Fill />
+            <Switch value={settings.optimizer.enableShaderWarmup} on-changed="OnShaderWarmupToggled" />
+        </HBox>
+        {isInfoExpanded('EnableShaderWarmup') && <Text text={localize('EnableShaderWarmupInfo')} style="hint" />}
+
+        <Separator />
+        <HBox align="center">
+            <Text text={optLabel('EnableHitchWatchdog')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('EnableHitchWatchdog')" />
+            <Fill />
+            <Switch value={settings.optimizer.enableHitchWatchdog} on-changed="OnHitchWatchdogToggled" />
+        </HBox>
+        {isInfoExpanded('EnableHitchWatchdog') && <Text text={localize('EnableHitchWatchdogInfo')} style="hint" />}
+        {settings.optimizer.enableHitchWatchdog && <>
+            <HBox align="center" class="indent">
+                <Text text={optLabel('HitchThreshold')} style="label" />
+                <Icon type="information" on-click="OnInfoToggle('HitchThreshold')" />
+                <Fill />
+                <Slider value={settings.optimizer.hitchThresholdMs} min="17" max="200" showValue="true" on-changed="OnHitchThresholdChanged" />
+            </HBox>
+            {isInfoExpanded('HitchThreshold') && <Text text={localize('HitchThresholdInfo')} style="hint" />}
+        </>}
+
+        <HBox align="center">
+            <Text text={optLabel('EnableJitWarmup')} style="label" />
+            <Icon type="information" on-click="OnInfoToggle('EnableJitWarmup')" />
+            <Fill />
+            <Switch value={settings.optimizer.enableJitWarmup} on-changed="OnJitWarmupToggled" />
+        </HBox>
+        {isInfoExpanded('EnableJitWarmup') && <Text text={localize('EnableJitWarmupInfo')} style="hint" />}
+        </View>}
+
         </View>}
 
         <HBox align="center">
