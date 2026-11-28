@@ -221,7 +221,7 @@ namespace Iridium
                 // 区块，全展开保证可见；用户收起后不会再次自动展开）
                 if (entry.Tab == "optimizer")
                 {
-                    foreach (string s in new[] { "image", "rendering", "easing", "particle", "scene", "loading", "tween", "extreme", "memory", "advancedMemory" })
+                    foreach (string s in new[] { "image", "rendering", "easing", "particle", "scene", "loading", "tween", "extreme", "memory", "advancedMemory", "hitchGuard" })
                         _sectionExpanded[s] = true;
                 }
 

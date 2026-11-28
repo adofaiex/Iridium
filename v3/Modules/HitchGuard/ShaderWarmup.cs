@@ -120,11 +120,13 @@ namespace Iridium.Modules.HitchGuard
         {
             if (item.Shader == null) return;
             var material = new Material(item.Shader) { hideFlags = HideFlags.HideAndDontSave };
-            var rt = RenderTexture.GetTemporary(4, 4, 0);
+            RenderTexture? rt = null;
             var prev = RenderTexture.active;
-            RenderTexture.active = rt;
             try
             {
+                // RT 分配放在 try 内：分配失败也能在 finally 里销毁 material，不泄漏
+                rt = RenderTexture.GetTemporary(4, 4, 0);
+                RenderTexture.active = rt;
                 // 应用场景材质的关键字组合，使 SetPass 编译的是实际使用的变体而非默认变体
                 if (item.Keywords.Length > 0) material.shaderKeywords = item.Keywords;
 
@@ -150,7 +152,7 @@ namespace Iridium.Modules.HitchGuard
             finally
             {
                 RenderTexture.active = prev;
-                RenderTexture.ReleaseTemporary(rt);
+                if (rt != null) RenderTexture.ReleaseTemporary(rt);
                 UnityEngine.Object.Destroy(material);
             }
         }

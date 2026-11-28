@@ -206,7 +206,7 @@ namespace Iridium
             if (Settings.optimizer.enableOptimizer)
             {
                 Modules.HitchGuard.ShaderWarmup.Tick();
-                Modules.HitchGuard.HitchWatchdog.Tick(ADOFAI.scrController.instance?.gameworld == true);
+                Modules.HitchGuard.HitchWatchdog.Tick(scrController.instance?.gameworld == true);
             }
 
             // 自定义缓速引擎帧驱动；开关关闭后继续驱动在飞的 tween 直到自然结束
